@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>物流部 月間人時・OPLH管理</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header><div class="hi"><div><h1>物流部 月間人時・OPLH管理</h1><div class="sub">月間出荷量と各従業員の出勤日数から、必要人時・不足人時を判定</div></div><div class="toolbar"><span id="userLabel" class="small"></span><button id="logoutBtn" class="hidden">ログアウト</button></div></div></header>
+<main>
+<section id="authView" class="panel auth"><h2>ログイン</h2><div class="small">同じアカウントなら、どのPCでも同じ従業員・月間計画を参照できます。</div><p><label>メールアドレス</label><input id="email" type="email"></p><p><label>パスワード</label><input id="password" type="password"></p><button class="primary" id="loginBtn">ログイン</button><div id="authError" class="err"></div></section>
+<div id="appView" class="hidden">
+<div class="tabs"><button class="tab active" data-tab="monthly">月間リソース計画</button><button class="tab" data-tab="master">従業員マスタ</button></div>
+<section id="monthlyTab">
+<div class="grid2">
+<section class="panel">
+<div class="head"><div><b>月間出荷計画</b><div class="small">対象月度を変えると、その月の出勤日数・出荷計画を切替</div></div><div id="dirtyLabel" class="small"></div></div>
+<div class="fields"><div><label>対象月度</label><input id="month" type="month"></div><div><label>月間出荷予定件数</label><input id="shipments" type="number" min="0" step="1"></div><div><label>目標OPLH</label><input id="targetOplh" type="number" min="0.01" step="0.01"></div><div><label>安全余力 %（任意）</label><input id="bufferPct" type="number" min="0" max="100" step="0.1"></div></div>
+<div class="kpis"><div class="kpi"><span class="lab">必要出荷人時</span><b id="requiredHours">0.0h</b><div class="hint">出荷件数 ÷ OPLH</div></div><div class="kpi"><span class="lab">確保出荷人時</span><b id="securedHours">0.0h</b><div class="hint">全対象者の月間出荷人時</div></div><div class="kpi"><span class="lab">不足 / 余剰人時</span><b id="gapHours">0.0h</b><div class="hint">確保 − 必要</div></div><div class="kpi"><span class="lab">現有人時で必要OPLH</span><b id="requiredOplh">—</b><div class="hint">出荷件数 ÷ 確保人時</div></div></div>
+<div id="status" class="status warn">月間出荷予定件数を入力してください</div><div class="progress"><div id="fulfillBar"></div></div>
+</section>
+<section class="panel"><b>月間人時サマリー</b><div class="summaryrow"><span>在籍人数</span><strong id="staffCount">0人</strong></div><div class="summaryrow"><span>計算対象人数</span><strong id="includedCount">0人</strong></div><div class="summaryrow"><span>延べ出勤日数</span><strong id="totalDays">0.0日</strong></div><div class="summaryrow"><span>勤務総人時</span><strong id="grossHours">0.0h</strong></div><div class="summaryrow"><span>出荷人時</span><strong id="shipHours">0.0h</strong></div><div class="summaryrow"><span>出荷外・休憩等</span><strong id="otherHours">0.0h</strong></div><div class="summaryrow"><span>人時充足率</span><strong id="fulfillRate">—</strong></div><div class="summaryrow"><span>計算セルフチェック</span><strong id="selfCheck">確認中</strong></div></section>
+</div>
+<section class="panel section">
+<div class="head"><div><b>月別 従業員人時</b><div class="small">勤務時間は月ごとにスナップショット保存。通常は「出勤日数」だけ変更すればOKです。</div></div><div class="toolbar"><button id="copyPrevBtn">前月設定をコピー</button><button id="resetDefaultBtn">標準日数に戻す</button><button class="primary" id="saveMonthBtn">変更を保存</button></div></div>
+<div id="monthNotice" class="notice hidden"></div>
+<div class="tablewrap" style="margin-top:8px"><table id="monthlyTable"><colgroup><col style="width:56px"><col style="width:190px"><col style="width:82px"><col style="width:132px"><col style="width:132px"><col style="width:108px"><col style="width:100px"><col style="width:116px"><col style="width:116px"><col style="width:92px"><col style="width:124px"></colgroup><thead><tr><th>対象</th><th><button class="sortBtn" data-msort="name">氏名 <span class="sortMark">↕</span></button></th><th><button class="sortBtn" data-msort="type">区分 <span class="sortMark">↕</span></button></th><th>勤務時間</th><th>休憩</th><th class="num"><button class="sortBtn" data-msort="shipDay">出荷人時/日 <span class="sortMark">↕</span></button></th><th class="num"><button class="sortBtn" data-msort="workDays">出勤日数 <span class="sortMark">↕</span></button></th><th class="num"><button class="sortBtn" data-msort="grossMonth">勤務人時/月 <span class="sortMark">↕</span></button></th><th class="num"><button class="sortBtn" data-msort="shipMonth">出荷人時/月 <span class="sortMark">↕</span></button></th><th>状態</th><th>操作</th></tr></thead><tbody id="monthlyBody"></tbody></table></div>
+</section>
+</section>
+<section id="masterTab" class="hidden"><section class="panel"><div class="head"><div><b>従業員マスタ</b><div class="small">氏名・雇用区分・標準勤務時間・休憩・標準出勤日数を登録</div></div><button class="primary" id="addStaffBtn">＋ 従業員追加</button></div><div class="tablewrap"><table id="masterTable"><colgroup><col style="width:220px"><col style="width:95px"><col style="width:145px"><col style="width:145px"><col style="width:120px"><col style="width:130px"><col style="width:300px"><col style="width:90px"></colgroup><thead><tr><th><button class="sortBtn" data-sort="name">氏名 <span class="sortMark">↕</span></button></th><th><button class="sortBtn" data-sort="type">区分 <span class="sortMark">↕</span></button></th><th>標準勤務</th><th>休憩</th><th class="num"><button class="sortBtn" data-sort="shipDay">出荷人時/日 <span class="sortMark">↕</span></button></th><th class="num"><button class="sortBtn" data-sort="defaultDays">標準出勤日数 <span class="sortMark">↕</span></button></th><th>備考</th><th>操作</th></tr></thead><tbody id="masterBody"></tbody></table></div></section></section>
+</div>
+</main>
+<dialog id="staffDlg"><form id="staffForm" class="modal"><h3 id="staffDlgTitle">従業員編集</h3><div class="mgrid"><div><label>氏名 *</label><input id="fName" required></div><div><label>雇用区分</label><select id="fType"><option>社員</option><option>パート</option><option>シルバー</option><option>タイミー</option><option>派遣</option><option>他部署応援</option><option>その他</option></select></div><div><label>標準出勤</label><input id="fStart" type="time"></div><div><label>標準退勤</label><input id="fEnd" type="time"></div><div><label>休憩</label><select id="fBreakMode"><option value="none">なし</option><option value="one">12:00～13:00</option><option value="custom">カスタム</option></select></div><div><label>標準月出勤日数</label><input id="fDays" type="number" min="0" max="31" step="0.5"></div><div id="fBreakStartWrap" class="hidden"><label>休憩開始</label><input id="fBreakStart" type="time"></div><div id="fBreakEndWrap" class="hidden"><label>休憩終了</label><input id="fBreakEnd" type="time"></div><div class="wide"><label>備考</label><input id="fNotes"></div><div class="wide small" id="fPreview"></div></div><div class="actions"><button type="button" id="staffCancel">キャンセル</button><button class="primary" type="submit">保存</button></div></form></dialog>
+<dialog id="monthScheduleDlg"><form id="monthScheduleForm" class="modal"><h3>この月だけ勤務時間を変更</h3><div class="mgrid"><div class="wide"><b id="msName"></b><div class="small">変更は選択月にだけ反映され、従業員マスタは変わりません。</div></div><div><label>出勤</label><input id="msStart" type="time"></div><div><label>退勤</label><input id="msEnd" type="time"></div><div><label>休憩</label><select id="msBreakMode"><option value="none">なし</option><option value="one">12:00～13:00</option><option value="custom">カスタム</option></select></div><div></div><div id="msBreakStartWrap" class="hidden"><label>休憩開始</label><input id="msBreakStart" type="time"></div><div id="msBreakEndWrap" class="hidden"><label>休憩終了</label><input id="msBreakEnd" type="time"></div></div><div class="actions"><button type="button" id="msReset">標準勤務に戻す</button><button type="button" id="msCancel">キャンセル</button><button class="primary" type="submit">反映</button></div></form></dialog>
+<script src="core.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
