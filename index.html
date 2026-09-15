@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>物流部 月間人時・OPLH管理</title>
+<title>物流部 月間人時・OPLH・シフト管理</title>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<header><div class="hi"><div><h1>物流部 月間人時・OPLH管理</h1><div class="sub">月間出荷量と各従業員の出勤日数から、必要人時・不足人時を判定</div></div><div class="toolbar"><span id="userLabel" class="small"></span><button id="logoutBtn" class="hidden">ログアウト</button></div></div></header>
+<header><div class="hi"><div><h1>物流部 月間人時・OPLH・シフト管理</h1><div class="sub">月間人時・365日出荷予測・シフトを一体管理</div></div><div class="toolbar"><span id="userLabel" class="small"></span><button id="logoutBtn" class="hidden">ログアウト</button></div></div></header>
 <main>
 <section id="authView" class="panel auth"><h2>ログイン</h2><div class="small">同じアカウントなら、どのPCでも同じ従業員・月間計画を参照できます。</div><p><label>メールアドレス</label><input id="email" type="email"></p><p><label>パスワード</label><input id="password" type="password"></p><button class="primary" id="loginBtn">ログイン</button><div id="authError" class="err"></div></section>
 <div id="appView" class="hidden">
@@ -35,5 +35,6 @@
 <dialog id="monthScheduleDlg"><form id="monthScheduleForm" class="modal"><h3>この月だけ勤務時間を変更</h3><div class="mgrid"><div class="wide"><b id="msName"></b><div class="small">変更は選択月にだけ反映され、従業員マスタは変わりません。</div></div><div><label>出勤</label><input id="msStart" type="time"></div><div><label>退勤</label><input id="msEnd" type="time"></div><div><label>休憩</label><select id="msBreakMode"><option value="none">なし</option><option value="one">12:00～13:00</option><option value="custom">カスタム</option></select></div><div></div><div id="msBreakStartWrap" class="hidden"><label>休憩開始</label><input id="msBreakStart" type="time"></div><div id="msBreakEndWrap" class="hidden"><label>休憩終了</label><input id="msBreakEnd" type="time"></div></div><div class="actions"><button type="button" id="msReset">標準勤務に戻す</button><button type="button" id="msCancel">キャンセル</button><button class="primary" type="submit">反映</button></div></form></dialog>
 <script src="core.js"></script>
 <script src="app.js"></script>
+<script src="shift.js"></script>
 </body>
 </html>
