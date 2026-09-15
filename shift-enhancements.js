@@ -102,11 +102,34 @@
     if(!$('shiftClearBtn')){const b=document.createElement('button');b.id='shiftClearBtn';b.type='button';b.className='danger';b.textContent='全クリア';b.onclick=clearAll;auto.parentElement.insertBefore(b,auto)}
   }
 
+  async function syncMasterDaysToSelectedMonth(staffId,days){
+    const ym=$('shiftMonth')?.value||$('month')?.value;
+    if(!staffId||!ym)return;
+    const planMonth=ym+'-01',now=new Date().toISOString();
+    const rows=await rest('logistics_monthly_staffing',`owner_id=eq.${user.id}&staff_id=eq.${staffId}&plan_month=eq.${planMonth}&select=id`);
+    if(rows?.length){
+      await rest('logistics_monthly_staffing',`owner_id=eq.${user.id}&staff_id=eq.${staffId}&plan_month=eq.${planMonth}`,{method:'PATCH',body:JSON.stringify({work_days:days,updated_at:now})});
+    }
+  }
+
   function installMasterRefresh(){
     const form=$('staffForm');
     if(form?.onsubmit&&!form.dataset.shiftRefreshWrapped){
       const base=form.onsubmit;
-      form.onsubmit=async function(e){await base.call(this,e);if(!$('staffDlg')?.open)masterDirty=true};
+      form.onsubmit=async function(e){
+        const beforeId=typeof editingStaff!=='undefined'?editingStaff:null;
+        const savedName=$('fName')?.value.trim()||'';
+        const savedDays=Number($('fDays')?.value)||0;
+        await base.call(this,e);
+        if($('staffDlg')?.open)return;
+        let id=beforeId;
+        if(!id&&savedName){
+          const q=await rest('logistics_staff',`owner_id=eq.${user.id}&name=eq.${encodeURIComponent(savedName)}&select=id,created_at&order=created_at.desc&limit=1`);
+          id=q?.[0]?.id||null;
+        }
+        if(id)await syncMasterDaysToSelectedMonth(id,savedDays);
+        masterDirty=true;
+      };
       form.dataset.shiftRefreshWrapped='1';
     }
     const tab=document.querySelector('.tab[data-tab="shift"]');
