@@ -66,4 +66,25 @@
   renderAll=function(){originalRenderAll();renderMonthly()};
   const select=$('monthlyPeriod');if(select)select.onchange=renderMonthly;
   window.renderMonthly=renderMonthly;
+
+  // 実績出荷件数は、佐川・ネコポス・ゆうパックの3便合計から自動入力する。
+  const totalInput=$('dActual');
+  if(totalInput){
+    totalInput.readOnly=true;
+    totalInput.setAttribute('aria-readonly','true');
+    totalInput.style.background='#f2f4f7';
+    const label=totalInput.closest('label');
+    if(label&&label.firstChild&&label.firstChild.nodeType===Node.TEXT_NODE){
+      label.firstChild.nodeValue='実績出荷件数（自動合計）';
+    }
+  }
+  function syncActualTotal(){
+    if(!totalInput)return;
+    const inputs=['dSagawa','dNekopos','dYupack'].map(id=>$(id)).filter(Boolean);
+    const hasAny=inputs.some(el=>el.value!=='');
+    const sum=inputs.reduce((z,el)=>z+Number(el.value||0),0);
+    totalInput.value=hasAny?String(sum):'';
+    if(typeof updateDaySum==='function')updateDaySum();
+  }
+  ['dSagawa','dNekopos','dYupack'].forEach(id=>{const el=$(id);if(el)el.addEventListener('input',syncActualTotal)});
 })();
