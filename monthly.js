@@ -66,25 +66,98 @@
   renderAll=function(){originalRenderAll();renderMonthly()};
   const select=$('monthlyPeriod');if(select)select.onchange=renderMonthly;
   window.renderMonthly=renderMonthly;
+})();
 
-  // 実績出荷件数は、佐川・ネコポス・ゆうパックの3便合計から自動入力する。
-  const totalInput=$('dActual');
-  if(totalInput){
-    totalInput.readOnly=true;
-    totalInput.setAttribute('aria-readonly','true');
-    totalInput.style.background='#f2f4f7';
-    const label=totalInput.closest('label');
-    if(label&&label.firstChild&&label.firstChild.nodeType===Node.TEXT_NODE){
-      label.firstChild.nodeValue='実績出荷件数（自動合計）';
+// 実績入力は担当者・入力タイミングが異なるため、項目ごとの追記保存を許可する。
+(()=>{
+  const carrierIds=['dSagawa','dNekopos','dYupack'];
+  const totalEl=$('dActual');
+  if(!totalEl)return;
+
+  totalEl.readOnly=true;
+  totalEl.removeAttribute('required');
+  totalEl.placeholder='配送3便から自動計算';
+  carrierIds.forEach(id=>$(id)?.removeAttribute('required'));
+
+  const readNum=id=>{
+    const el=$(id);if(!el||el.value==='')return null;
+    const n=Number(el.value);return Number.isFinite(n)?n:null;
+  };
+
+  function partialUpdateDaySum(){
+    const values=carrierIds.map(readNum),entered=values.filter(v=>v!==null).length;
+    if(entered===3){
+      const sum=values.reduce((z,v)=>z+v,0);
+      totalEl.value=sum;
+      $('deliverySum').textContent=`配送3便 合計 ${fmtInt(sum)}件（自動計算）`;
+      $('deliverySum').className='sumcheck ok';
+    }else{
+      totalEl.value='';
+      $('deliverySum').textContent=entered?`配送件数 ${entered}/3便入力済み　残りは後から追記できます`:'各項目は別々のタイミングで保存できます';
+      $('deliverySum').className='sumcheck';
     }
   }
-  function syncActualTotal(){
-    if(!totalInput)return;
-    const inputs=['dSagawa','dNekopos','dYupack'].map(id=>$(id)).filter(Boolean);
-    const hasAny=inputs.some(el=>el.value!=='');
-    const sum=inputs.reduce((z,el)=>z+Number(el.value||0),0);
-    totalInput.value=hasAny?String(sum):'';
-    if(typeof updateDaySum==='function')updateDaySum();
-  }
-  ['dSagawa','dNekopos','dYupack'].forEach(id=>{const el=$(id);if(el)el.addEventListener('input',syncActualTotal)});
+  updateDaySum=partialUpdateDaySum;
+  carrierIds.forEach(id=>{if($(id))$(id).oninput=partialUpdateDaySum});
+
+  const keepOrNumber=(value,current)=>value===''||value==null?(current??null):Number(value);
+  const keepOrText=(value,current)=>value===''||value==null?(current??null):value;
+
+  saveActual=async function(input){
+    const r=rows.find(x=>x.forecast_date===input.forecast_date);
+    if(!r)throw new Error('対象日が見つかりません。');
+
+    const before={s:r.actual_sagawa,n:r.actual_nekopos,y:r.actual_yupack,total:r.actual_total};
+    const sag=keepOrNumber(input.actual_sagawa,r.actual_sagawa);
+    const nek=keepOrNumber(input.actual_nekopos,r.actual_nekopos);
+    const yu=keepOrNumber(input.actual_yupack,r.actual_yupack);
+    const carriersComplete=[sag,nek,yu].every(v=>v!==null&&Number.isFinite(Number(v)));
+    const total=carriersComplete?Number(sag)+Number(nek)+Number(yu):(r.actual_total??null);
+    const now=new Date().toISOString();
+
+    const patch={
+      actual_sagawa:sag,
+      actual_nekopos:nek,
+      actual_yupack:yu,
+      actual_total:total,
+      actual_staff:keepOrNumber(input.actual_staff,r.actual_staff),
+      temp_staff:keepOrNumber(input.temp_staff,r.temp_staff),
+      completed_at:keepOrText(input.completed_at,r.completed_at),
+      note:keepOrText(input.note,r.note),
+      updated_at:now
+    };
+    if(total!==null)patch.data_state='actual';
+
+    Object.assign(r,patch);
+    saveLocal();
+    if(storageMode==='cloud'){
+      await rest('forecast365_daily',`owner_id=eq.${user.id}&forecast_date=eq.${r.forecast_date}`,{method:'PATCH',body:JSON.stringify(patch)});
+    }
+
+    const carrierChanged=before.s!==r.actual_sagawa||before.n!==r.actual_nekopos||before.y!==r.actual_yupack||before.total!==r.actual_total;
+    if(r.actual_total!==null&&carrierChanged)await persistRecalculation();
+    else renderAll();
+    return {recalculated:r.actual_total!==null&&carrierChanged};
+  };
+
+  submitDay=async function(e){
+    e.preventDefault();
+    const b=$('saveDayBtn');b.disabled=true;b.textContent='保存中…';
+    try{
+      const result=await saveActual({
+        forecast_date:$('dayDate').value,
+        actual_total:$('dActual').value,
+        actual_sagawa:$('dSagawa').value,
+        actual_nekopos:$('dNekopos').value,
+        actual_yupack:$('dYupack').value,
+        actual_staff:$('dStaff').value,
+        temp_staff:$('dTemp').value,
+        completed_at:$('dCompleted').value,
+        note:$('dNote').value
+      });
+      $('dayDlg').close();
+      toast(result.recalculated?'実績を保存し、未来予測を再計算しました。':'入力内容を保存しました。未入力項目は後から追記できます。');
+    }catch(err){alert(err.message)}finally{b.disabled=false;b.textContent='実績を保存'}
+  };
+  $('dayForm').onsubmit=submitDay;
 })();
