@@ -19,7 +19,7 @@ function parseTime(v){v=String(v??'').trim();if(!v)return 0;if(/^\d+$/.test(v)){
 function hmInputHtml(field,min){
  min=Math.max(0,Math.round(Number(min)||0));
  const hh=Math.floor(min/60),mm=min%60,has=min>0;
- return `<td><div class="hm-input" data-field="${field}"><input class="time-part hour-part" data-field="${field}" data-part="h" type="number" inputmode="numeric" min="0" max="24" step="1" placeholder="0" value="${has?hh:''}" aria-label="時間"><span class="hm-unit">H</span><span class="hm-colon">:</span><input class="time-part minute-part" data-field="${field}" data-part="m" type="number" inputmode="numeric" min="0" max="59" step="1" placeholder="00" value="${has?String(mm).padStart(2,'0'):''}" aria-label="分"><span class="hm-unit">M</span></div></td>`;
+ return `<td><div class="hm-input" data-field="${field}"><input class="time-part hour-part" data-field="${field}" data-part="h" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" placeholder="0" value="${has?hh:''}" aria-label="時間"><span class="hm-colon">:</span><input class="time-part minute-part" data-field="${field}" data-part="m" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" placeholder="00" value="${has?String(mm).padStart(2,'0'):''}" aria-label="分"></div></td>`;
 }
 function readTaskMinutes(tr,field){
  const box=tr.querySelector(`.hm-input[data-field="${field}"]`);
@@ -32,9 +32,10 @@ function readTaskMinutes(tr,field){
  return{minutes:valid?hv*60+mv:NaN,empty:false,valid};
 }
 function normalizeTimePart(inp){
- if(!inp||!inp.value.trim())return;
+ if(!inp)return;
+ inp.value=String(inp.value||'').replace(/\D/g,'').slice(0,2);
+ if(!inp.value.trim())return;
  const n=Number(inp.value);
- if(!Number.isFinite(n))return;
  if(inp.dataset.part==='m')inp.value=String(Math.max(0,Math.min(59,Math.trunc(n)))).padStart(2,'0');
  else inp.value=String(Math.max(0,Math.min(24,Math.trunc(n))));
 }
@@ -72,7 +73,7 @@ function updateDateNav(){const today=localDateISO(),d=selectedWorkDate||today;co
 async function changeWorkDate(days){const base=new Date((selectedWorkDate||localDateISO())+'T00:00:00');base.setDate(base.getDate()+days);const next=localDateISO(base),today=localDateISO();if(next>today)return;selectedWorkDate=next;await loadToday()}
 async function loadToday(){const date=selectedWorkDate||localDateISO();selectedWorkDate=date;$('todayLabel').textContent=displayDate(date);updateDateNav();$('todayMessage').textContent='';const [rows,shifts]=await Promise.all([rest('logistics_work_time',`owner_id=eq.${user.id}&work_date=eq.${date}&select=*`),rest('logistics_daily_shifts',`owner_id=eq.${user.id}&shift_date=eq.${date}&select=staff_id,assignment`).catch(()=>[])]);todayRows=new Map((rows||[]).map(r=>[r.staff_id,r]));shiftMap=new Map((shifts||[]).map(r=>[r.staff_id,r.assignment]));renderToday()}
 function renderToday(){const tb=$('todayBody');tb.innerHTML='';let done=0,total=0,target=0;for(const s of activeStaff){const r=todayRows.get(s.id),shift=shiftMap.get(s.id),isDone=!!r?.submitted_at||r?.source==='legacy_excel';if(shift!=='off')target++;if(isDone&&shift!=='off')done++;const vals=taskFields.map(f=>Number(r?.[f]||0));total+=vals.reduce((a,b)=>a+b,0);const tr=document.createElement('tr');if(shift==='off')tr.classList.add('offrow');tr.dataset.staff=s.id;tr.innerHTML=`<td><span class="rowname">${esc(cleanStaffName(s.name))}</span><span class="rowmeta">${esc(staffCode(s.name))}${shift?(' ・ '+(shift==='work'?'出勤予定':'休み')):''}</span></td>${taskFields.map((f,i)=>hmInputHtml(f,vals[i])).join('')}<td class="totalcell">${fmtMin(vals.reduce((a,b)=>a+b,0))}</td><td><span class="state ${isDone?'done':(shift==='off'?'off':'pending')}">${isDone?'保存済 ✓':(shift==='off'?'休み':'未入力')}</span></td>`;tb.appendChild(tr)}
-tb.querySelectorAll('.time-part').forEach(inp=>{inp.oninput=()=>{const tr=inp.closest('tr'),r=readTaskMinutes(tr,inp.dataset.field);inp.closest('.hm-input')?.classList.toggle('invalid',!r.valid);updateRowTotal(tr);scheduleAutoSave(tr)};inp.onblur=()=>{normalizeTimePart(inp);const tr=inp.closest('tr'),r=readTaskMinutes(tr,inp.dataset.field);inp.closest('.hm-input')?.classList.toggle('invalid',!r.valid);updateRowTotal(tr);scheduleAutoSave(tr,true)}});
+tb.querySelectorAll('.time-part').forEach(inp=>{inp.oninput=()=>{inp.value=String(inp.value||'').replace(/\D/g,'').slice(0,2);const tr=inp.closest('tr'),r=readTaskMinutes(tr,inp.dataset.field);inp.closest('.hm-input')?.classList.toggle('invalid',!r.valid);updateRowTotal(tr);scheduleAutoSave(tr)};inp.onblur=()=>{normalizeTimePart(inp);const tr=inp.closest('tr'),r=readTaskMinutes(tr,inp.dataset.field);inp.closest('.hm-input')?.classList.toggle('invalid',!r.valid);updateRowTotal(tr);scheduleAutoSave(tr,true)}});
 $('todayStaffCount').textContent=target+'人';$('todayDoneCount').textContent=done+'人';$('todayPendingCount').textContent=Math.max(0,target-done)+'人';$('todayHours').textContent=fmtMin(total)}
 function setRowState(tr,text,cls){const el=tr?.querySelector('.state');if(!el)return;el.className='state '+cls;el.textContent=text}
 function refreshTodayKpis(){let target=0,done=0,total=0;document.querySelectorAll('#todayBody tr').forEach(tr=>{if(!tr.classList.contains('offrow')){target++;if(tr.querySelector('.state')?.classList.contains('done'))done++}taskFields.forEach(f=>{const r=readTaskMinutes(tr,f);if(r.valid)total+=r.minutes})});$('todayStaffCount').textContent=target+'人';$('todayDoneCount').textContent=done+'人';$('todayPendingCount').textContent=Math.max(0,target-done)+'人';$('todayHours').textContent=fmtMin(total)}
