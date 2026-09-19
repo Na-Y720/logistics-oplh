@@ -3,7 +3,7 @@ const SB_KEY='sb_publishable_KzELBvq1CkhnHL_CXN99GA_5-an2G6m';
 const SESSION_KEY='logistics_monthly_oplh_session_v1';
 const OWNER_FALLBACK=null;
 const $=id=>document.getElementById(id);
-let session=null,user=null,allStaff=[],activeStaff=[],todayRows=new Map(),shiftMap=new Map(),refreshPromise=null,selectedWorkDate=null,autoSaveTimers=new Map();
+let session=null,user=null,allStaff=[],activeStaff=[],todayRows=new Map(),shiftMap=new Map(),refreshPromise=null,selectedWorkDate=null,autoSaveTimers=new Map(),staffSyncBusy=false,staffSyncTimer=null,staffSyncChannel=null;
 const taskFields=['picking_minutes','pass_sort_minutes','sorting_minutes','hand_pack_minutes','auto_pack_minutes','stock_move_minutes'];
 
 function saveSession(s){session=s;if(s)localStorage.setItem(SESSION_KEY,JSON.stringify(s));else localStorage.removeItem(SESSION_KEY)}
@@ -24,6 +24,28 @@ async function logout(){try{if(session?.access_token)await req('/auth/v1/logout'
 function showApp(){const on=!!session?.access_token;$('authView').classList.toggle('hidden',on);$('appView').classList.toggle('hidden',!on);$('logoutBtn').classList.toggle('hidden',!on);$('userLabel').textContent=user?.email||''}
 
 async function loadBase(){allStaff=await rest('logistics_staff',`owner_id=eq.${user.id}&select=id,name,employment_type,is_active&order=name.asc`)||[];activeStaff=allStaff.filter(s=>s.is_active&&['パート','シルバー'].includes(s.employment_type));}
+function staffSignature(){return activeStaff.map(s=>[s.id,s.name,s.employment_type,s.is_active].join(':')).join('|')}
+async function syncStaffFromMaster(force=false){
+ if(!session?.access_token||!user||staffSyncBusy)return;
+ staffSyncBusy=true;
+ try{
+  const before=staffSignature();
+  await loadBase();
+  const changed=before!==staffSignature();
+  if(force||changed)await loadToday();
+ }catch(e){console.warn('従業員マスタ同期に失敗しました',e)}
+ finally{staffSyncBusy=false}
+}
+function startStaffSync(){
+ if(staffSyncTimer)return;
+ window.addEventListener('storage',e=>{if(e.key==='logistics_staff_changed_v1')syncStaffFromMaster(true)});
+ if('BroadcastChannel' in window){
+  try{staffSyncChannel=new BroadcastChannel('logistics_staff_v1');staffSyncChannel.onmessage=()=>syncStaffFromMaster(true)}catch{}
+ }
+ window.addEventListener('focus',()=>syncStaffFromMaster());
+ document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncStaffFromMaster()});
+ staffSyncTimer=setInterval(()=>syncStaffFromMaster(),5000);
+}
 function updateDateNav(){const today=localDateISO(),d=selectedWorkDate||today;const next=$('nextDateBtn');if(next)next.disabled=d>=today}
 async function changeWorkDate(days){const base=new Date((selectedWorkDate||localDateISO())+'T00:00:00');base.setDate(base.getDate()+days);const next=localDateISO(base),today=localDateISO();if(next>today)return;selectedWorkDate=next;await loadToday()}
 async function loadToday(){const date=selectedWorkDate||localDateISO();selectedWorkDate=date;$('todayLabel').textContent=displayDate(date);updateDateNav();$('todayMessage').textContent='';const [rows,shifts]=await Promise.all([rest('logistics_work_time',`owner_id=eq.${user.id}&work_date=eq.${date}&select=*`),rest('logistics_daily_shifts',`owner_id=eq.${user.id}&shift_date=eq.${date}&select=staff_id,assignment`).catch(()=>[])]);todayRows=new Map((rows||[]).map(r=>[r.staff_id,r]));shiftMap=new Map((shifts||[]).map(r=>[r.staff_id,r.assignment]));renderToday()}
@@ -58,4 +80,5 @@ document.querySelectorAll('.tab').forEach(b=>b.onclick=async()=>{document.queryS
 $('loginBtn').onclick=login;$('logoutBtn').onclick=logout;$('reloadTodayBtn').onclick=loadToday;$('prevDateBtn').onclick=()=>changeWorkDate(-1);$('nextDateBtn').onclick=()=>changeWorkDate(1);$('loadMonthBtn').onclick=loadMonth;$('monthMode').onchange=loadMonth;
 selectedWorkDate=localDateISO();
 $('monthPick').value=localDateISO().slice(0,7);
+startStaffSync();
 (async()=>{session=loadSession();if(session?.access_token){try{user=await req('/auth/v1/user');showApp();await loadBase();await loadToday();await loadImportStatus()}catch{saveSession(null);session=null;user=null;showApp()}}else showApp()})();
