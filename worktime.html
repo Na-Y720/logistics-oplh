@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>物流パート 作業時間管理</title>
+<link rel="stylesheet" href="worktime.css">
+</head>
+<body>
+<header class="topbar">
+  <div>
+    <h1>物流パート 作業時間管理</h1>
+    <div class="sub">帰宅前に、その日の作業時間を入力</div>
+  </div>
+  <div class="top-actions">
+    <span id="userLabel" class="muted"></span>
+    <a class="linkbtn" href="./">人時・シフト管理へ</a>
+    <button id="logoutBtn" class="ghost hidden">ログアウト</button>
+  </div>
+</header>
+
+<main>
+<section id="authView" class="card auth">
+  <h2>ログイン</h2>
+  <p class="muted">既存の物流アプリと同じアカウントを使用します。</p>
+  <label>メールアドレス<input id="email" type="email" autocomplete="username"></label>
+  <label>パスワード<input id="password" type="password" autocomplete="current-password"></label>
+  <button id="loginBtn" class="primary">ログイン</button>
+  <div id="authError" class="error"></div>
+</section>
+
+<div id="appView" class="hidden">
+  <nav class="tabs">
+    <button class="tab active" data-tab="today">本日入力</button>
+    <button class="tab" data-tab="monthly">月次集計</button>
+    <button class="tab" data-tab="admin">管理</button>
+  </nav>
+
+  <section id="todayTab">
+    <section class="hero card">
+      <div>
+        <div class="eyebrow">本日の入力</div>
+        <h2 id="todayLabel">—</h2>
+        <div class="muted">日付は自動固定です。入力日の選び間違いは起きません。</div>
+      </div>
+      <button id="reloadTodayBtn" class="ghost">再読み込み</button>
+    </section>
+
+    <section class="kpis">
+      <div class="kpi"><span>対象人数</span><b id="todayStaffCount">0人</b></div>
+      <div class="kpi"><span>入力済</span><b id="todayDoneCount">0人</b></div>
+      <div class="kpi"><span>未入力</span><b id="todayPendingCount">0人</b></div>
+      <div class="kpi"><span>作業時間合計</span><b id="todayHours">0:00</b></div>
+    </section>
+
+    <section class="card">
+      <div class="section-head">
+        <div>
+          <h3>作業時間入力</h3>
+          <div class="muted">入力例：3:30。作業していない項目は空欄のままでOKです。</div>
+        </div>
+        <button id="saveAllBtn" class="primary">入力分をすべて保存</button>
+      </div>
+      <div class="tablewrap">
+        <table class="worktable">
+          <thead>
+            <tr>
+              <th class="namecol">氏名</th>
+              <th>ピッキング</th>
+              <th>パスソート</th>
+              <th>手梱包</th>
+              <th>自動梱包機</th>
+              <th>入庫＆在庫移動</th>
+              <th>合計</th>
+              <th>状態</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="todayBody"></tbody>
+        </table>
+      </div>
+      <div id="todayMessage" class="message"></div>
+    </section>
+  </section>
+
+  <section id="monthlyTab" class="hidden">
+    <section class="card filters">
+      <div>
+        <label>対象月度<input id="monthPick" type="month"></label>
+      </div>
+      <div>
+        <label>集計期間
+          <select id="monthMode">
+            <option value="company">会社月度（21日～翌20日）</option>
+            <option value="calendar">暦月（1日～末日）</option>
+          </select>
+        </label>
+      </div>
+      <div class="rangebox">
+        <span class="muted">集計期間</span>
+        <b id="monthRange">—</b>
+      </div>
+      <button id="loadMonthBtn" class="primary">表示</button>
+    </section>
+
+    <section class="kpis">
+      <div class="kpi"><span>ピッキング</span><b id="mPicking">0:00</b></div>
+      <div class="kpi"><span>パスソート</span><b id="mPass">0:00</b></div>
+      <div class="kpi"><span>手梱包</span><b id="mHand">0:00</b></div>
+      <div class="kpi"><span>自動梱包機</span><b id="mAuto">0:00</b></div>
+      <div class="kpi"><span>入庫＆在庫移動</span><b id="mStock">0:00</b></div>
+      <div class="kpi accent"><span>総人時</span><b id="mTotal">0:00</b></div>
+    </section>
+
+    <section class="card">
+      <div class="section-head">
+        <div>
+          <h3>個人別 月次集計</h3>
+          <div class="muted">過去在籍者・旧シルバー集計も履歴として表示します。</div>
+        </div>
+      </div>
+      <div class="tablewrap">
+        <table class="summarytable">
+          <thead><tr><th>氏名</th><th>ピッキング</th><th>パスソート</th><th>手梱包</th><th>自動梱包機</th><th>入庫＆在庫移動</th><th>合計</th></tr></thead>
+          <tbody id="monthBody"></tbody>
+        </table>
+      </div>
+      <div id="monthMessage" class="message"></div>
+    </section>
+  </section>
+
+  <section id="adminTab" class="hidden">
+    <section class="card">
+      <h3>データ管理</h3>
+      <div class="admin-grid">
+        <div class="admin-item"><span class="badge">共通マスタ</span><b>従業員マスタ</b><p>既存の logistics_staff を参照します。在籍中のパート・シルバーだけを本日入力に表示します。</p></div>
+        <div class="admin-item"><span class="badge">保存方式</span><b>分単位で保存</b><p>画面は 3:30 のように表示し、DBでは210分として保持します。</p></div>
+        <div class="admin-item"><span class="badge">履歴</span><b>旧Excelデータ</b><p id="importStatus">取込状況を確認中…</p></div>
+      </div>
+    </section>
+  </section>
+</div>
+</main>
+
+<script src="worktime.js"></script>
+</body>
+</html>
