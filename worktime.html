@@ -31,7 +31,7 @@
 
 <div id="appView" class="hidden">
   <nav class="tabs">
-    <button class="tab active" data-tab="today">本日入力</button>
+    <button class="tab active" data-tab="today">日別入力</button>
     <button class="tab" data-tab="monthly">月次集計</button>
     <button class="tab" data-tab="admin">管理</button>
   </nav>
@@ -39,9 +39,13 @@
   <section id="todayTab">
     <section class="hero card">
       <div>
-        <div class="eyebrow">本日の入力</div>
-        <h2 id="todayLabel">—</h2>
-        <div class="muted">日付は自動固定です。入力日の選び間違いは起きません。</div>
+        <div class="eyebrow">作業日入力</div>
+        <div class="date-nav">
+          <button id="prevDateBtn" class="date-arrow" type="button" aria-label="前日">＜</button>
+          <h2 id="todayLabel">—</h2>
+          <button id="nextDateBtn" class="date-arrow" type="button" aria-label="翌日">＞</button>
+        </div>
+        <div class="muted">初期表示は当日です。＜ ＞で過去の日付を切り替えられます。</div>
       </div>
       <button id="reloadTodayBtn" class="ghost">再読み込み</button>
     </section>
