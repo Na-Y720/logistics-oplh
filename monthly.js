@@ -22,10 +22,13 @@
     const actual=list.filter(r=>r.actual_total!=null);
     const completed=list.filter(r=>toMinutes(r.completed_at)!=null);
     const actualTotal=actual.reduce((z,r)=>z+Number(r.actual_total||0),0);
+    const sagawaTotal=list.reduce((z,r)=>z+(r.actual_sagawa==null?0:Number(r.actual_sagawa)),0);
+    const nekoposTotal=list.reduce((z,r)=>z+(r.actual_nekopos==null?0:Number(r.actual_nekopos)),0);
+    const yupackTotal=list.reduce((z,r)=>z+(r.actual_yupack==null?0:Number(r.actual_yupack)),0);
     const outlook=list.reduce((z,r)=>z+Number(r.actual_total!=null?r.actual_total:(r.final_forecast||0)),0);
     const avg=completed.length?completed.reduce((z,r)=>z+toMinutes(r.completed_at),0)/completed.length:null;
     const onTime=completed.length?completed.filter(r=>toMinutes(r.completed_at)<=15*60+30).length/completed.length:null;
-    return {actualTotal,actualDays:actual.length,outlook,avg,completedDays:completed.length,onTime};
+    return {actualTotal,sagawaTotal,nekoposTotal,yupackTotal,actualDays:actual.length,outlook,avg,completedDays:completed.length,onTime};
   };
   function ensureOptions(){
     const select=$('monthlyPeriod');if(!select||!rows.length)return [];
@@ -45,12 +48,15 @@
     $('monthlyActual').textContent=fmtInt(s.actualTotal)+'件';
     $('monthlyActualDays').textContent=s.actualDays+'日';
     $('monthlyOutlook').textContent=fmtInt(s.outlook)+'件';
+    $('monthlySagawa').textContent=fmtInt(s.sagawaTotal)+'件';
+    $('monthlyNekopos').textContent=fmtInt(s.nekoposTotal)+'件';
+    $('monthlyYupack').textContent=fmtInt(s.yupackTotal)+'件';
     $('monthlyAvgTime').textContent=formatTime(s.avg);
     $('monthlyAvgDays').textContent=s.completedDays?`${s.completedDays}日平均`:'完了時間未入力';
     $('monthlyOnTime').textContent=s.onTime==null?'—':(s.onTime*100).toFixed(1)+'%';
     body.innerHTML=keys.map(k=>{
       const mrows=rows.filter(r=>closeMonthKey(r.forecast_date)===k),x=summarize(mrows);
-      return `<tr class="${k===selected?'today-row':''}"><td><button class="linkdate" data-month="${k}">${closeMonthLabel(k)}</button></td><td>${periodLabel(mrows)}</td><td class="num">${fmtInt(x.actualTotal)}</td><td class="num">${x.actualDays}</td><td class="num">${fmtInt(x.outlook)}</td><td class="num">${formatTime(x.avg)}</td><td class="num">${x.onTime==null?'—':(x.onTime*100).toFixed(1)+'%'}</td></tr>`;
+      return `<tr class="${k===selected?'today-row':''}"><td><button class="linkdate" data-month="${k}">${closeMonthLabel(k)}</button></td><td>${periodLabel(mrows)}</td><td class="num">${fmtInt(x.actualTotal)}</td><td class="num">${fmtInt(x.sagawaTotal)}</td><td class="num">${fmtInt(x.nekoposTotal)}</td><td class="num">${fmtInt(x.yupackTotal)}</td><td class="num">${x.actualDays}</td><td class="num">${fmtInt(x.outlook)}</td><td class="num">${formatTime(x.avg)}</td><td class="num">${x.onTime==null?'—':(x.onTime*100).toFixed(1)+'%'}</td></tr>`;
     }).join('');
     body.querySelectorAll('[data-month]').forEach(b=>b.onclick=()=>{select.value=b.dataset.month;renderMonthly()});
   }
