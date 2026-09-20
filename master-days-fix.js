@@ -1,7 +1,9 @@
 (function(){
   const $=id=>document.getElementById(id);
+  function periodStart(ym){const[y,m]=String(ym).split('-').map(Number),d=new Date(Date.UTC(y,m-2,21)),pad=v=>String(v).padStart(2,'0');return d.getUTCFullYear()+'-'+pad(d.getUTCMonth()+1)+'-'+pad(d.getUTCDate())}
   async function syncMonth(staffId,ym,days){
     if(!staffId||!ym)return;
+    const s=(typeof staff!=='undefined'?staff.find(x=>x.id===staffId):null);if(s?.retirement_date&&String(s.retirement_date).slice(0,10)<periodStart(ym))return;
     const planMonth=ym+'-01';
     const rows=await rest('logistics_monthly_staffing',`owner_id=eq.${user.id}&staff_id=eq.${staffId}&plan_month=eq.${planMonth}&select=*`);
     const now=new Date().toISOString();
