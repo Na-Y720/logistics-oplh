@@ -45,7 +45,7 @@
   async function importKotFile(file){
     const ym=$('shiftMonth')?.value;if(!ym){setNotice('先に対象月度を選択してください。','bad');return}const b=$('shiftKotImportBtn');if(b){b.disabled=true;b.textContent='取込中…'}
     try{const text=await file.text(),parsed=parseKotHtml(text),p=periodForMonth(ym);if(parsed.start!==p.start||parsed.end!==p.end)throw new Error(`ファイル期間 ${parsed.start}～${parsed.end} と、選択中の対象期間 ${p.start}～${p.end} が一致しません。`);
-      const slist=await rest('logistics_staff',`owner_id=eq.${user.id}&is_active=eq.true&select=id,name`),byName=new Map((slist||[]).map(s=>[normalizeName(s.name),s])),planMonth=ym+'-01',now=new Date().toISOString(),out=[],matched=new Set(),unmatched=[];
+      const slist=await rest('logistics_staff',`owner_id=eq.${user.id}&is_active=eq.true&select=id,name,retirement_date`),byName=new Map((slist||[]).filter(s=>!s.retirement_date||String(s.retirement_date).slice(0,10)>=p.start).map(s=>[normalizeName(s.name),s])),planMonth=ym+'-01',now=new Date().toISOString(),out=[],matched=new Set(),unmatched=[];
       for(const r of parsed.rows){const s=byName.get(r.name);if(!s){unmatched.push(r.rawName);continue}matched.add(s.id);for(const d of r.offs)out.push({owner_id:user.id,staff_id:s.id,plan_month:planMonth,shift_date:d,assignment:'off',lock_type:'manual_off',updated_at:now})}
       if(!out.length)throw new Error('登録済み従業員に一致する「--」がありませんでした。');for(let i=0;i<out.length;i+=300)await rest('logistics_daily_shifts','on_conflict=owner_id%2Cstaff_id%2Cshift_date',{method:'POST',headers:{Prefer:'resolution=merge-duplicates'},body:JSON.stringify(out.slice(i,i+300))});const refresh=$('shiftRefreshBtn');if(refresh?.onclick)await refresh.onclick();const extra=unmatched.length?` アプリ未登録または氏名不一致 ${unmatched.length}名は無視しました。`:'';setNotice(`KING OF TIMEから ${matched.size}名・${out.length}件の休みを「休★」として取り込みました。${extra}`,'good')}
     catch(e){setNotice('KING OF TIME休み取込に失敗しました: '+(e?.message||e),'bad')}
@@ -56,6 +56,7 @@
 
   async function syncMasterDaysToSelectedMonth(staffId,days){
     const ym=$('shiftMonth')?.value||$('month')?.value;if(!staffId||!ym)return null;
+    const p=periodForMonth(ym),s=(typeof staff!=='undefined'?staff.find(x=>x.id===staffId):null);if(s?.retirement_date&&String(s.retirement_date).slice(0,10)<p.start)return null;
     const planMonth=ym+'-01',now=new Date().toISOString(),rows=await rest('logistics_monthly_staffing',`owner_id=eq.${user.id}&staff_id=eq.${staffId}&plan_month=eq.${planMonth}&select=*`),cur=rows?.[0]||null,d=(typeof defaults!=='undefined'?defaults.find(x=>x.staff_id===staffId):null)||{};
     const body={owner_id:user.id,staff_id:staffId,plan_month:planMonth,work_days:days,included:cur?!!cur.included:true,start_time:cur?cur.start_time:(d.start_time||null),end_time:cur?cur.end_time:(d.end_time||null),break_start:cur?cur.break_start:(d.break_start??null),break_end:cur?cur.break_end:(d.break_end??null),updated_at:now};
     await rest('logistics_monthly_staffing','on_conflict=owner_id%2Cstaff_id%2Cplan_month',{method:'POST',headers:{Prefer:'resolution=merge-duplicates'},body:JSON.stringify(body)});return ym
