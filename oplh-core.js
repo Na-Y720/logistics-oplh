@@ -7,7 +7,7 @@ let session=null,user=null,staff=[];
 function esc(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 function num(v){const n=Number(v);return Number.isFinite(n)?n:0}
 function fmt(v,d=1){return Number.isFinite(v)?Number(v).toLocaleString('ja-JP',{minimumFractionDigits:d,maximumFractionDigits:d}):'—'}
-function normName(v){return String(v??'').normalize('NFKC').replace(/[\s　]+/g,'').trim()}
+function normName(v){return String(v??'').normalize('NFKC').replace(/^[0-9]{6}[\s　\u00A0]*/,'').replace(/[\s　\u00A0]+/g,'').trim()}
 function saveSession(v){session=v;if(v)localStorage.setItem(SESSION_KEY,JSON.stringify(v));else localStorage.removeItem(SESSION_KEY)}
 function loadSession(){try{return JSON.parse(localStorage.getItem(SESSION_KEY)||'null')}catch{return null}}
 
