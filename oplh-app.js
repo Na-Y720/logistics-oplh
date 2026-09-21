@@ -22,7 +22,7 @@ const TIME_ONLY=[
  {key:'pass_sort',label:'パスソート'},
  {key:'auto_pack',label:'自動梱包機'}
 ];
-let wmsRows=[],tdRows=[],workRows=[],imports=[],analysis=null;
+let wmsRows=[],tdRows=[],workRows=[],imports=[],shipmentSummary=[],analysis=null;
 
 function setImportStatus(msg,type=''){
  const el=$('importStatus');if(!el)return;
@@ -88,20 +88,29 @@ function minmax(current,d){
  if(!current.max||d>current.max)current.max=d;
  return current;
 }
+function monthForWorkDate(d){
+ const m=String(d||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);if(!m)return'';
+ let y=Number(m[1]),mon=Number(m[2]),day=Number(m[3]);
+ if(day>=21){mon++;if(mon===13){y++;mon=1}}
+ return y+'-'+String(mon).padStart(2,'0');
+}
 async function importWms(file){
  setImportStatus('WMS CSVを解析中…');await new Promise(r=>setTimeout(r,20));
- const text=await readCsvText(file),agg=new Map(),range={min:'',max:''};let header=null,ix=null,sourceRows=0,usedRows=0;
+ const text=await readCsvText(file),agg=new Map(),range={min:'',max:''},shipmentSets=new Map();let header=null,ix=null,sourceRows=0,usedRows=0;
  eachCsvRow(text,(row,no)=>{
-  if(no===0){header=row;ix=getIndices(header,{date:'業務日付',activity:'作業区分',qty:'実績数',code:'作業者コード',name:'作業者名'});return}
+  if(no===0){header=row;ix=getIndices(header,{date:'業務日付',activity:'作業区分',qty:'実績数',slip:'伝票No',code:'作業者コード',name:'作業者名'});return}
   sourceRows++;
   const label=String(row[ix.activity]||'').trim(),key=WMS_MAP[label];if(!key)return;
   const d=dateOnly(row[ix.date]);if(!d)return;minmax(range,d);
+  if(label==='ピッキング'){
+   const slip=String(row[ix.slip]||'').trim(),ym=monthForWorkDate(d);
+   if(slip&&ym){if(!shipmentSets.has(ym))shipmentSets.set(ym,new Set());shipmentSets.get(ym).add(slip)}
+  }
   const workerCodeIndex=row.length>=6?row.length-6:ix.code,workerNameIndex=row.length>=5?row.length-5:ix.name;
   const name=String(row[workerNameIndex]||'').trim(),code=String(row[workerCodeIndex]||'').trim(),workerKey=code||normName(name);if(!workerKey)return;
   const k=[d,workerKey,key].join('|'),q=num(String(row[ix.qty]||'').replaceAll(',',''));
   let a=agg.get(k);if(!a){a={work_date:d,worker_key:workerKey,worker_code:code||null,worker_name:name,activity_key:key,activity_label:label,action_count:0,quantity:0};agg.set(k,a)}
-  if(key==='stock_move'){if(q>0){a.action_count++;a.quantity+=q;usedRows++}}
-  else if(q>0){a.action_count++;a.quantity+=q;usedRows++}
+  if(q>0){a.action_count++;a.quantity+=q;usedRows++}
  });
  if(!agg.size)throw new Error('対象となるWMS作業データがありません。');
  const batch=await rest('oplh_import_batches','select=*',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify({owner_id:user.id,source:'wms',source_filename:file.name,period_start:range.min,period_end:range.max,source_rows:sourceRows,aggregate_rows:agg.size})});
@@ -109,7 +118,14 @@ async function importWms(file){
  await rest('oplh_wms_daily','owner_id=eq.'+user.id+'&work_date=gte.'+range.min+'&work_date=lte.'+range.max,{method:'DELETE'});
  const rows=[...agg.values()].map(r=>({...r,owner_id:user.id,staff_id:staffByName(r.worker_name)?.id||null,batch_id:batchId,updated_at:new Date().toISOString()}));
  await chunkUpsert('oplh_wms_daily',rows,'owner_id,work_date,worker_key,activity_key');
- setImportStatus('WMS取込完了：元データ '+sourceRows.toLocaleString()+'行 / 対象 '+usedRows.toLocaleString()+'行 → 日別集計 '+rows.length.toLocaleString()+'件','good');
+ const summaries=[];
+ for(const [ym,set] of shipmentSets){
+  const p=planPeriod(ym);
+  if(range.min<=p.start&&range.max>=p.end)summaries.push({owner_id:user.id,month_ym:ym,period_start:p.start,period_end:p.end,shipment_count:set.size,batch_id:batchId,updated_at:new Date().toISOString()});
+ }
+ if(summaries.length)await chunkUpsert('oplh_wms_monthly_summary',summaries,'owner_id,month_ym',50);
+ const shipText=summaries.length?' / 月度出荷件数 '+summaries.map(x=>x.month_ym+'='+x.shipment_count.toLocaleString()+'件').join(', '):' / 完結月度なし（出荷件数集計は更新なし）';
+ setImportStatus('WMS取込完了：元データ '+sourceRows.toLocaleString()+'行 / 対象 '+usedRows.toLocaleString()+'行 → 日別集計 '+rows.length.toLocaleString()+'件'+shipText,'good');
 }
 async function importTd(file){
  setImportStatus('TimeDesigner CSVを解析中…');await new Promise(r=>setTimeout(r,20));
@@ -140,99 +156,116 @@ async function handleImport(kind){
  finally{$('wmsImportBtn').disabled=false;$('tdImportBtn').disabled=false;input.value=''}
 }
 async function loadData(){
- const p=periodText();$('refreshBtn').disabled=true;$('dataState').textContent='読み込み中…';
+ const p=periodText(),ym=$('month').value;$('refreshBtn').disabled=true;$('dataState').textContent='読み込み中…';
  try{
   const q='owner_id=eq.'+user.id+'&work_date=gte.'+p.start+'&work_date=lte.'+p.end;
-  [staff,wmsRows,tdRows,workRows,imports]=await Promise.all([
+  [staff,wmsRows,tdRows,workRows,imports,shipmentSummary]=await Promise.all([
    restAll('logistics_staff','owner_id=eq.'+user.id+'&select=id,name,employment_type,retirement_date,is_active&order=name.asc'),
    restAll('oplh_wms_daily',q+'&select=*'),
    restAll('oplh_timedesigner_daily',q+'&select=*'),
-   restAll('logistics_work_time',q+'&select=staff_id,work_date,picking_minutes'),
-   rest('oplh_import_batches','owner_id=eq.'+user.id+'&select=*&order=imported_at.desc&limit=12')
+   restAll('logistics_work_time',q+'&select=staff_id,work_date,picking_minutes,hand_pack_minutes,auto_pack_minutes,pass_sort_minutes,sorting_minutes'),
+   rest('oplh_import_batches','owner_id=eq.'+user.id+'&select=*&order=imported_at.desc&limit=12'),
+   rest('oplh_wms_monthly_summary','owner_id=eq.'+user.id+'&month_ym=eq.'+ym+'&select=*')
   ]);
   analysis=buildAnalysis();renderAll();
-  $('dataState').textContent='WMS '+wmsRows.length.toLocaleString()+'件 / TimeDesigner '+tdRows.length.toLocaleString()+'件 / パート時間 '+workRows.length.toLocaleString()+'件';
+  const ship=num(shipmentSummary?.[0]?.shipment_count);
+  $('dataState').textContent='出荷 '+(ship?ship.toLocaleString()+'件':'未集計')+' / WMS '+wmsRows.length.toLocaleString()+'件 / TimeDesigner '+tdRows.length.toLocaleString()+'件 / 時間管理 '+workRows.length.toLocaleString()+'件';
  }catch(e){$('dataState').textContent='読み込みエラー：'+e.message}
  finally{$('refreshBtn').disabled=false}
 }
-function blankMetric(){return{quantity:0,actions:0,tdMinutes:0,partMinutes:0,minutes:0,source:'',oplh:null}}
+function blankMetric(){return{quantity:0,actions:0,tdMinutes:0,partMinutes:0,minutes:0,source:''}}
 function buildAnalysis(){
  const byStaff=new Map(),unmatchedW=new Map(),unmatchedT=new Map();
  const people=new Map(staff.map(s=>[s.id,{...s,name:cleanStaffName(s.name)}]));
  const ensure=(sid,name='')=>{
   if(!people.has(sid))people.set(sid,{id:sid,name:cleanStaffName(name)||name||'未登録',employment_type:'未登録'});
-  if(!byStaff.has(sid))byStaff.set(sid,{metrics:{},timeOnly:{}});
+  if(!byStaff.has(sid))byStaff.set(sid,{picking:blankMetric(),timeOnly:{}});
   return byStaff.get(sid);
  };
- const getMetric=(sid,key,name='')=>{const o=ensure(sid,name);if(!o.metrics[key])o.metrics[key]=blankMetric();return o.metrics[key]};
+ const tdCovered=new Set(),overallMinutes={picking:0,hand_pack:0,auto_pack:0};
  for(const r of wmsRows){
+  if(r.activity_key!=='picking')continue;
   const linked=resolveStaffId(r),sid=linked||externalStaffId(r.worker_name);if(!sid)continue;
   if(!linked){const k=r.worker_code||r.worker_name;unmatchedW.set(k,{name:r.worker_name,code:r.worker_code,qty:(unmatchedW.get(k)?.qty||0)+num(r.quantity)})}
-  const m=getMetric(sid,r.activity_key,r.worker_name);m.quantity+=num(r.quantity);m.actions+=num(r.action_count);
+  const m=ensure(sid,r.worker_name).picking;m.quantity+=num(r.quantity);m.actions+=num(r.action_count);
  }
  for(const r of tdRows){
   const linked=resolveStaffId(r),sid=linked||externalStaffId(r.worker_name);if(!sid)continue;
   if(!linked){const k=r.employee_no||r.worker_name;unmatchedT.set(k,{name:r.worker_name,code:r.employee_no,minutes:(unmatchedT.get(k)?.minutes||0)+num(r.work_minutes)})}
-  if(TIME_ONLY.some(x=>x.key===r.activity_key)){const o=ensure(sid,r.worker_name);o.timeOnly[r.activity_key]=(o.timeOnly[r.activity_key]||0)+num(r.work_minutes)}
-  else getMetric(sid,r.activity_key,r.worker_name).tdMinutes+=num(r.work_minutes);
- }
- for(const r of workRows){if(r.staff_id)getMetric(r.staff_id,'picking',people.get(r.staff_id)?.name||'').partMinutes+=num(r.picking_minutes)}
- for(const [sid,o] of byStaff){
-  for(const a of ACTIVITIES){
-   const m=o.metrics[a.key]||blankMetric();o.metrics[a.key]=m;
-   if(a.key==='picking'){
-    if(m.tdMinutes>0){m.minutes=m.tdMinutes;m.source='TimeDesigner'}
-    else if(m.partMinutes>0){m.minutes=m.partMinutes;m.source='時間管理'}
-   }else if(m.tdMinutes>0){m.minutes=m.tdMinutes;m.source='TimeDesigner'}
-   if(a.oplh&&m.minutes>0)m.oplh=null;
+  const mins=num(r.work_minutes),key=r.activity_key;
+  if(['picking','hand_pack','auto_pack'].includes(key)){
+   overallMinutes[key]+=mins;
+   if(linked)tdCovered.add(linked+'|'+r.work_date+'|'+key);
   }
+  if(key==='picking')ensure(sid,r.worker_name).picking.tdMinutes+=mins;
+  if(['total_picking','pass_sort'].includes(key)){const o=ensure(sid,r.worker_name);o.timeOnly[key]=(o.timeOnly[key]||0)+mins}
  }
- return{byStaff,people,unmatchedW:[...unmatchedW.values()],unmatchedT:[...unmatchedT.values()]};
-}
-function selectedActivity(){return ACTIVITIES.find(x=>x.key===$('activity').value)||ACTIVITIES[0]}
-function selectedBasis(){return $('basisMode')?.value==='quantity'?'quantity':'actions'}
-function metricValue(m,basis=selectedBasis()){return basis==='quantity'?num(m.quantity):num(m.actions)}
-function metricOplh(m,a=selectedActivity(),basis=selectedBasis()){return a.oplh&&m.minutes>0?metricValue(m,basis)/(m.minutes/60):null}
-function overallFor(a){
- const basis=selectedBasis();let qty=0,actions=0,mins=0,covered=0,total=0;
- for(const r of wmsRows)if(r.activity_key===a.key)total+=basis==='quantity'?num(r.quantity):num(r.action_count);
- for(const [sid,o] of analysis.byStaff){
-  const m=o.metrics[a.key]||blankMetric();qty+=m.quantity;actions+=m.actions;
-  if(m.minutes>0){mins+=m.minutes;covered+=metricValue(m,basis)}
+ for(const r of workRows){
+  const sid=r.staff_id;if(!sid)continue;
+  const o=ensure(sid,people.get(sid)?.name||'');
+  const fields=[['picking','picking_minutes'],['hand_pack','hand_pack_minutes'],['auto_pack','auto_pack_minutes']];
+  for(const [key,field] of fields){
+   const mins=num(r[field]);if(!mins)continue;
+   const covered=tdCovered.has(sid+'|'+r.work_date+'|'+key);
+   if(!covered)overallMinutes[key]+=mins;
+   if(key==='picking'&&!covered)o.picking.partMinutes+=mins;
+  }
+  const pass=num(r.pass_sort_minutes);if(pass)o.timeOnly.pass_sort=(o.timeOnly.pass_sort||0)+pass;
  }
- return{qty,actions,mins,oplh:a.oplh&&mins>0?covered/(mins/60):null,coverage:total>0?covered/total*100:0,total};
+ for(const [,o] of byStaff){
+  const m=o.picking;m.minutes=m.tdMinutes+m.partMinutes;
+  if(m.tdMinutes>0&&m.partMinutes>0)m.source='TimeDesigner＋時間管理';
+  else if(m.tdMinutes>0)m.source='TimeDesigner';
+  else if(m.partMinutes>0)m.source='時間管理';
+ }
+ const shipmentCount=num(shipmentSummary?.[0]?.shipment_count);
+ const totalMinutes=overallMinutes.picking+overallMinutes.hand_pack+overallMinutes.auto_pack;
+ return{
+  byStaff,people,unmatchedW:[...unmatchedW.values()],unmatchedT:[...unmatchedT.values()],
+  overall:{...overallMinutes,totalMinutes,shipmentCount,oplh:shipmentCount>0&&totalMinutes>0?shipmentCount/(totalMinutes/60):null}
+ };
 }
-function renderAll(){renderActivity();renderTimeOnly();renderUnmatched();renderImports()}
-function renderActivity(){
- const a=selectedActivity(),basis=selectedBasis(),ov=overallFor(a),basisLabel=basis==='quantity'?'処理点数（実績数）':'WMS作業回数';
- $('metricNumeratorLabel').textContent=basisLabel;
- $('metricQty').textContent=fmt(ov.total,0)+(basis==='quantity'?'点':'回');
- $('metricHours').textContent=a.oplh?fmt(ov.mins/60,1)+'h':'—';
- $('metricOplh').textContent=a.oplh&&ov.oplh!=null?fmt(ov.oplh,1):'算出対象外';
- $('metricCoverage').textContent=a.oplh?fmt(ov.coverage,1)+'%':'—';
- $('activityNote').textContent=a.oplh?'OPLH = '+basisLabel+' ÷ 作業時間。基準は切替可能です。ピッキング時間はTimeDesignerを優先し、記録がない人はパート時間管理のピッキング時間を使用します。':'調整出庫はWMS実績のみ表示し、OPLHは算出しません。';
+function avgPickSeconds(m){return m.quantity>0&&m.minutes>0?m.minutes*60/m.quantity:null}
+function renderAll(){renderOverall();renderPicking();renderReferenceTimes();renderUnmatched();renderImports()}
+function renderOverall(){
+ const o=analysis.overall;
+ $('metricShipments').textContent=o.shipmentCount?o.shipmentCount.toLocaleString()+'件':'—';
+ $('metricPickingHours').textContent=fmt(o.picking/60,1)+'h';
+ $('metricHandPackHours').textContent=fmt(o.hand_pack/60,1)+'h';
+ $('metricAutoPackHours').textContent=fmt(o.auto_pack/60,1)+'h';
+ $('metricTotalHours').textContent=fmt(o.totalMinutes/60,1)+'h';
+ $('metricOplh').textContent=o.oplh!=null?fmt(o.oplh,1):'—';
+ $('activityNote').textContent=o.shipmentCount
+  ?'OPLH = 出荷件数 ÷（全体ピッキング時間＋手動梱包時間＋自動梱包機時間）。同じ人・同じ日・同じ作業に両方の時間記録がある場合はTimeDesignerを優先し、時間管理側は重複計上しません。'
+  :'出荷件数が未集計です。対象月度を丸ごと含むWMS履歴CSVを取り込むと、伝票Noのユニーク数を出荷件数として保存します。';
+}
+function renderPicking(){
  let rows=[];
  for(const [sid,o] of analysis.byStaff){
-  const s=analysis.people.get(sid)||{id:sid,name:sid,employment_type:'未登録'};
-  const m=o?.metrics?.[a.key];if(!m||(m.quantity===0&&m.minutes===0))continue;
-  rows.push({s,m});
+  const s=analysis.people.get(sid)||{id:sid,name:sid,employment_type:'未登録'},m=o.picking;
+  if(!m||(m.quantity===0&&m.minutes===0))continue;
+  rows.push({s,m,avg:avgPickSeconds(m)});
  }
  const mode=$('sortMode').value;
  rows.sort((x,y)=>{
-  if(mode==='oplh')return(num(metricOplh(y.m,a,basis))-num(metricOplh(x.m,a,basis)))||x.s.name.localeCompare(y.s.name,'ja');
+  if(mode==='avg')return((x.avg??Infinity)-(y.avg??Infinity))||x.s.name.localeCompare(y.s.name,'ja');
+  if(mode==='hours')return(y.m.minutes-x.m.minutes)||x.s.name.localeCompare(y.s.name,'ja');
   if(mode==='qty')return(y.m.quantity-x.m.quantity)||x.s.name.localeCompare(y.s.name,'ja');
   return x.s.name.localeCompare(y.s.name,'ja');
  });
- let html='<tr class="total"><td><b>全体</b></td><td>—</td><td class="num"><b>'+fmt(ov.qty,0)+'</b></td><td class="num">'+fmt(ov.actions,0)+'</td><td class="num">'+(a.oplh?fmt(ov.mins/60,1)+'h':'—')+'</td><td class="num"><b>'+(a.oplh&&ov.oplh!=null?fmt(ov.oplh,1):'—')+'</b></td><td>—</td></tr>';
- for(const {s,m} of rows){const oplh=metricOplh(m,a,basis);html+='<tr><td><b>'+esc(s.name)+'</b></td><td>'+esc(s.employment_type||'')+'</td><td class="num">'+fmt(m.quantity,0)+'</td><td class="num">'+fmt(m.actions,0)+'</td><td class="num">'+(m.minutes?fmt(m.minutes/60,2)+'h':'—')+'</td><td class="num oplh">'+(oplh!=null?fmt(oplh,1):'—')+'</td><td>'+esc(m.source||'時間なし')+'</td></tr>'}
- if(!rows.length)html+='<tr><td colspan="7" class="muted">この月度のデータがありません。</td></tr>';
+ let totalQty=0,totalActions=0,totalMins=0;
+ for(const {m} of rows){totalQty+=m.quantity;totalActions+=m.actions;totalMins+=m.minutes}
+ const totalAvg=totalQty>0&&totalMins>0?totalMins*60/totalQty:null;
+ let html='<tr class="total"><td><b>全体</b></td><td>—</td><td class="num"><b>'+fmt(totalQty,0)+'</b></td><td class="num">'+fmt(totalActions,0)+'</td><td class="num"><b>'+fmt(totalMins/60,1)+'h</b></td><td class="num"><b>'+(totalAvg!=null?fmt(totalAvg,1)+'秒':'—')+'</b></td><td>—</td></tr>';
+ for(const {s,m,avg} of rows)html+='<tr><td><b>'+esc(s.name)+'</b></td><td>'+esc(s.employment_type||'')+'</td><td class="num">'+fmt(m.quantity,0)+'</td><td class="num">'+fmt(m.actions,0)+'</td><td class="num">'+(m.minutes?fmt(m.minutes/60,2)+'h':'—')+'</td><td class="num oplh">'+(avg!=null?fmt(avg,1)+'秒':'—')+'</td><td>'+esc(m.source||'時間なし')+'</td></tr>';
+ if(!rows.length)html+='<tr><td colspan="7" class="muted">この月度のピッキングデータがありません。</td></tr>';
  $('performanceBody').innerHTML=html;
 }
-function renderTimeOnly(){
- const totals=Object.fromEntries(TIME_ONLY.map(x=>[x.key,0]));
- const people=Object.fromEntries(TIME_ONLY.map(x=>[x.key,new Set()]));
- for(const [sid,o] of analysis.byStaff)for(const t of TIME_ONLY){const m=num(o.timeOnly[t.key]);if(m){totals[t.key]+=m;people[t.key].add(sid)}}
- $('timeOnlyBody').innerHTML=TIME_ONLY.map(t=>'<tr><td>'+esc(t.label)+'</td><td class="num">'+fmt(totals[t.key]/60,1)+'h</td><td class="num">'+people[t.key].size+'人</td><td class="muted">処理件数データなし</td></tr>').join('');
+function renderReferenceTimes(){
+ const keys=[{key:'total_picking',label:'トータルピッキング'},{key:'pass_sort',label:'パスソート'}];
+ const totals=Object.fromEntries(keys.map(x=>[x.key,0])),people=Object.fromEntries(keys.map(x=>[x.key,new Set()]));
+ for(const [sid,o] of analysis.byStaff)for(const t of keys){const m=num(o.timeOnly[t.key]);if(m){totals[t.key]+=m;people[t.key].add(sid)}}
+ $('timeOnlyBody').innerHTML=keys.map(t=>'<tr><td>'+esc(t.label)+'</td><td class="num">'+fmt(totals[t.key]/60,1)+'h</td><td class="num">'+people[t.key].size+'人</td><td class="muted">OPLH分母には含めない</td></tr>').join('');
 }
 function renderUnmatched(){
  const all=[...analysis.unmatchedW.map(x=>({...x,src:'WMS'})),...analysis.unmatchedT.map(x=>({...x,src:'TimeDesigner'}))];
@@ -245,8 +278,7 @@ function renderImports(){
 }
 async function bootApp(){
  if(!$('month').value)$('month').value=currentYm();
- if(!$('activity').options.length)for(const a of ACTIVITIES){const o=document.createElement('option');o.value=a.key;o.textContent=a.label;$('activity').appendChild(o)}
- $('month').onchange=loadData;$('activity').onchange=renderActivity;$('basisMode').onchange=renderActivity;$('sortMode').onchange=renderActivity;$('refreshBtn').onclick=loadData;
+ $('month').onchange=loadData;$('sortMode').onchange=renderPicking;$('refreshBtn').onclick=loadData;
  $('wmsImportBtn').onclick=()=>handleImport('wms');$('tdImportBtn').onclick=()=>handleImport('td');
  $('wmsFile').onchange=()=>{if($('wmsFile').files?.[0])handleImport('wms')};
  $('tdFile').onchange=()=>{if($('tdFile').files?.[0])handleImport('td')};
