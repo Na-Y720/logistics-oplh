@@ -177,7 +177,7 @@ async function loadData(){
 function blankMetric(){return{quantity:0,actions:0,tdMinutes:0,partMinutes:0,minutes:0,source:''}}
 function buildAnalysis(){
  const byStaff=new Map(),unmatchedW=new Map(),unmatchedT=new Map();
- const people=new Map(staff.map(s=>[s.id,{...s,name:cleanStaffName(s.name)}]));
+ const people=new Map(staff.map(s=>[s.id,{...s,name:String(s.name??'').trim()}]));
  const ensure=(sid,name='')=>{
   if(!people.has(sid))people.set(sid,{id:sid,name:cleanStaffName(name)||name||'未登録',employment_type:'未登録'});
   if(!byStaff.has(sid))byStaff.set(sid,{picking:blankMetric(),timeOnly:{}});
