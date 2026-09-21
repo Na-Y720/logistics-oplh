@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>物流部 個人作業能力・OPLH分析</title>
+<title>物流部 OPLH・ピッキング分析</title>
 <link rel="stylesheet" href="oplh.css">
 </head>
 <body>
 <header>
  <div class="headerin">
-  <div class="title"><h1>物流部 個人作業能力・OPLH分析</h1><div class="sub">WMS作業実績 × TimeDesigner × パート時間管理</div></div>
+  <div class="title"><h1>物流部 OPLH・ピッキング分析</h1><div class="sub">WMS作業実績 × TimeDesigner × パート時間管理</div></div>
   <div class="toolbar"><span id="userLabel" class="sub"></span><button id="refreshBtn">再読み込み</button><button id="logoutBtn" class="hidden">ログアウト</button></div>
  </div>
 </header>
@@ -27,26 +27,26 @@
     <div><h2>対象月度</h2><div id="dataState" class="datastate"></div></div>
     <div class="filters">
      <div class="field"><label>月度</label><input id="month" type="month"></div>
-     <div class="field"><label>作業</label><select id="activity"></select></div>
-     <div class="field"><label>OPLH基準</label><select id="basisMode"><option value="actions">WMS作業回数</option><option value="quantity">処理点数（実績数）</option></select></div>
-     <div class="field"><label>並び順</label><select id="sortMode"><option value="name">氏名順</option><option value="oplh">OPLH高い順</option><option value="qty">処理点数多い順</option></select></div>
+     <div class="field"><label>個人表の並び順</label><select id="sortMode"><option value="name">氏名順</option><option value="avg">1点あたり時間が短い順</option><option value="hours">ピッキング時間が長い順</option><option value="qty">処理点数が多い順</option></select></div>
     </div>
    </div>
    <div class="period">集計期間：<span id="periodLabel"></span></div>
    <div class="kpis">
-    <div class="kpi"><span id="metricNumeratorLabel" class="label">WMS作業回数</span><strong id="metricQty">—</strong></div>
-    <div class="kpi"><span class="label">紐付いた作業時間</span><strong id="metricHours">—</strong></div>
-    <div class="kpi"><span class="label">全体OPLH</span><strong id="metricOplh">—</strong></div>
-    <div class="kpi"><span class="label">時間紐付け率</span><strong id="metricCoverage">—</strong></div>
+    <div class="kpi"><span class="label">出荷件数</span><strong id="metricShipments">—</strong></div>
+    <div class="kpi"><span class="label">ピッキング時間</span><strong id="metricPickingHours">—</strong></div>
+    <div class="kpi"><span class="label">手動梱包時間</span><strong id="metricHandPackHours">—</strong></div>
+    <div class="kpi"><span class="label">自動梱包機時間</span><strong id="metricAutoPackHours">—</strong></div>
+    <div class="kpi"><span class="label">ピッキング＋梱包 合計人時</span><strong id="metricTotalHours">—</strong></div>
+    <div class="kpi"><span class="label">全体OPLH（出荷件/人時）</span><strong id="metricOplh">—</strong></div>
    </div>
    <div id="activityNote" class="note"></div>
   </section>
 
   <section class="panel">
-   <div class="head"><div><h2>個人別作業能力</h2><div class="sub">全体OPLHは、時間が確認できる作業者の選択基準値 ÷ 合計作業時間で算出</div></div></div>
+   <div class="head"><div><h2>個人別ピッキングタイム</h2><div class="sub">個人OPLHは使用せず、WMSピッキング実績と実作業時間から1点あたりの平均ピッキング時間を表示</div></div></div>
    <div class="tablewrap">
     <table>
-     <thead><tr><th>作業者</th><th>区分</th><th class="num">処理点数</th><th class="num">WMS作業回数</th><th class="num">作業時間</th><th class="num">OPLH</th><th>時間データ</th></tr></thead>
+     <thead><tr><th>作業者</th><th>区分</th><th class="num">ピッキング点数</th><th class="num">WMS作業回数</th><th class="num">ピッキング時間</th><th class="num">1点あたり平均</th><th>時間データ</th></tr></thead>
      <tbody id="performanceBody"></tbody>
     </table>
    </div>
@@ -56,7 +56,7 @@
    <div class="head"><div><h2>CSV取込</h2><div class="sub">同じ期間を再取込すると、その期間の集計データを置き換えます。</div></div></div>
    <div class="importgrid">
     <div class="upload">
-     <h3>WMS 作業履歴</h3><p>作業区分・実績数・作業者コード・作業者名を日別集計して保存します。</p>
+     <h3>WMS 作業履歴</h3><p>作業実績を日別集計し、月度が完全に含まれる場合は伝票Noのユニーク数を出荷件数として保存します。</p>
      <div class="uploadrow"><input id="wmsFile" type="file" accept=".csv,text/csv"><button id="wmsImportBtn" class="primary">WMS取込</button></div>
     </div>
     <div class="upload">
@@ -69,7 +69,7 @@
 
   <div class="sectiongrid">
    <section class="panel">
-    <div class="head"><div><h3>OPLH未算出の時間作業</h3><div class="sub">TimeDesignerには時間があるが、対応する処理件数がない作業</div></div></div>
+    <div class="head"><div><h3>参考作業時間</h3><div class="sub">記録は確認するが、現在のOPLH分母には含めない作業</div></div></div>
     <div class="tablewrap"><table class="smalltable"><thead><tr><th>作業</th><th class="num">全体時間</th><th class="num">作業者数</th><th>状態</th></tr></thead><tbody id="timeOnlyBody"></tbody></table></div>
    </section>
    <section class="panel">
