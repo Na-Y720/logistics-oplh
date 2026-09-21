@@ -227,6 +227,7 @@ function buildAnalysis(){
  };
 }
 function avgPickSeconds(m){return m.quantity>0&&m.minutes>0?m.minutes*60/m.quantity:null}
+function avgActionSeconds(m){return m.actions>0&&m.minutes>0?m.minutes*60/m.actions:null}
 function renderAll(){renderOverall();renderPicking();renderReferenceTimes();renderUnmatched();renderImports()}
 function renderOverall(){
  const o=analysis.overall;
@@ -260,7 +261,7 @@ function renderPicking(){
  for(const [sid,o] of analysis.byStaff){
   const s=analysis.people.get(sid)||{id:sid,name:sid,employment_type:'未登録'},m=o.picking;
   if(!m||(m.quantity===0&&m.minutes===0))continue;
-  rows.push({s,m,avg:avgPickSeconds(m)});
+  rows.push({s,m,avg:avgPickSeconds(m),avgAction:avgActionSeconds(m)});
  }
  const dir=pickingSort.dir==='desc'?-1:1;
  const cmpText=(a,b)=>String(a??'').localeCompare(String(b??''),'ja');
@@ -278,6 +279,7 @@ function renderPicking(){
   else if(pickingSort.key==='actions')c=cmpNum(x.m.actions,y.m.actions);
   else if(pickingSort.key==='minutes')c=cmpNum(x.m.minutes,y.m.minutes);
   else if(pickingSort.key==='avg')c=cmpNum(x.avg,y.avg);
+  else if(pickingSort.key==='avgAction')c=cmpNum(x.avgAction,y.avgAction);
   else if(pickingSort.key==='source')c=cmpText(x.m.source||'時間なし',y.m.source||'時間なし');
   else c=cmpText(x.s.name,y.s.name);
   if(c===0)c=cmpText(x.s.name,y.s.name);
@@ -287,9 +289,10 @@ function renderPicking(){
  let totalQty=0,totalActions=0,totalMins=0;
  for(const {m} of rows){totalQty+=m.quantity;totalActions+=m.actions;totalMins+=m.minutes}
  const totalAvg=totalQty>0&&totalMins>0?totalMins*60/totalQty:null;
- let html='<tr class="total"><td><b>全体</b></td><td>—</td><td class="num"><b>'+fmt(totalQty,0)+'</b></td><td class="num">'+fmt(totalActions,0)+'</td><td class="num"><b>'+fmt(totalMins/60,1)+'h</b></td><td class="num"><b>'+(totalAvg!=null?fmt(totalAvg,1)+'秒':'—')+'</b></td><td>—</td></tr>';
- for(const {s,m,avg} of rows)html+='<tr><td><b>'+esc(s.name)+'</b></td><td>'+esc(s.employment_type||'')+'</td><td class="num">'+fmt(m.quantity,0)+'</td><td class="num">'+fmt(m.actions,0)+'</td><td class="num">'+(m.minutes?fmt(m.minutes/60,2)+'h':'—')+'</td><td class="num oplh">'+(avg!=null?fmt(avg,1)+'秒':'—')+'</td><td>'+esc(m.source||'時間なし')+'</td></tr>';
- if(!rows.length)html+='<tr><td colspan="7" class="muted">この月度のピッキングデータがありません。</td></tr>';
+ const totalAvgAction=totalActions>0&&totalMins>0?totalMins*60/totalActions:null;
+ let html='<tr class="total"><td><b>全体</b></td><td>—</td><td class="num"><b>'+fmt(totalQty,0)+'</b></td><td class="num">'+fmt(totalActions,0)+'</td><td class="num"><b>'+fmt(totalMins/60,1)+'h</b></td><td class="num"><b>'+(totalAvg!=null?fmt(totalAvg,1)+'秒':'—')+'</b></td><td class="num"><b>'+(totalAvgAction!=null?fmt(totalAvgAction,1)+'秒':'—')+'</b></td><td>—</td></tr>';
+ for(const {s,m,avg,avgAction} of rows)html+='<tr><td><b>'+esc(s.name)+'</b></td><td>'+esc(s.employment_type||'')+'</td><td class="num">'+fmt(m.quantity,0)+'</td><td class="num">'+fmt(m.actions,0)+'</td><td class="num">'+(m.minutes?fmt(m.minutes/60,2)+'h':'—')+'</td><td class="num oplh">'+(avg!=null?fmt(avg,1)+'秒':'—')+'</td><td class="num oplh">'+(avgAction!=null?fmt(avgAction,1)+'秒':'—')+'</td><td>'+esc(m.source||'時間なし')+'</td></tr>';
+ if(!rows.length)html+='<tr><td colspan="8" class="muted">この月度のピッキングデータがありません。</td></tr>';
  $('performanceBody').innerHTML=html;
 }
 function renderReferenceTimes(){
