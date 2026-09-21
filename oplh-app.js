@@ -23,6 +23,7 @@ const TIME_ONLY=[
  {key:'auto_pack',label:'自動梱包機'}
 ];
 let wmsRows=[],tdRows=[],workRows=[],imports=[],shipmentSummary=[],analysis=null;
+let pickingSort={key:'name',dir:'asc'};
 
 function setImportStatus(msg,type=''){
  const el=$('importStatus');if(!el)return;
@@ -239,6 +240,21 @@ function renderOverall(){
   ?'OPLH = 出荷件数 ÷（全体ピッキング時間＋手動梱包時間＋自動梱包機時間）。同じ人・同じ日・同じ作業に両方の時間記録がある場合はTimeDesignerを優先し、時間管理側は重複計上しません。'
   :'出荷件数が未集計です。対象月度を丸ごと含むWMS履歴CSVを取り込むと、伝票Noのユニーク数を出荷件数として保存します。';
 }
+function setPickingSort(key){
+ const textKeys=new Set(['name','type','source']);
+ if(pickingSort.key===key)pickingSort.dir=pickingSort.dir==='asc'?'desc':'asc';
+ else pickingSort={key,dir:textKeys.has(key)?'asc':'desc'};
+ renderPicking();
+}
+function updateSortHeaders(){
+ document.querySelectorAll('#pickingTable th[data-sort]').forEach(th=>{
+  const active=th.dataset.sort===pickingSort.key;
+  th.classList.toggle('sort-active',active);
+  th.setAttribute('aria-sort',active?(pickingSort.dir==='asc'?'ascending':'descending'):'none');
+  const mark=th.querySelector('.sortmark');
+  if(mark)mark.textContent=active?(pickingSort.dir==='asc'?'▲':'▼'):'↕';
+ });
+}
 function renderPicking(){
  let rows=[];
  for(const [sid,o] of analysis.byStaff){
@@ -246,13 +262,28 @@ function renderPicking(){
   if(!m||(m.quantity===0&&m.minutes===0))continue;
   rows.push({s,m,avg:avgPickSeconds(m)});
  }
- const mode=$('sortMode').value;
+ const dir=pickingSort.dir==='desc'?-1:1;
+ const cmpText=(a,b)=>String(a??'').localeCompare(String(b??''),'ja');
+ const cmpNum=(a,b)=>{
+  const av=a==null?null:Number(a),bv=b==null?null:Number(b);
+  if(av==null&&bv==null)return 0;
+  if(av==null)return 1;
+  if(bv==null)return -1;
+  return av-bv;
+ };
  rows.sort((x,y)=>{
-  if(mode==='avg')return((x.avg??Infinity)-(y.avg??Infinity))||x.s.name.localeCompare(y.s.name,'ja');
-  if(mode==='hours')return(y.m.minutes-x.m.minutes)||x.s.name.localeCompare(y.s.name,'ja');
-  if(mode==='qty')return(y.m.quantity-x.m.quantity)||x.s.name.localeCompare(y.s.name,'ja');
-  return x.s.name.localeCompare(y.s.name,'ja');
+  let c=0;
+  if(pickingSort.key==='type')c=cmpText(x.s.employment_type,y.s.employment_type);
+  else if(pickingSort.key==='qty')c=cmpNum(x.m.quantity,y.m.quantity);
+  else if(pickingSort.key==='actions')c=cmpNum(x.m.actions,y.m.actions);
+  else if(pickingSort.key==='minutes')c=cmpNum(x.m.minutes,y.m.minutes);
+  else if(pickingSort.key==='avg')c=cmpNum(x.avg,y.avg);
+  else if(pickingSort.key==='source')c=cmpText(x.m.source||'時間なし',y.m.source||'時間なし');
+  else c=cmpText(x.s.name,y.s.name);
+  if(c===0)c=cmpText(x.s.name,y.s.name);
+  return c*dir;
  });
+ updateSortHeaders();
  let totalQty=0,totalActions=0,totalMins=0;
  for(const {m} of rows){totalQty+=m.quantity;totalActions+=m.actions;totalMins+=m.minutes}
  const totalAvg=totalQty>0&&totalMins>0?totalMins*60/totalQty:null;
@@ -278,7 +309,8 @@ function renderImports(){
 }
 async function bootApp(){
  if(!$('month').value)$('month').value=currentYm();
- $('month').onchange=loadData;$('sortMode').onchange=renderPicking;$('refreshBtn').onclick=loadData;
+ $('month').onchange=loadData;$('refreshBtn').onclick=loadData;
+ document.querySelectorAll('#pickingTable th[data-sort]').forEach(th=>{th.onclick=()=>setPickingSort(th.dataset.sort)});
  $('wmsImportBtn').onclick=()=>handleImport('wms');$('tdImportBtn').onclick=()=>handleImport('td');
  $('wmsFile').onchange=()=>{if($('wmsFile').files?.[0])handleImport('wms')};
  $('tdFile').onchange=()=>{if($('tdFile').files?.[0])handleImport('td')};
