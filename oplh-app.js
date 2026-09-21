@@ -93,7 +93,8 @@ async function importWms(file){
   const name=String(row[ix.name]||'').trim(),code=String(row[ix.code]||'').trim(),workerKey=code||normName(name);if(!workerKey)return;
   const k=[d,workerKey,key].join('|'),q=num(String(row[ix.qty]||'').replaceAll(',',''));
   let a=agg.get(k);if(!a){a={work_date:d,worker_key:workerKey,worker_code:code||null,worker_name:name,activity_key:key,activity_label:label,action_count:0,quantity:0};agg.set(k,a)}
-  a.action_count++;a.quantity+=q;usedRows++;
+  if(key==='stock_move'){if(q>0){a.action_count++;a.quantity+=q;usedRows++}}
+  else if(q>0){a.action_count++;a.quantity+=q;usedRows++}
  });
  if(!agg.size)throw new Error('対象となるWMS作業データがありません。');
  const batch=await rest('oplh_import_batches','select=*',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify({owner_id:user.id,source:'wms',source_filename:file.name,period_start:range.min,period_end:range.max,source_rows:sourceRows,aggregate_rows:agg.size})});
