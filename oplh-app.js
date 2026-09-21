@@ -170,26 +170,33 @@ function buildAnalysis(){
     if(m.tdMinutes>0){m.minutes=m.tdMinutes;m.source='TimeDesigner'}
     else if(m.partMinutes>0){m.minutes=m.partMinutes;m.source='時間管理'}
    }else if(m.tdMinutes>0){m.minutes=m.tdMinutes;m.source='TimeDesigner'}
-   if(a.oplh&&m.minutes>0)m.oplh=m.quantity/(m.minutes/60);
+   if(a.oplh&&m.minutes>0)m.oplh=null;
   }
  }
  return{byStaff,unmatchedW:[...unmatchedW.values()],unmatchedT:[...unmatchedT.values()]};
 }
 function selectedActivity(){return ACTIVITIES.find(x=>x.key===$('activity').value)||ACTIVITIES[0]}
+function selectedBasis(){return $('basisMode')?.value==='quantity'?'quantity':'actions'}
+function metricValue(m,basis=selectedBasis()){return basis==='quantity'?num(m.quantity):num(m.actions)}
+function metricOplh(m,a=selectedActivity(),basis=selectedBasis()){return a.oplh&&m.minutes>0?metricValue(m,basis)/(m.minutes/60):null}
 function overallFor(a){
- let qty=0,actions=0,mins=0,coveredQty=0,totalQty=0;
- for(const r of wmsRows)if(r.activity_key===a.key)totalQty+=num(r.quantity);
- for(const [sid,o] of analysis.byStaff){const m=o.metrics[a.key]||blankMetric();qty+=m.quantity;actions+=m.actions;if(m.minutes>0){mins+=m.minutes;coveredQty+=m.quantity}}
- return{qty,actions,mins,oplh:a.oplh&&mins>0?coveredQty/(mins/60):null,coverage:totalQty>0?coveredQty/totalQty*100:0,totalQty};
+ const basis=selectedBasis();let qty=0,actions=0,mins=0,covered=0,total=0;
+ for(const r of wmsRows)if(r.activity_key===a.key)total+=basis==='quantity'?num(r.quantity):num(r.action_count);
+ for(const [sid,o] of analysis.byStaff){
+  const m=o.metrics[a.key]||blankMetric();qty+=m.quantity;actions+=m.actions;
+  if(m.minutes>0){mins+=m.minutes;covered+=metricValue(m,basis)}
+ }
+ return{qty,actions,mins,oplh:a.oplh&&mins>0?covered/(mins/60):null,coverage:total>0?covered/total*100:0,total};
 }
 function renderAll(){renderActivity();renderTimeOnly();renderUnmatched();renderImports()}
 function renderActivity(){
- const a=selectedActivity(),ov=overallFor(a);
- $('metricQty').textContent=fmt(ov.totalQty,0)+'点';
+ const a=selectedActivity(),basis=selectedBasis(),ov=overallFor(a),basisLabel=basis==='quantity'?'処理点数（実績数）':'WMS作業回数';
+ $('metricNumeratorLabel').textContent=basisLabel;
+ $('metricQty').textContent=fmt(ov.total,0)+(basis==='quantity'?'点':'回');
  $('metricHours').textContent=a.oplh?fmt(ov.mins/60,1)+'h':'—';
  $('metricOplh').textContent=a.oplh&&ov.oplh!=null?fmt(ov.oplh,1):'算出対象外';
  $('metricCoverage').textContent=a.oplh?fmt(ov.coverage,1)+'%':'—';
- $('activityNote').textContent=a.oplh?'OPLH = WMS実績数 ÷ 作業時間。ピッキングはTimeDesignerを優先し、記録がない人はパート時間管理のピッキング時間を使用します。':'調整出庫はWMS件数のみ表示し、OPLHは算出しません。';
+ $('activityNote').textContent=a.oplh?'OPLH = '+basisLabel+' ÷ 作業時間。基準は切替可能です。ピッキング時間はTimeDesignerを優先し、記録がない人はパート時間管理のピッキング時間を使用します。':'調整出庫はWMS実績のみ表示し、OPLHは算出しません。';
  let rows=[];
  for(const s of staff){
   const o=analysis.byStaff.get(s.id),m=o?.metrics?.[a.key];if(!m||(m.quantity===0&&m.minutes===0))continue;
@@ -197,12 +204,12 @@ function renderActivity(){
  }
  const mode=$('sortMode').value;
  rows.sort((x,y)=>{
-  if(mode==='oplh')return(num(y.m.oplh)-num(x.m.oplh))||x.s.name.localeCompare(y.s.name,'ja');
+  if(mode==='oplh')return(num(metricOplh(y.m,a,basis))-num(metricOplh(x.m,a,basis)))||x.s.name.localeCompare(y.s.name,'ja');
   if(mode==='qty')return(y.m.quantity-x.m.quantity)||x.s.name.localeCompare(y.s.name,'ja');
   return x.s.name.localeCompare(y.s.name,'ja');
  });
- let html='<tr class="total"><td><b>全体</b></td><td>—</td><td class="num"><b>'+fmt(ov.totalQty,0)+'</b></td><td class="num">'+fmt(ov.actions,0)+'</td><td class="num">'+(a.oplh?fmt(ov.mins/60,1)+'h':'—')+'</td><td class="num"><b>'+(a.oplh&&ov.oplh!=null?fmt(ov.oplh,1):'—')+'</b></td><td>—</td></tr>';
- for(const {s,m} of rows)html+='<tr><td><b>'+esc(s.name)+'</b></td><td>'+esc(s.employment_type||'')+'</td><td class="num">'+fmt(m.quantity,0)+'</td><td class="num">'+fmt(m.actions,0)+'</td><td class="num">'+(m.minutes?fmt(m.minutes/60,2)+'h':'—')+'</td><td class="num oplh">'+(m.oplh!=null?fmt(m.oplh,1):'—')+'</td><td>'+esc(m.source||'時間なし')+'</td></tr>';
+ let html='<tr class="total"><td><b>全体</b></td><td>—</td><td class="num"><b>'+fmt(ov.qty,0)+'</b></td><td class="num">'+fmt(ov.actions,0)+'</td><td class="num">'+(a.oplh?fmt(ov.mins/60,1)+'h':'—')+'</td><td class="num"><b>'+(a.oplh&&ov.oplh!=null?fmt(ov.oplh,1):'—')+'</b></td><td>—</td></tr>';
+ for(const {s,m} of rows){const oplh=metricOplh(m,a,basis);html+='<tr><td><b>'+esc(s.name)+'</b></td><td>'+esc(s.employment_type||'')+'</td><td class="num">'+fmt(m.quantity,0)+'</td><td class="num">'+fmt(m.actions,0)+'</td><td class="num">'+(m.minutes?fmt(m.minutes/60,2)+'h':'—')+'</td><td class="num oplh">'+(oplh!=null?fmt(oplh,1):'—')+'</td><td>'+esc(m.source||'時間なし')+'</td></tr>'}
  if(!rows.length)html+='<tr><td colspan="7" class="muted">この月度のデータがありません。</td></tr>';
  $('performanceBody').innerHTML=html;
 }
@@ -224,7 +231,7 @@ function renderImports(){
 async function bootApp(){
  if(!$('month').value)$('month').value=currentYm();
  if(!$('activity').options.length)for(const a of ACTIVITIES){const o=document.createElement('option');o.value=a.key;o.textContent=a.label;$('activity').appendChild(o)}
- $('month').onchange=loadData;$('activity').onchange=renderActivity;$('sortMode').onchange=renderActivity;$('refreshBtn').onclick=loadData;
+ $('month').onchange=loadData;$('activity').onchange=renderActivity;$('basisMode').onchange=renderActivity;$('sortMode').onchange=renderActivity;$('refreshBtn').onclick=loadData;
  $('wmsImportBtn').onclick=()=>handleImport('wms');$('tdImportBtn').onclick=()=>handleImport('td');
  await loadData();
 }
