@@ -28,12 +28,13 @@
     <div class="filters">
      <div class="field"><label>月度</label><input id="month" type="month"></div>
      <div class="field"><label>作業</label><select id="activity"></select></div>
+     <div class="field"><label>OPLH基準</label><select id="basisMode"><option value="actions">WMS作業回数</option><option value="quantity">処理点数（実績数）</option></select></div>
      <div class="field"><label>並び順</label><select id="sortMode"><option value="name">氏名順</option><option value="oplh">OPLH高い順</option><option value="qty">処理点数多い順</option></select></div>
     </div>
    </div>
    <div class="period">集計期間：<span id="periodLabel"></span></div>
    <div class="kpis">
-    <div class="kpi"><span class="label">WMS処理点数</span><strong id="metricQty">—</strong></div>
+    <div class="kpi"><span id="metricNumeratorLabel" class="label">WMS作業回数</span><strong id="metricQty">—</strong></div>
     <div class="kpi"><span class="label">紐付いた作業時間</span><strong id="metricHours">—</strong></div>
     <div class="kpi"><span class="label">全体OPLH</span><strong id="metricOplh">—</strong></div>
     <div class="kpi"><span class="label">時間紐付け率</span><strong id="metricCoverage">—</strong></div>
@@ -42,7 +43,7 @@
   </section>
 
   <section class="panel">
-   <div class="head"><div><h2>個人別作業能力</h2><div class="sub">全体値は、時間が確認できる作業者の処理点数 ÷ 合計作業時間で算出</div></div></div>
+   <div class="head"><div><h2>個人別作業能力</h2><div class="sub">全体OPLHは、時間が確認できる作業者の選択基準値 ÷ 合計作業時間で算出</div></div></div>
    <div class="tablewrap">
     <table>
      <thead><tr><th>作業者</th><th>区分</th><th class="num">処理点数</th><th class="num">WMS作業回数</th><th class="num">作業時間</th><th class="num">OPLH</th><th>時間データ</th></tr></thead>
