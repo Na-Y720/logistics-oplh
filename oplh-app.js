@@ -90,7 +90,8 @@ async function importWms(file){
   sourceRows++;
   const label=String(row[ix.activity]||'').trim(),key=WMS_MAP[label];if(!key)return;
   const d=dateOnly(row[ix.date]);if(!d)return;minmax(range,d);
-  const name=String(row[ix.name]||'').trim(),code=String(row[ix.code]||'').trim(),workerKey=code||normName(name);if(!workerKey)return;
+  const workerCodeIndex=row.length>=6?row.length-6:ix.code,workerNameIndex=row.length>=5?row.length-5:ix.name;
+  const name=String(row[workerNameIndex]||'').trim(),code=String(row[workerCodeIndex]||'').trim(),workerKey=code||normName(name);if(!workerKey)return;
   const k=[d,workerKey,key].join('|'),q=num(String(row[ix.qty]||'').replaceAll(',',''));
   let a=agg.get(k);if(!a){a={work_date:d,worker_key:workerKey,worker_code:code||null,worker_name:name,activity_key:key,activity_label:label,action_count:0,quantity:0};agg.set(k,a)}
   if(key==='stock_move'){if(q>0){a.action_count++;a.quantity+=q;usedRows++}}
