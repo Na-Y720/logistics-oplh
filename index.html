@@ -27,7 +27,6 @@
     <div><h2>対象月度</h2><div id="dataState" class="datastate"></div></div>
     <div class="filters">
      <div class="field"><label>月度</label><input id="month" type="month"></div>
-     <div class="field"><label>個人表の並び順</label><select id="sortMode"><option value="name">氏名順</option><option value="avg">1点あたり時間が短い順</option><option value="hours">ピッキング時間が長い順</option><option value="qty">処理点数が多い順</option></select></div>
     </div>
    </div>
    <div class="period">集計期間：<span id="periodLabel"></span></div>
@@ -45,8 +44,16 @@
   <section class="panel">
    <div class="head"><div><h2>個人別ピッキングタイム</h2><div class="sub">個人OPLHは使用せず、WMSピッキング実績と実作業時間から1点あたりの平均ピッキング時間を表示</div></div></div>
    <div class="tablewrap">
-    <table>
-     <thead><tr><th>作業者</th><th>区分</th><th class="num">ピッキング点数</th><th class="num">WMS作業回数</th><th class="num">ピッキング時間</th><th class="num">1点あたり平均</th><th>時間データ</th></tr></thead>
+    <table id="pickingTable">
+     <thead><tr>
+      <th class="sortable" data-sort="name">作業者 <span class="sortmark">▲</span></th>
+      <th class="sortable" data-sort="type">区分 <span class="sortmark">↕</span></th>
+      <th class="num sortable" data-sort="qty">ピッキング点数 <span class="sortmark">↕</span></th>
+      <th class="num sortable" data-sort="actions">WMS作業回数 <span class="sortmark">↕</span></th>
+      <th class="num sortable" data-sort="minutes">ピッキング時間 <span class="sortmark">↕</span></th>
+      <th class="num sortable" data-sort="avg">1点あたり平均 <span class="sortmark">↕</span></th>
+      <th class="sortable" data-sort="source">時間データ <span class="sortmark">↕</span></th>
+     </tr></thead>
      <tbody id="performanceBody"></tbody>
     </table>
    </div>
