@@ -38,6 +38,12 @@ function resolveStaffId(row){
  if(row.staff_id&&staff.some(s=>s.id===row.staff_id))return row.staff_id;
  return staffByName(row.worker_name)?.id||null;
 }
+function externalStaffId(name){
+ const n=normName(name);return n?'ext:'+n:null;
+}
+function cleanStaffName(name){
+ return String(name??'').normalize('NFKC').replace(/^[0-9]{6}[\s　\u00A0]*/,'').trim();
+}
 function periodText(){
  const p=planPeriod($('month').value);
  $('periodLabel').textContent=jpDate(p.start)+' ～ '+jpDate(p.end);
@@ -152,18 +158,25 @@ async function loadData(){
 function blankMetric(){return{quantity:0,actions:0,tdMinutes:0,partMinutes:0,minutes:0,source:'',oplh:null}}
 function buildAnalysis(){
  const byStaff=new Map(),unmatchedW=new Map(),unmatchedT=new Map();
- const ensure=sid=>{if(!byStaff.has(sid))byStaff.set(sid,{metrics:{},timeOnly:{}});return byStaff.get(sid)};
- const getMetric=(sid,key)=>{const o=ensure(sid);if(!o.metrics[key])o.metrics[key]=blankMetric();return o.metrics[key]};
+ const people=new Map(staff.map(s=>[s.id,{...s,name:cleanStaffName(s.name)}]));
+ const ensure=(sid,name='')=>{
+  if(!people.has(sid))people.set(sid,{id:sid,name:cleanStaffName(name)||name||'未登録',employment_type:'未登録'});
+  if(!byStaff.has(sid))byStaff.set(sid,{metrics:{},timeOnly:{}});
+  return byStaff.get(sid);
+ };
+ const getMetric=(sid,key,name='')=>{const o=ensure(sid,name);if(!o.metrics[key])o.metrics[key]=blankMetric();return o.metrics[key]};
  for(const r of wmsRows){
-  const sid=resolveStaffId(r);if(!sid){const k=r.worker_code||r.worker_name;unmatchedW.set(k,{name:r.worker_name,code:r.worker_code,qty:(unmatchedW.get(k)?.qty||0)+num(r.quantity)});continue}
-  const m=getMetric(sid,r.activity_key);m.quantity+=num(r.quantity);m.actions+=num(r.action_count);
+  const linked=resolveStaffId(r),sid=linked||externalStaffId(r.worker_name);if(!sid)continue;
+  if(!linked){const k=r.worker_code||r.worker_name;unmatchedW.set(k,{name:r.worker_name,code:r.worker_code,qty:(unmatchedW.get(k)?.qty||0)+num(r.quantity)})}
+  const m=getMetric(sid,r.activity_key,r.worker_name);m.quantity+=num(r.quantity);m.actions+=num(r.action_count);
  }
  for(const r of tdRows){
-  const sid=resolveStaffId(r);if(!sid){const k=r.employee_no||r.worker_name;unmatchedT.set(k,{name:r.worker_name,code:r.employee_no,minutes:(unmatchedT.get(k)?.minutes||0)+num(r.work_minutes)});continue}
-  if(TIME_ONLY.some(x=>x.key===r.activity_key)){const o=ensure(sid);o.timeOnly[r.activity_key]=(o.timeOnly[r.activity_key]||0)+num(r.work_minutes)}
-  else getMetric(sid,r.activity_key).tdMinutes+=num(r.work_minutes);
+  const linked=resolveStaffId(r),sid=linked||externalStaffId(r.worker_name);if(!sid)continue;
+  if(!linked){const k=r.employee_no||r.worker_name;unmatchedT.set(k,{name:r.worker_name,code:r.employee_no,minutes:(unmatchedT.get(k)?.minutes||0)+num(r.work_minutes)})}
+  if(TIME_ONLY.some(x=>x.key===r.activity_key)){const o=ensure(sid,r.worker_name);o.timeOnly[r.activity_key]=(o.timeOnly[r.activity_key]||0)+num(r.work_minutes)}
+  else getMetric(sid,r.activity_key,r.worker_name).tdMinutes+=num(r.work_minutes);
  }
- for(const r of workRows){if(r.staff_id)getMetric(r.staff_id,'picking').partMinutes+=num(r.picking_minutes)}
+ for(const r of workRows){if(r.staff_id)getMetric(r.staff_id,'picking',people.get(r.staff_id)?.name||'').partMinutes+=num(r.picking_minutes)}
  for(const [sid,o] of byStaff){
   for(const a of ACTIVITIES){
    const m=o.metrics[a.key]||blankMetric();o.metrics[a.key]=m;
@@ -174,7 +187,7 @@ function buildAnalysis(){
    if(a.oplh&&m.minutes>0)m.oplh=null;
   }
  }
- return{byStaff,unmatchedW:[...unmatchedW.values()],unmatchedT:[...unmatchedT.values()]};
+ return{byStaff,people,unmatchedW:[...unmatchedW.values()],unmatchedT:[...unmatchedT.values()]};
 }
 function selectedActivity(){return ACTIVITIES.find(x=>x.key===$('activity').value)||ACTIVITIES[0]}
 function selectedBasis(){return $('basisMode')?.value==='quantity'?'quantity':'actions'}
@@ -199,8 +212,9 @@ function renderActivity(){
  $('metricCoverage').textContent=a.oplh?fmt(ov.coverage,1)+'%':'—';
  $('activityNote').textContent=a.oplh?'OPLH = '+basisLabel+' ÷ 作業時間。基準は切替可能です。ピッキング時間はTimeDesignerを優先し、記録がない人はパート時間管理のピッキング時間を使用します。':'調整出庫はWMS実績のみ表示し、OPLHは算出しません。';
  let rows=[];
- for(const s of staff){
-  const o=analysis.byStaff.get(s.id),m=o?.metrics?.[a.key];if(!m||(m.quantity===0&&m.minutes===0))continue;
+ for(const [sid,o] of analysis.byStaff){
+  const s=analysis.people.get(sid)||{id:sid,name:sid,employment_type:'未登録'};
+  const m=o?.metrics?.[a.key];if(!m||(m.quantity===0&&m.minutes===0))continue;
   rows.push({s,m});
  }
  const mode=$('sortMode').value;
@@ -234,5 +248,7 @@ async function bootApp(){
  if(!$('activity').options.length)for(const a of ACTIVITIES){const o=document.createElement('option');o.value=a.key;o.textContent=a.label;$('activity').appendChild(o)}
  $('month').onchange=loadData;$('activity').onchange=renderActivity;$('basisMode').onchange=renderActivity;$('sortMode').onchange=renderActivity;$('refreshBtn').onclick=loadData;
  $('wmsImportBtn').onclick=()=>handleImport('wms');$('tdImportBtn').onclick=()=>handleImport('td');
+ $('wmsFile').onchange=()=>{if($('wmsFile').files?.[0])handleImport('wms')};
+ $('tdFile').onchange=()=>{if($('tdFile').files?.[0])handleImport('td')};
  await loadData();
 }
