@@ -57,6 +57,7 @@ function n(v){const x=Number(v);return Number.isFinite(x)?x:0}
 function int(v){const x=Math.trunc(Number(v));return Number.isFinite(x)&&x>=0?x:0}
 function pct(num,den){return den>0?(num/den*100).toFixed(1)+'%':'—'}
 function avg(minutes,count){return count>0?(minutes/count).toFixed(1)+'分':'—'}
+function workAvgLabel(minutes,count,legacyAvg){if(count>0)return avg(minutes,count);const x=Number(legacyAvg);return Number.isFinite(x)&&x>0?x.toFixed(1)+'分':'—'}
 function blankZero(v){return Number(v)>0?String(v):''}
 function setMessage(id,text='',kind=''){const el=$(id);el.textContent=text;el.className='message'+(kind?' '+kind:'')}
 
@@ -138,7 +139,7 @@ function renderDaily(){
     const total=phoneTotal+mailTotal;
     const first=n(r.phone_first_resolution_count)+n(r.mail_first_resolution_count);
     const card=document.createElement('article');
-    card.className='staff-card';card.dataset.staff=s.id;
+    card.className='staff-card';card.dataset.staff=s.id;card.dataset.workAvg=r.work_avg_minutes??'';
     const extras=s.employee_code==='100051'
       ? `<div class="extras"><div class="input-section-title">個別管理項目</div><div class="input-grid">${numField('単独解決数','single_resolution_count',r.single_resolution_count)}</div></div>`
       : s.employee_code==='100052'
@@ -180,11 +181,11 @@ function renderDaily(){
           </div>
         </div>
         <div class="input-section">
-          <div class="input-section-title"><span>作業量・時間</span><span class="mini-result" data-metric="avg">1件タイム ${avg(n(r.work_minutes),n(r.work_case_count))}</span></div>
+          <div class="input-section-title"><span>作業量・時間</span><span class="mini-result" data-metric="avg">1件タイム ${workAvgLabel(n(r.work_minutes),n(r.work_case_count),r.work_avg_minutes)}</span></div>
           <div class="input-grid work">
             ${numField('件数','work_case_count',r.work_case_count)}
             ${numField('時間（分）','work_minutes',r.work_minutes,'max="1440"')}
-            <div class="field">1件タイム<div class="readonly" data-metric="avgbox">${avg(n(r.work_minutes),n(r.work_case_count))}</div></div>
+            <div class="field">1件タイム<div class="readonly" data-metric="avgbox">${workAvgLabel(n(r.work_minutes),n(r.work_case_count),r.work_avg_minutes)}</div></div>
           </div>
         </div>
         ${extras}
@@ -194,7 +195,7 @@ function renderDaily(){
   }
   root.querySelectorAll('input[data-field],select[data-field]').forEach(el=>{
     const evt=el.tagName==='SELECT'?'change':'input';
-    el.addEventListener(evt,()=>{const card=el.closest('.staff-card');updateCardMetrics(card);scheduleReportSave(card)});
+    el.addEventListener(evt,()=>{const card=el.closest('.staff-card');if(['work_case_count','work_minutes'].includes(el.dataset.field))card.dataset.workAvg='';updateCardMetrics(card);scheduleReportSave(card)});
     if(el.tagName==='INPUT')el.addEventListener('blur',()=>scheduleReportSave(el.closest('.staff-card'),true));
   });
   refreshDailyKpis();
@@ -208,6 +209,8 @@ function readCard(card){
   const b=card.querySelector('[data-field="complaint_within_20min"]');
   out.complaint_within_20min=!b||b.value===''?null:b.value==='true';
   out.note=card.querySelector('[data-field="note"]')?.value?.trim()||'';
+  const legacyAvg=Number(card.dataset.workAvg);
+  out.work_avg_minutes=out.work_case_count>0?Number((out.work_minutes/out.work_case_count).toFixed(1)):(Number.isFinite(legacyAvg)&&legacyAvg>0?legacyAvg:null);
   return out;
 }
 function calcMetrics(v){
@@ -222,7 +225,7 @@ function updateCardMetrics(card){
   const p=card.querySelector('[data-metric="phone"]');if(p)p.textContent=`合計 ${m.phone} / 初回解決率 ${pct(v.phone_first_resolution_count,m.phone)}`;
   const e=card.querySelector('[data-metric="mail"]');if(e)e.textContent=`合計 ${m.mail} / 初回解決率 ${pct(v.mail_first_resolution_count,m.mail)}`;
   const o=card.querySelector('[data-metric="overall"]');if(o)o.textContent=`CS対応 ${m.total} / 総合初回解決率 ${pct(m.first,m.total)}`;
-  const a=avg(v.work_minutes,v.work_case_count);
+  const a=workAvgLabel(v.work_minutes,v.work_case_count,v.work_avg_minutes);
   const t=card.querySelector('[data-metric="avg"]');if(t)t.textContent='1件タイム '+a;
   const box=card.querySelector('[data-metric="avgbox"]');if(box)box.textContent=a;
   refreshDailyKpis();
@@ -303,8 +306,9 @@ function shiftPeriod(dir){
   else{d.setDate(15);d.setMonth(d.getMonth()+dir)}
   $('periodAnchor').value=localDateISO(d);loadPeriod();
 }
-function emptyAgg(){const o={};numericFields.forEach(f=>o[f]=0);o.complaint_within_20min=null;return o}
-function addReport(a,r){numericFields.forEach(f=>a[f]+=n(r[f]));return a}
+function emptyAgg(){const o={};numericFields.forEach(f=>o[f]=0);o.complaint_within_20min=null;o.work_avg_sum=0;o.work_avg_days=0;return o}
+function addReport(a,r){numericFields.forEach(f=>a[f]+=n(r[f]));const x=Number(r.work_avg_minutes);if(Number.isFinite(x)&&x>0){a.work_avg_sum+=x;a.work_avg_days++}return a}
+function periodWorkAvg(a){if(a.work_case_count>0)return avg(a.work_minutes,a.work_case_count);return a.work_avg_days>0?(a.work_avg_sum/a.work_avg_days).toFixed(1)+'分':'—'}
 async function loadPeriod(){
   const anchor=$('periodAnchor').value||localDateISO(),mode=$('periodMode').value,{start,end}=getPeriodRange(anchor,mode);
   $('periodRange').textContent=shortDate(start)+' ～ '+shortDate(end);setMessage('periodMessage');
@@ -334,7 +338,7 @@ async function loadPeriod(){
         <td>${m.phone}</td><td>${a.phone_first_resolution_count}</td><td>${m.mail}</td><td>${a.mail_first_resolution_count}</td>
         <td><b>${m.total}</b></td><td>${pct(m.first,m.total)}</td><td>${a.returns_exchange_count}</td><td>${a.store_service_count}</td>
         <td>${a.complaint_count}</td><td>${a.store_cancel_count}</td><td>${a.customer_cancel_count}</td>
-        <td>${a.work_case_count}</td><td>${a.work_minutes}</td><td>${avg(a.work_minutes,a.work_case_count)}</td>`;
+        <td>${a.work_case_count||'—'}</td><td>${a.work_minutes}</td><td>${periodWorkAvg(a)}</td>`;
       tb.appendChild(tr);
     }
   }catch(e){setMessage('periodMessage','集計に失敗しました: '+e.message,'bad')}
