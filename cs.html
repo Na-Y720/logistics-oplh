@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CS課 日報・対応数管理</title>
+<link rel="stylesheet" href="cs.css">
+</head>
+<body>
+<header class="topbar">
+  <div>
+    <h1>CS課 日報・対応数管理</h1>
+    <div class="sub">日々の対応数を入力し、初回解決率・対応率を自動集計</div>
+  </div>
+  <div class="top-actions">
+    <span id="userLabel" class="muted"></span>
+    <a class="linkbtn" href="./">物流管理へ</a>
+    <a class="linkbtn" href="worktime.html">PT作業管理へ</a>
+    <button id="logoutBtn" class="ghost hidden">ログアウト</button>
+  </div>
+</header>
+
+<main>
+<section id="authView" class="card auth">
+  <h2>ログイン</h2>
+  <p class="muted">既存の物流アプリと同じアカウントを使用します。</p>
+  <label>メールアドレス<input id="email" type="email" autocomplete="username"></label>
+  <label>パスワード<input id="password" type="password" autocomplete="current-password"></label>
+  <button id="loginBtn" class="primary">ログイン</button>
+  <div id="authError" class="error"></div>
+</section>
+
+<div id="appView" class="hidden">
+  <nav class="tabs">
+    <button class="tab active" data-tab="daily">日別入力</button>
+    <button class="tab" data-tab="summary">集計</button>
+    <button class="tab" data-tab="master">CS従業員マスタ</button>
+  </nav>
+
+  <section id="dailyTab">
+    <section class="hero card">
+      <div>
+        <div class="eyebrow">CS日報</div>
+        <div class="date-nav">
+          <button id="prevDateBtn" class="date-arrow" type="button" aria-label="前日">＜</button>
+          <h2 id="dailyDateLabel">—</h2>
+          <button id="nextDateBtn" class="date-arrow" type="button" aria-label="翌日">＞</button>
+        </div>
+        <div class="muted">初期表示は当日です。入力内容は自動保存されます。</div>
+      </div>
+      <div class="daily-common">
+        <label>受注件数
+          <input id="orderCount" type="number" min="0" step="1" inputmode="numeric" placeholder="0">
+        </label>
+        <span id="summarySaveState" class="save-state">未入力</span>
+      </div>
+    </section>
+
+    <section class="kpis">
+      <div class="kpi"><span>電話</span><b id="kPhone">0</b></div>
+      <div class="kpi"><span>メール</span><b id="kMail">0</b></div>
+      <div class="kpi accent"><span>CS対応数</span><b id="kTotal">0</b></div>
+      <div class="kpi"><span>総合初回解決率</span><b id="kFirstRate">—</b></div>
+      <div class="kpi"><span>CS対応率</span><b id="kResponseRate">—</b></div>
+      <div class="kpi"><span>クレーム件数</span><b id="kComplaints">0</b></div>
+    </section>
+
+    <section class="card">
+      <div class="section-head">
+        <div>
+          <h3>個人別入力</h3>
+          <div class="muted">合計・率・1件タイムは自動計算です。0件の項目は空欄のままで構いません。</div>
+        </div>
+        <button id="reloadDailyBtn" class="ghost">再読み込み</button>
+      </div>
+      <div id="staffCards" class="staff-cards"></div>
+      <div id="dailyMessage" class="message"></div>
+    </section>
+  </section>
+
+  <section id="summaryTab" class="hidden">
+    <section class="card period-controls">
+      <label>集計単位
+        <select id="periodMode">
+          <option value="week">週次（月～日）</option>
+          <option value="company" selected>会社月度（21日～翌20日）</option>
+          <option value="calendar">暦月（1日～末日）</option>
+        </select>
+      </label>
+      <div class="period-nav">
+        <button id="prevPeriodBtn" class="date-arrow" type="button">＜</button>
+        <label>基準日<input id="periodAnchor" type="date"></label>
+        <button id="nextPeriodBtn" class="date-arrow" type="button">＞</button>
+      </div>
+      <div class="rangebox">
+        <span class="muted">集計期間</span>
+        <b id="periodRange">—</b>
+      </div>
+      <button id="loadPeriodBtn" class="primary">表示</button>
+    </section>
+
+    <section class="kpis">
+      <div class="kpi"><span>受注件数</span><b id="sOrders">0</b></div>
+      <div class="kpi"><span>電話</span><b id="sPhone">0</b></div>
+      <div class="kpi"><span>メール</span><b id="sMail">0</b></div>
+      <div class="kpi accent"><span>CS対応数</span><b id="sTotal">0</b></div>
+      <div class="kpi"><span>総合初回解決率</span><b id="sFirstRate">—</b></div>
+      <div class="kpi"><span>CS対応率</span><b id="sResponseRate">—</b></div>
+    </section>
+
+    <section class="card">
+      <div class="section-head">
+        <div>
+          <h3>個人別集計</h3>
+          <div class="muted">件数は合計、率は期間合計から再計算します。日別率の単純平均はしません。</div>
+        </div>
+      </div>
+      <div class="tablewrap">
+        <table class="summary-table">
+          <thead>
+            <tr>
+              <th>氏名</th><th>電話</th><th>電話初回解決</th><th>メール</th><th>メール初回解決</th>
+              <th>CS対応</th><th>総合初回解決率</th><th>返品交換</th><th>店舗接客</th><th>クレーム</th>
+              <th>店舗都合CXL</th><th>お客様都合CXL</th><th>件数</th><th>時間(分)</th><th>1件タイム</th>
+            </tr>
+          </thead>
+          <tbody id="periodBody"></tbody>
+        </table>
+      </div>
+      <div id="periodMessage" class="message"></div>
+    </section>
+  </section>
+
+  <section id="masterTab" class="hidden">
+    <section class="card">
+      <div class="section-head">
+        <div>
+          <h3>CS課 従業員マスタ</h3>
+          <div class="muted">物流従業員マスタとは別管理です。退職日以降は日別入力に表示しませんが、過去データは残ります。</div>
+        </div>
+        <button id="addStaffBtn" class="primary">＋ 従業員追加</button>
+      </div>
+      <div class="tablewrap">
+        <table class="master-table">
+          <thead><tr><th>表示順</th><th>社員コード</th><th>氏名</th><th>雇用区分</th><th>状態</th><th>退職日</th><th>操作</th></tr></thead>
+          <tbody id="masterBody"></tbody>
+        </table>
+      </div>
+      <div id="masterMessage" class="message"></div>
+    </section>
+  </section>
+</div>
+</main>
+
+<dialog id="staffDialog">
+<form id="staffForm" class="modal">
+  <h3 id="staffDialogTitle">従業員編集</h3>
+  <div class="modal-grid">
+    <label>社員コード *<input id="fCode" required maxlength="20"></label>
+    <label>氏名 *<input id="fName" required></label>
+    <label>雇用区分
+      <select id="fType"><option>社員</option><option>パート早出</option><option>パート</option><option>その他</option></select>
+    </label>
+    <label>表示順<input id="fOrder" type="number" min="0" step="1"></label>
+    <label>退職日<input id="fRetirement" type="date"></label>
+    <label class="checklabel"><input id="fActive" type="checkbox" checked> 在籍・入力対象</label>
+  </div>
+  <label>備考<input id="fNotes"></label>
+  <div class="actions">
+    <button id="staffCancel" type="button">キャンセル</button>
+    <button class="primary" type="submit">保存</button>
+  </div>
+</form>
+</dialog>
+
+<script src="cs.js"></script>
+</body>
+</html>

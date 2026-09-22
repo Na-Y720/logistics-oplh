@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<header><div class="hi"><div><h1>物流部 月間人時・OPLH・シフト管理</h1><div class="sub">月間人時・365日出荷予測・シフトを一体管理</div></div><div class="toolbar"><span id="userLabel" class="small"></span><button type="button" onclick="window.location.href=&quot;worktime.html&quot;">作業時間管理</button><button id="logoutBtn" class="hidden">ログアウト</button></div></div></header>
+<header><div class="hi"><div><h1>物流部 月間人時・OPLH・シフト管理</h1><div class="sub">月間人時・365日出荷予測・シフトを一体管理</div></div><div class="toolbar"><span id="userLabel" class="small"></span><button type="button" onclick="window.location.href=&quot;worktime.html&quot;">作業時間管理</button><button type="button" onclick="window.location.href=&quot;cs.html&quot;">CS日報管理</button><button id="logoutBtn" class="hidden">ログアウト</button></div></div></header>
 <main>
 <section id="authView" class="panel auth"><h2>ログイン</h2><div class="small">同じアカウントなら、どのPCでも同じ従業員・月間計画を参照できます。</div><p><label>メールアドレス</label><input id="email" type="email"></p><p><label>パスワード</label><input id="password" type="password"></p><button class="primary" id="loginBtn">ログイン</button><div id="authError" class="err"></div></section>
 <div id="appView" class="hidden">
