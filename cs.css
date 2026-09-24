@@ -62,3 +62,43 @@ dialog{border:0;border-radius:14px;padding:0;box-shadow:0 18px 50px rgba(15,23,4
 .modal{padding:20px}.modal h3{margin-top:0}.modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.modal label{font-size:12px;font-weight:700;color:#4b5563}.modal input,.modal select{display:block;width:100%;margin-top:4px;padding:9px;border:1px solid #cfd6df;border-radius:8px;background:#fff}.checklabel{display:flex!important;align-items:center;gap:8px;margin-top:20px}.checklabel input{width:auto;margin:0}.actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}.actions button{padding:9px 14px;border-radius:8px;border:1px solid var(--line);background:#fff}.actions .primary{background:var(--accent);color:#fff;border-color:var(--accent)}
 @media(max-width:1100px){.kpis{grid-template-columns:repeat(3,1fr)}.staff-cards{grid-template-columns:1fr}.input-grid.other{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:720px){.topbar{position:static;align-items:flex-start;flex-direction:column;padding:14px}.top-actions{justify-content:flex-start}.topbar h1{font-size:19px}main{padding:0 10px;margin-top:10px}.hero{align-items:flex-start;flex-direction:column}.daily-common{width:100%}.kpis{grid-template-columns:repeat(2,1fr)}.kpi b{font-size:19px}.tabs{overflow:auto}.tab{white-space:nowrap;padding:9px 13px}.input-grid,.input-grid.mail,.input-grid.other,.input-grid.work{grid-template-columns:repeat(2,minmax(0,1fr))}.modal-grid{grid-template-columns:1fr}.period-controls{align-items:stretch}.period-nav{align-items:end}}
+
+
+/* CS shift planner */
+.wide-field{grid-column:1 / -1}
+.field-title{display:block;font-size:12px;font-weight:700;color:#4b5563;margin-bottom:6px}
+.condition-checks{display:flex;gap:16px;flex-wrap:wrap;padding:10px 12px;border:1px solid #e5e7eb;border-radius:9px;background:#f8fafc}
+.condition-checks .checklabel{margin:0}
+.shift-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.danger-lite{color:#b91c1c;border-color:#fecaca}
+.danger-lite:hover{background:#fef2f2}
+.shift-controls{display:flex;align-items:end;gap:8px;flex-wrap:wrap}
+.shift-controls label{font-size:12px;font-weight:700}
+.shift-controls input{display:block;margin-top:4px;padding:9px;border:1px solid #cfd6df;border-radius:8px;background:#fff}
+.shift-help{margin-left:auto;align-self:center}
+.shift-notice{padding:10px 12px;border-radius:9px;background:#fff7ed;color:#9a3412;font-size:13px;margin-bottom:9px}
+.shift-notice.good{background:#ecfdf5;color:#047857}
+.shift-notice.bad{background:#fef2f2;color:#b91c1c}
+.shift-legend{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:9px}
+.shift-tablewrap{max-height:65vh}
+.shift-table{min-width:1450px}
+.shift-table th,.shift-table td{padding:5px;text-align:center;min-width:42px}
+.shift-table th:first-child,.shift-table td:first-child{min-width:160px;text-align:left;z-index:4}
+.shift-table th:nth-child(2),.shift-table td:nth-child(2){min-width:95px}
+.shift-table th:nth-child(3),.shift-table td:nth-child(3){min-width:72px}
+.shift-date{font-weight:800;font-size:11px}.shift-week{font-size:10px;color:#6b7280}.shift-week.weekend{color:#b91c1c}
+.shift-count{font-size:10px;color:#0f766e;margin-top:2px}
+.shift-cell{width:100%;min-width:37px;height:34px;border-radius:6px;border:1px solid #dbe1e8;font-size:11px;font-weight:800;padding:0;background:#fff}
+.shift-cell.work{background:#ecfdf5;color:#047857;border-color:#a7f3d0}
+.shift-cell.off{background:#f8fafc;color:#6b7280}
+.shift-cell.manual-off{background:#fef2f2;color:#b91c1c;border-color:#fecaca}
+.shift-cell.manual-work{background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe}
+.shift-cell.unset{background:#fff;color:#9ca3af}
+.shift-cell.retired{background:#e5e7eb;color:#6b7280;cursor:not-allowed}
+.shift-days-warn{background:#fff7ed!important;color:#9a3412;font-weight:800}
+.staff-condition{font-size:11px;color:#6b7280;margin-top:2px}
+@media(max-width:720px){
+  .condition-checks{flex-direction:column;gap:6px}
+  .shift-actions{width:100%;justify-content:flex-start}
+  .shift-help{margin-left:0;width:100%}
+}
