@@ -344,11 +344,24 @@ async function loadPeriod(){
   }catch(e){setMessage('periodMessage','集計に失敗しました: '+e.message,'bad')}
 }
 
+function staffConstraintText(s){
+  const a=[];
+  if(s?.no_weekends_holidays)a.push('土日祝不可');
+  else if(s?.no_sundays)a.push('日曜不可');
+  if(s?.no_four_consecutive)a.push('4連勤不可');
+  return a.length?a.join('・'):'なし';
+}
+function syncStaffConstraintChecks(){
+  const all=$('fNoWeekendsHolidays'),sun=$('fNoSundays');
+  if(!all||!sun)return;
+  if(all.checked){sun.checked=false;sun.disabled=true}else sun.disabled=false;
+}
 function renderMaster(){
   const tb=$('masterBody');if(!tb)return;tb.innerHTML='';
   for(const s of staff){
     const [label,kind]=staffStatus(s),tr=document.createElement('tr');
     tr.innerHTML=`<td>${s.display_order??0}</td><td>${esc(s.employee_code)}</td><td><b>${esc(s.name)}</b></td><td>${esc(s.employment_type)}</td>
+      <td>${n(s.default_work_days).toFixed(0)}日</td><td>${esc(staffConstraintText(s))}</td>
       <td><span class="badge ${kind}">${label}</span></td><td>${s.retirement_date?esc(s.retirement_date.replaceAll('-','/')):'—'}</td>
       <td><button class="editbtn" data-edit="${s.id}">編集</button></td>`;
     tb.appendChild(tr);
@@ -362,8 +375,13 @@ function openStaff(id=null){
   $('fName').value=s?.name||'';
   $('fType').value=s?.employment_type||'パート';
   $('fOrder').value=s?.display_order??((staff.length+1)*10);
+  $('fDefaultWorkDays').value=s?.default_work_days??0;
   $('fRetirement').value=s?.retirement_date||'';
   $('fActive').checked=s?.is_active??true;
+  $('fNoWeekendsHolidays').checked=!!s?.no_weekends_holidays;
+  $('fNoSundays').checked=!!s?.no_sundays;
+  $('fNoFourConsecutive').checked=!!s?.no_four_consecutive;
+  syncStaffConstraintChecks();
   $('fNotes').value=s?.notes||'';
   $('staffDialog').showModal();
 }
@@ -371,13 +389,18 @@ async function saveStaff(e){
   e.preventDefault();
   const body={
     employee_code:$('fCode').value.trim(),name:$('fName').value.trim(),employment_type:$('fType').value,
-    display_order:int($('fOrder').value),retirement_date:$('fRetirement').value||null,is_active:$('fActive').checked,
+    display_order:int($('fOrder').value),default_work_days:n($('fDefaultWorkDays').value),
+    retirement_date:$('fRetirement').value||null,is_active:$('fActive').checked,
+    no_weekends_holidays:$('fNoWeekendsHolidays').checked,
+    no_sundays:$('fNoWeekendsHolidays').checked?false:$('fNoSundays').checked,
+    no_four_consecutive:$('fNoFourConsecutive').checked,
     notes:$('fNotes').value.trim(),updated_at:new Date().toISOString()
   };
   if(!body.employee_code||!body.name)return;
   try{
     if(editingStaffId){
       await rest('cs_staff',`owner_id=eq.${user.id}&id=eq.${editingStaffId}`,{method:'PATCH',body:JSON.stringify(body)});
+      if(body.retirement_date)await rest('cs_daily_shifts',`owner_id=eq.${user.id}&staff_id=eq.${editingStaffId}&shift_date=gt.${body.retirement_date}`,{method:'DELETE'});
     }else{
       body.owner_id=user.id;
       await rest('cs_staff','',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify(body)});
@@ -391,8 +414,10 @@ function activateTab(name){
   $('dailyTab').classList.toggle('hidden',name!=='daily');
   $('summaryTab').classList.toggle('hidden',name!=='summary');
   $('masterTab').classList.toggle('hidden',name!=='master');
+  $('shiftTab').classList.toggle('hidden',name!=='shift');
   if(name==='summary')loadPeriod();
   if(name==='master')renderMaster();
+  if(name==='shift'&&window.csShiftLoad)window.csShiftLoad(false);
 }
 async function bootstrap(){
   selectedDate=selectedDate||localDateISO();
@@ -409,6 +434,7 @@ $('orderCount').addEventListener('blur',()=>scheduleSummarySave(true));
 $('periodMode').onchange=loadPeriod;$('periodAnchor').onchange=loadPeriod;$('loadPeriodBtn').onclick=loadPeriod;
 $('prevPeriodBtn').onclick=()=>shiftPeriod(-1);$('nextPeriodBtn').onclick=()=>shiftPeriod(1);
 $('addStaffBtn').onclick=()=>openStaff();$('staffCancel').onclick=()=>$('staffDialog').close();$('staffForm').onsubmit=saveStaff;
+$('fNoWeekendsHolidays').onchange=syncStaffConstraintChecks;
 
 (async()=>{
   selectedDate=localDateISO();$('periodAnchor').value=localDateISO();session=loadSession();
