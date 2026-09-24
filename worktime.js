@@ -47,7 +47,7 @@ async function logout(){try{if(session?.access_token)await req('/auth/v1/logout'
 function showApp(){const on=!!session?.access_token;$('authView').classList.toggle('hidden',on);$('appView').classList.toggle('hidden',!on);$('logoutBtn').classList.toggle('hidden',!on);$('userLabel').textContent=user?.email||''}
 
 async function loadBase(){allStaff=await rest('logistics_staff',`owner_id=eq.${user.id}&select=id,name,employment_type,is_active,retirement_date&order=name.asc`)||[];activeStaff=allStaff.filter(s=>['パート','シルバー','派遣'].includes(s.employment_type)&&(s.is_active||s.retirement_date));}
-function staffForDate(date){return activeStaff.filter(s=>s.retirement_date?date<s.retirement_date:s.is_active)}
+function staffForDate(date){return activeStaff.filter(s=>s.retirement_date?date<=s.retirement_date:s.is_active)}
 function staffSignature(){return activeStaff.map(s=>[s.id,s.name,s.employment_type,s.is_active,s.retirement_date||''].join(':')).join('|')}
 async function syncStaffFromMaster(force=false){
  if(!session?.access_token||!user||staffSyncBusy)return;
