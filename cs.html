@@ -35,6 +35,7 @@
     <button class="tab active" data-tab="daily">日別入力</button>
     <button class="tab" data-tab="summary">集計</button>
     <button class="tab" data-tab="master">CS従業員マスタ</button>
+    <button class="tab" data-tab="shift">シフト自動作成</button>
   </nav>
 
   <section id="dailyTab">
@@ -142,11 +143,62 @@
       </div>
       <div class="tablewrap">
         <table class="master-table">
-          <thead><tr><th>表示順</th><th>社員コード</th><th>氏名</th><th>雇用区分</th><th>状態</th><th>退職日</th><th>操作</th></tr></thead>
+          <thead><tr><th>表示順</th><th>社員コード</th><th>氏名</th><th>雇用区分</th><th>標準出勤日数</th><th>勤務条件</th><th>状態</th><th>退職日</th><th>操作</th></tr></thead>
           <tbody id="masterBody"></tbody>
         </table>
       </div>
       <div id="masterMessage" class="message"></div>
+    </section>
+  </section>
+
+  <section id="shiftTab" class="hidden">
+    <section class="card">
+      <div class="section-head">
+        <div>
+          <h3>CS課 シフト自動作成</h3>
+          <div class="muted">CS専用マスタの標準出勤日数・勤務条件・固定休を守り、日ごとの出勤人数がなるべく均等になるよう自動配置します。</div>
+        </div>
+        <div class="shift-actions">
+          <button id="shiftReloadBtn" class="ghost">再読み込み</button>
+          <button id="shiftClearBtn" class="ghost danger-lite">全クリア</button>
+          <button id="shiftAutoBtn" class="primary">自動作成</button>
+        </div>
+      </div>
+
+      <div class="shift-controls">
+        <button id="shiftPrevMonth" class="date-arrow" type="button">＜</button>
+        <label>対象月度
+          <input id="shiftMonth" type="month">
+        </label>
+        <button id="shiftNextMonth" class="date-arrow" type="button">＞</button>
+        <div class="rangebox">
+          <span class="muted">対象期間</span>
+          <b id="shiftPeriod">—</b>
+        </div>
+        <div class="shift-help muted">セルクリック：未作成/自動 → 休み固定 → 出勤固定 → 未作成</div>
+      </div>
+    </section>
+
+    <section class="kpis shift-kpis">
+      <div class="kpi"><span>配置出勤日数</span><b id="shiftAssignedDays">0</b></div>
+      <div class="kpi"><span>目標出勤日数</span><b id="shiftTargetDays">0</b></div>
+      <div class="kpi"><span>手動固定</span><b id="shiftLockedCount">0</b></div>
+      <div class="kpi"><span>最大連勤</span><b id="shiftMaxStreak">0</b></div>
+      <div class="kpi"><span>日別最少人数</span><b id="shiftMinPeople">0</b></div>
+      <div class="kpi accent"><span>日別最多人数</span><b id="shiftMaxPeople">0</b></div>
+    </section>
+
+    <section class="card">
+      <div id="shiftNotice" class="shift-notice">シフトを読み込んでいます。</div>
+      <div class="shift-legend muted">
+        <span>出＝自動出勤</span><span>休＝自動休み</span><span>休★＝休み固定</span><span>出★＝出勤固定</span><span>退＝退職後</span><span>―＝未作成</span>
+      </div>
+      <div class="tablewrap shift-tablewrap">
+        <table class="shift-table">
+          <thead id="shiftHead"></thead>
+          <tbody id="shiftBody"></tbody>
+        </table>
+      </div>
     </section>
   </section>
 </div>
@@ -162,8 +214,17 @@
       <select id="fType"><option>社員</option><option>パート早出</option><option>パート</option><option>その他</option></select>
     </label>
     <label>表示順<input id="fOrder" type="number" min="0" step="1"></label>
+    <label>標準出勤日数<input id="fDefaultWorkDays" type="number" min="0" max="31" step="1" value="0"></label>
     <label>退職日<input id="fRetirement" type="date"></label>
     <label class="checklabel"><input id="fActive" type="checkbox" checked> 在籍・入力対象</label>
+    <div class="wide-field">
+      <span class="field-title">シフト勤務条件</span>
+      <div class="condition-checks">
+        <label class="checklabel"><input id="fNoWeekendsHolidays" type="checkbox"> 土日祝不可</label>
+        <label class="checklabel"><input id="fNoSundays" type="checkbox"> 日曜のみ不可</label>
+        <label class="checklabel"><input id="fNoFourConsecutive" type="checkbox"> 4連勤不可</label>
+      </div>
+    </div>
   </div>
   <label>備考<input id="fNotes"></label>
   <div class="actions">
@@ -174,5 +235,6 @@
 </dialog>
 
 <script src="cs.js"></script>
+<script src="cs-shift.js"></script>
 </body>
 </html>
