@@ -405,7 +405,7 @@ async function saveStaff(e){
       body.owner_id=user.id;
       await rest('cs_staff','',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify(body)});
     }
-    $('staffDialog').close();setMessage('masterMessage','保存しました。','ok');await loadStaff();await loadDay();
+    $('staffDialog').close();setMessage('masterMessage','保存しました。','ok');await loadStaff();if(window.csShiftInvalidate)window.csShiftInvalidate();await loadDay();
   }catch(e){setMessage('masterMessage','保存に失敗しました: '+e.message,'bad')}
 }
 
