@@ -184,7 +184,7 @@ function renderDaily(){
           ${verticalField('⑩','店舗接客','store_service_count',r.store_service_count)}
         </section>
 
-        <div class="vertical-total cs-total"><span>CS対応数（電話合計＋メール合計）</span><b data-metric="overall">${m.total}</b></div>
+        <div class="vertical-total cs-total"><span>CS対応数（電話合計＋メール合計＋⑧返品）</span><b data-metric="overall">${m.total}</b></div>
         <label class="field note-row">備考<input type="text" data-field="note" value="${esc(r.note||'')}" placeholder="任意"></label>
       </div>`;
     root.appendChild(card);
@@ -214,10 +214,11 @@ function readCard(card){
 function calcMetrics(v){
   const phone=n(v.phone_customer_count)+n(v.phone_partner_count)+n(v.phone_complaint_count);
   const mail=n(v.mail_site_return_count)+n(v.mail_relation_count)+n(v.mail_store_manager_count)+n(v.mail_complaint_count);
-  const total=phone+mail;
+  const returns=n(v.returns_exchange_count);
+  const total=phone+mail+returns;
   const resolved=n(v.site_return_first_resolution_count);
   const resolutionBase=n(v.mail_site_return_count);
-  return {phone,mail,total,resolved,resolutionBase,first:resolved};
+  return {phone,mail,returns,total,resolved,resolutionBase,first:resolved};
 }
 function updateCardMetrics(card){
   const v=readCard(card),m=calcMetrics(v);
