@@ -66,8 +66,11 @@
     return c;
   }
   function isWork(sid,date){return !afterRetirement(sid,date)&&getCell(sid,date).assignment==='work'}
+  function isPaid(sid,date){return !afterRetirement(sid,date)&&getCell(sid,date).assignment==='paid'}
   function assignedCount(date){let x=0;for(const s of state.staff)if(isWork(s.id,date))x++;return x}
   function assignedForStaff(sid){let x=0;for(const d of state.dates)if(isWork(sid,d))x++;return x}
+  function paidForStaff(sid){let x=0;for(const d of state.dates)if(isPaid(sid,d))x++;return x}
+  function creditedForStaff(sid){return assignedForStaff(sid)+paidForStaff(sid)}
   function targetDays(sid){
     const s=state.staff.find(x=>x.id===sid);
     if(!s)return 0;
@@ -141,7 +144,7 @@
   function metrics(){
     let assignedDays=0,target=0,locked=0;
     for(const s of state.staff){
-      assignedDays+=assignedForStaff(s.id);target+=targetDays(s.id);
+      assignedDays+=creditedForStaff(s.id);target+=targetDays(s.id);
       for(const d of state.dates)if(getCell(s.id,d).lock_type!=='auto')locked++;
     }
     const counts=state.dates.map(assignedCount);
@@ -168,7 +171,7 @@
 
     const body=$('shiftBody');body.innerHTML='';
     for(const s of state.staff){
-      const actual=assignedForStaff(s.id),target=targetDays(s.id),row=document.createElement('tr');
+      const actual=creditedForStaff(s.id),target=targetDays(s.id),row=document.createElement('tr');
       row.innerHTML='<td><b>'+esc(s.name)+'</b><div class="staff-condition">'+esc(conditionText(s))+'</div></td><td>'+esc(s.employment_type||'')+'</td><td class="'+(actual===target?'':'shift-days-warn')+'">'+actual+'/'+target+'</td>';
       for(const d of state.dates){
         const td=document.createElement('td'),b=document.createElement('button');b.type='button';
@@ -188,17 +191,20 @@
     if(!c.exists&&c.lock_type==='auto')return '―';
     if(c.lock_type==='manual_off')return '休★';
     if(c.lock_type==='manual_work')return '出★';
+    if(c.lock_type==='manual_paid')return '有';
     return c.assignment==='work'?'出':'休';
   }
   function cellClass(c){
     if(!c.exists&&c.lock_type==='auto')return 'unset';
     if(c.lock_type==='manual_off')return 'manual-off';
     if(c.lock_type==='manual_work')return 'manual-work';
+    if(c.lock_type==='manual_paid')return 'manual-paid';
     return c.assignment==='work'?'work':'off';
   }
   function cellMode(c){
     if(c.lock_type==='manual_off')return '休み固定';
     if(c.lock_type==='manual_work')return '出勤固定';
+    if(c.lock_type==='manual_paid')return '有給';
     return c.exists?'自動':'未作成';
   }
   async function saveCells(cells){
@@ -213,12 +219,13 @@
   async function cycleCell(sid,date){
     const c=getCell(sid,date),before={...c};
     try{
-      if(c.lock_type==='manual_work'){
+      if(c.lock_type==='manual_paid'){
         await rest('cs_daily_shifts',`owner_id=eq.${user.id}&staff_id=eq.${sid}&shift_date=eq.${date}`,{method:'DELETE'});
         state.shifts.delete(key(sid,date));render();setNotice('未作成状態に戻しました。','good');return;
       }
       if(c.lock_type==='auto'){c.lock_type='manual_off';c.assignment='off'}
-      else{c.lock_type='manual_work';c.assignment='work'}
+      else if(c.lock_type==='manual_off'){c.lock_type='manual_work';c.assignment='work'}
+      else if(c.lock_type==='manual_work'){c.lock_type='manual_paid';c.assignment='paid'}
       c.exists=true;c.plan_month=state.planMonth;c.updated_at=new Date().toISOString();
       render();await saveCells([c]);setNotice('固定を保存しました。','good');
     }catch(e){Object.assign(c,before);render();setNotice('固定の保存に失敗しました: '+e.message,'bad')}
@@ -226,8 +233,9 @@
 
   function profileData(){
     return state.staff.map(s=>{
-      const target=targetDays(s.id),manualWork=state.dates.filter(d=>getCell(s.id,d).lock_type==='manual_work').length;
-      return{s,target,remaining:Math.max(0,target-manualWork)};
+      const target=targetDays(s.id),manualWork=state.dates.filter(d=>getCell(s.id,d).lock_type==='manual_work').length,
+        manualPaid=state.dates.filter(d=>getCell(s.id,d).lock_type==='manual_paid').length;
+      return{s,target,remaining:Math.max(0,target-manualWork-manualPaid)};
     }).filter(x=>x.target>0||x.remaining>0);
   }
   function feasibleDates(p){
@@ -282,7 +290,7 @@
   }
   async function clearAll(){
     if(!state.loaded)return;
-    if(!confirm('この月度のCSシフトをすべてクリアします。休み固定・出勤固定も削除されます。よろしいですか？'))return;
+    if(!confirm('この月度のCSシフトをすべてクリアします。休み固定・出勤固定・有給も削除されます。よろしいですか？'))return;
     setBusy(true,'クリア中…');
     try{
       await rest('cs_daily_shifts',`owner_id=eq.${user.id}&shift_date=gte.${state.start}&shift_date=lte.${state.end}`,{method:'DELETE'});
