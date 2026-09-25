@@ -169,17 +169,16 @@ function renderDaily(){
           <div class="vertical-total"><span>メール合計（④＋⑤＋⑥＋⑦）</span><b data-metric="mailTotal">${m.mail}</b></div>
         </section>
 
+        <div class="resolution-box embedded-resolution">
+          <label class="vertical-field resolution-input">
+            <span class="vf-label"><span class="vf-no">④</span><span>に対して、1回で解決できた数</span></span>
+            <input type="number" min="0" step="1" inputmode="numeric" data-field="site_return_first_resolution_count" value="${blankZero(r.site_return_first_resolution_count)}" placeholder="0">
+          </label>
+          <div class="vertical-total resolution-total"><span>解決率（1回解決数 ÷ ④）</span><b data-metric="resolution">${pct(m.resolved,m.resolutionBase)}</b></div>
+        </div>
+
         <section class="vertical-section other-section">
           <div class="vertical-section-head"><b>その他対応</b><span>件数入力</span></div>
-
-          <div class="resolution-box embedded-resolution">
-            <label class="vertical-field resolution-input">
-              <span class="vf-label"><span class="vf-no">④</span><span>に対して、1回で解決できた数</span></span>
-              <input type="number" min="0" step="1" inputmode="numeric" data-field="site_return_first_resolution_count" value="${blankZero(r.site_return_first_resolution_count)}" placeholder="0">
-            </label>
-            <div class="vertical-total resolution-total"><span>解決率（1回解決数 ÷ ④）</span><b data-metric="resolution">${pct(m.resolved,m.resolutionBase)}</b></div>
-          </div>
-
           ${verticalField('⑧','返品','returns_exchange_count',r.returns_exchange_count)}
           ${verticalField('⑨','クレーム件数','complaint_count',r.complaint_count)}
           ${verticalField('⑩','店舗接客','store_service_count',r.store_service_count)}
