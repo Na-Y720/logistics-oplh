@@ -163,7 +163,7 @@ function renderDaily(){
         <section class="vertical-section">
           <div class="vertical-section-head"><b>メール</b><span data-metric="mail">合計 ${m.mail}</span></div>
           ${verticalField('④','サイトの確認・返品交換','mail_site_return_count',r.mail_site_return_count)}
-          ${verticalField('⑤','左記以外','mail_relation_count',r.mail_relation_count)}
+          ${verticalField('⑤','上記以外','mail_relation_count',r.mail_relation_count)}
           ${verticalField('⑥','店長','mail_store_manager_count',r.mail_store_manager_count)}
           ${verticalField('⑦','クレーム','mail_complaint_count',r.mail_complaint_count)}
           <div class="vertical-total"><span>メール合計（④＋⑤＋⑥＋⑦）</span><b data-metric="mailTotal">${m.mail}</b></div>
