@@ -160,7 +160,7 @@
 
     const head=$('shiftHead');head.innerHTML='';
     const tr=document.createElement('tr');
-    tr.innerHTML='<th>氏名</th><th>区分</th><th>出勤<br>実/目</th>';
+    tr.innerHTML='<th>氏名</th><th>区分</th><th>日数<br>実/目</th>';
     for(const d of state.dates){
       const inf=dateInfo(d),holiday=isHoliday(d),th=document.createElement('th');
       th.title=d+' '+inf.weekday+(holiday?' 祝':'')+' / 配置 '+assignedCount(d)+'人';
