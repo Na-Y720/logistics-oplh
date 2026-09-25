@@ -10,7 +10,7 @@ let summaryTimer=null;
 
 const numericFields=[
   'phone_customer_count','phone_partner_count','phone_complaint_count','phone_first_resolution_count',
-  'mail_relation_count','mail_store_manager_count','mail_complaint_count','mail_first_resolution_target_count','mail_first_resolution_count',
+  'mail_site_return_count','mail_relation_count','mail_store_manager_count','mail_complaint_count','mail_first_resolution_target_count','mail_first_resolution_count','site_return_first_resolution_count',
   'returns_exchange_count','store_service_count','complaint_count','store_cancel_count','customer_cancel_count',
   'work_case_count','work_minutes','single_resolution_count','complaint_minutes','manual_case_created_count'
 ];
@@ -161,8 +161,8 @@ function renderDaily(){
 
         <section class="vertical-section">
           <div class="vertical-section-head"><b>メール</b><span data-metric="mail">合計 ${m.mail}</span></div>
-          ${verticalField('④','サイトの確認・返品交換','mail_relation_count',r.mail_relation_count)}
-          ${verticalField('⑤','左記以外','mail_first_resolution_target_count',r.mail_first_resolution_target_count)}
+          ${verticalField('④','サイトの確認・返品交換','mail_site_return_count',r.mail_site_return_count)}
+          ${verticalField('⑤','左記以外','mail_relation_count',r.mail_relation_count)}
           ${verticalField('⑥','店長','mail_store_manager_count',r.mail_store_manager_count)}
           ${verticalField('⑦','クレーム','mail_complaint_count',r.mail_complaint_count)}
           <div class="vertical-total"><span>メール合計（④＋⑤＋⑥＋⑦）</span><b data-metric="mailTotal">${m.mail}</b></div>
@@ -178,7 +178,7 @@ function renderDaily(){
         <section class="resolution-box">
           <label class="vertical-field resolution-input">
             <span class="vf-label"><span class="vf-no">④</span><span>に対して、1回で解決できた数</span></span>
-            <input type="number" min="0" step="1" inputmode="numeric" data-field="mail_first_resolution_count" value="${blankZero(r.mail_first_resolution_count)}" placeholder="0">
+            <input type="number" min="0" step="1" inputmode="numeric" data-field="site_return_first_resolution_count" value="${blankZero(r.site_return_first_resolution_count)}" placeholder="0">
           </label>
           <div class="vertical-total resolution-total"><span>解決率（1回解決数 ÷ ④）</span><b data-metric="resolution">${pct(m.resolved,m.resolutionBase)}</b></div>
         </section>
@@ -212,10 +212,10 @@ function readCard(card){
 }
 function calcMetrics(v){
   const phone=n(v.phone_customer_count)+n(v.phone_partner_count)+n(v.phone_complaint_count);
-  const mail=n(v.mail_relation_count)+n(v.mail_first_resolution_target_count)+n(v.mail_store_manager_count)+n(v.mail_complaint_count);
+  const mail=n(v.mail_site_return_count)+n(v.mail_relation_count)+n(v.mail_store_manager_count)+n(v.mail_complaint_count);
   const total=phone+mail;
-  const resolved=n(v.mail_first_resolution_count);
-  const resolutionBase=n(v.mail_relation_count);
+  const resolved=n(v.site_return_first_resolution_count);
+  const resolutionBase=n(v.mail_site_return_count);
   return {phone,mail,total,resolved,resolutionBase,first:resolved};
 }
 function updateCardMetrics(card){
@@ -333,9 +333,9 @@ async function loadPeriod(){
       if(!has&&!s.is_active&&s.retirement_date&&s.retirement_date<start)continue;
       const tr=document.createElement('tr');
       tr.innerHTML=`<td><b>${esc(s.name)}</b><div class="muted">${esc(s.employee_code)}</div></td>
-        <td>${m.phone}</td><td>${a.mail_relation_count}</td><td>${a.mail_first_resolution_target_count}</td><td>${a.mail_store_manager_count}</td>
-        <td>${a.mail_complaint_count}</td><td>${m.mail}</td><td><b>${m.total}</b></td><td>${a.mail_first_resolution_count}</td>
-        <td>${pct(a.mail_first_resolution_count,a.mail_relation_count)}</td><td>${a.returns_exchange_count}</td>
+        <td>${m.phone}</td><td>${a.mail_site_return_count}</td><td>${a.mail_relation_count}</td><td>${a.mail_store_manager_count}</td>
+        <td>${a.mail_complaint_count}</td><td>${m.mail}</td><td><b>${m.total}</b></td><td>${a.site_return_first_resolution_count}</td>
+        <td>${pct(a.site_return_first_resolution_count,a.mail_site_return_count)}</td><td>${a.returns_exchange_count}</td>
         <td>${a.complaint_count}</td><td>${a.store_service_count}</td>`;
       tb.appendChild(tr);
     }
