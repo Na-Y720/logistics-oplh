@@ -373,3 +373,31 @@ dialog{border:0;border-radius:14px;padding:0;box-shadow:0 18px 50px rgba(15,23,4
   #dailyTab .staff-cards.vertical-form{grid-template-columns:1fr}
   #dailyTab .vertical-field{grid-template-columns:minmax(0,1fr) 88px}
 }
+
+
+/* CS daily input: clearer staff-card boundaries while scrolling */
+#dailyTab .staff-cards.vertical-form{
+  row-gap:26px;
+}
+#dailyTab .vertical-card{
+  border:1px solid #cbd5e1;
+  border-top:4px solid #0f766e;
+  box-shadow:0 3px 10px rgba(15,23,42,.08);
+}
+#dailyTab .vertical-card .staff-head{
+  background:#eef2f6;
+  border-bottom:2px solid #cbd5e1;
+  padding-top:9px;
+  padding-bottom:9px;
+}
+#dailyTab .vertical-card .staff-name{
+  font-size:15px;
+  font-weight:900;
+}
+#dailyTab .vertical-card:nth-child(n+4){
+  margin-top:6px;
+}
+@media(max-width:1200px){
+  #dailyTab .staff-cards.vertical-form{row-gap:22px}
+  #dailyTab .vertical-card:nth-child(n+4){margin-top:0}
+}
