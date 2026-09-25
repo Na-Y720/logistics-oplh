@@ -141,6 +141,7 @@ function renderDaily(){
       phone_customer_count:n(r.phone_customer_count),phone_partner_count:n(r.phone_partner_count),phone_complaint_count:n(r.phone_complaint_count),
       mail_site_return_count:n(r.mail_site_return_count),mail_relation_count:n(r.mail_relation_count),
       mail_store_manager_count:n(r.mail_store_manager_count),mail_complaint_count:n(r.mail_complaint_count),
+      returns_exchange_count:n(r.returns_exchange_count),
       site_return_first_resolution_count:n(r.site_return_first_resolution_count)
     });
     const card=document.createElement('article');
