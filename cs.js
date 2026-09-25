@@ -124,110 +124,108 @@ function changeDay(days){
 function numField(label,field,val,opts=''){
   return `<label class="field">${esc(label)}<input type="number" min="0" step="1" inputmode="numeric" data-field="${field}" value="${blankZero(val)}" ${opts}></label>`;
 }
+function verticalField(no,label,field,val){
+  return `<label class="vertical-field"><span class="vf-label"><span class="vf-no">${no}</span><span>${esc(label)}</span></span><input type="number" min="0" step="1" inputmode="numeric" data-field="${field}" value="${blankZero(val)}" placeholder="0"></label>`;
+}
 function selectBoolField(label,field,val){
   const v=val===true?'true':val===false?'false':'';
   return `<label class="field">${esc(label)}<select data-field="${field}"><option value="" ${v===''?'selected':''}>—</option><option value="true" ${v==='true'?'selected':''}>○</option><option value="false" ${v==='false'?'selected':''}>×</option></select></label>`;
 }
 function reportValue(r,f){return r?.[f]??0}
 function renderDaily(){
-  const root=$('staffCards');root.innerHTML='';
+  const root=$('staffCards');root.innerHTML='';root.classList.add('vertical-form');
   const list=visibleStaffForDate(selectedDate);
   for(const s of list){
     const r=dailyRows.get(s.id)||{};
-    const phoneTotal=n(r.phone_customer_count)+n(r.phone_partner_count)+n(r.phone_complaint_count);
-    const mailTotal=n(r.mail_relation_count)+n(r.mail_store_manager_count)+n(r.mail_complaint_count);
-    const total=phoneTotal+mailTotal;
-    const first=n(r.phone_first_resolution_count)+n(r.mail_first_resolution_count);
+    const m=calcMetrics({
+      phone_customer_count:n(r.phone_customer_count),phone_partner_count:n(r.phone_partner_count),phone_complaint_count:n(r.phone_complaint_count),
+      mail_relation_count:n(r.mail_relation_count),mail_first_resolution_target_count:n(r.mail_first_resolution_target_count),
+      mail_store_manager_count:n(r.mail_store_manager_count),mail_complaint_count:n(r.mail_complaint_count),
+      mail_first_resolution_count:n(r.mail_first_resolution_count)
+    });
     const card=document.createElement('article');
-    card.className='staff-card';card.dataset.staff=s.id;card.dataset.workAvg=r.work_avg_minutes??'';
-    const extras=s.employee_code==='100051'
-      ? `<div class="extras"><div class="input-section-title">個別管理項目</div><div class="input-grid">${numField('単独解決数','single_resolution_count',r.single_resolution_count)}</div></div>`
-      : s.employee_code==='100052'
-      ? `<div class="extras"><div class="input-section-title">個別管理項目</div><div class="input-grid">${numField('クレーム時間(分)','complaint_minutes',r.complaint_minutes)}${selectBoolField('クレーム20分以内','complaint_within_20min',r.complaint_within_20min)}${numField('マニュアル・事例 作成数','manual_case_created_count',r.manual_case_created_count)}</div></div>`
-      : '';
+    card.className='staff-card vertical-card';card.dataset.staff=s.id;
     card.innerHTML=`
       <div class="staff-head">
         <div><div class="staff-name">${esc(s.name)}</div><div class="staff-meta">${esc(s.employee_code)} ・ ${esc(s.employment_type)}</div></div>
         <span class="staff-state ${r.id?'saved':''}">${r.id?'保存済 ✓':'未入力'}</span>
       </div>
-      <div class="staff-body">
-        <div class="input-section">
-          <div class="input-section-title"><span>電話</span><span class="mini-result" data-metric="phone">合計 ${phoneTotal} / 初回解決率 ${pct(n(r.phone_first_resolution_count),phoneTotal)}</span></div>
-          <div class="input-grid">
-            ${numField('お客様','phone_customer_count',r.phone_customer_count)}
-            ${numField('取引先','phone_partner_count',r.phone_partner_count)}
-            ${numField('クレーム','phone_complaint_count',r.phone_complaint_count)}
-            ${numField('初回解決数','phone_first_resolution_count',r.phone_first_resolution_count)}
-          </div>
-        </div>
-        <div class="input-section">
-          <div class="input-section-title"><span>メール</span><span class="mini-result" data-metric="mail">合計 ${mailTotal} / 初回解決率 ${pct(n(r.mail_first_resolution_count),mailTotal)}</span></div>
-          <div class="input-grid mail">
-            ${numField('Relation','mail_relation_count',r.mail_relation_count)}
-            ${numField('店長','mail_store_manager_count',r.mail_store_manager_count)}
-            ${numField('クレーム','mail_complaint_count',r.mail_complaint_count)}
-            ${numField('初回解決対象ラベル','mail_first_resolution_target_count',r.mail_first_resolution_target_count)}
-            ${numField('初回解決数','mail_first_resolution_count',r.mail_first_resolution_count)}
-          </div>
-        </div>
-        <div class="input-section">
-          <div class="input-section-title"><span>その他対応</span><span class="mini-result" data-metric="overall">CS対応 ${total} / 総合初回解決率 ${pct(first,total)}</span></div>
-          <div class="input-grid other">
-            ${numField('返品交換','returns_exchange_count',r.returns_exchange_count)}
-            ${numField('店舗接客','store_service_count',r.store_service_count)}
-            ${numField('クレーム件数','complaint_count',r.complaint_count)}
-            ${numField('店舗都合キャンセル','store_cancel_count',r.store_cancel_count)}
-            ${numField('お客様都合キャンセル','customer_cancel_count',r.customer_cancel_count)}
-          </div>
-        </div>
-        <div class="input-section">
-          <div class="input-section-title"><span>作業量・時間</span><span class="mini-result" data-metric="avg">1件タイム ${workAvgLabel(n(r.work_minutes),n(r.work_case_count),r.work_avg_minutes)}</span></div>
-          <div class="input-grid work">
-            ${numField('件数','work_case_count',r.work_case_count)}
-            ${numField('時間（分）','work_minutes',r.work_minutes,'max="1440"')}
-            <div class="field">1件タイム<div class="readonly" data-metric="avgbox">${workAvgLabel(n(r.work_minutes),n(r.work_case_count),r.work_avg_minutes)}</div></div>
-          </div>
-        </div>
-        ${extras}
+      <div class="staff-body vertical-body">
+        <section class="vertical-section">
+          <div class="vertical-section-head"><b>電話</b><span data-metric="phone">合計 ${m.phone}</span></div>
+          ${verticalField('①','お客様','phone_customer_count',r.phone_customer_count)}
+          ${verticalField('②','取引先','phone_partner_count',r.phone_partner_count)}
+          ${verticalField('③','クレーム','phone_complaint_count',r.phone_complaint_count)}
+          <div class="vertical-total"><span>電話合計（①＋②＋③）</span><b data-metric="phoneTotal">${m.phone}</b></div>
+        </section>
+
+        <section class="vertical-section">
+          <div class="vertical-section-head"><b>メール</b><span data-metric="mail">合計 ${m.mail}</span></div>
+          ${verticalField('④','サイトの確認・返品交換','mail_relation_count',r.mail_relation_count)}
+          ${verticalField('⑤','左記以外','mail_first_resolution_target_count',r.mail_first_resolution_target_count)}
+          ${verticalField('⑥','店長','mail_store_manager_count',r.mail_store_manager_count)}
+          ${verticalField('⑦','クレーム','mail_complaint_count',r.mail_complaint_count)}
+          <div class="vertical-total"><span>メール合計（④＋⑤＋⑥＋⑦）</span><b data-metric="mailTotal">${m.mail}</b></div>
+        </section>
+
+        <section class="vertical-section">
+          <div class="vertical-section-head"><b>その他対応</b><span>件数入力</span></div>
+          ${verticalField('⑧','返品','returns_exchange_count',r.returns_exchange_count)}
+          ${verticalField('⑨','クレーム件数','complaint_count',r.complaint_count)}
+          ${verticalField('⑩','店舗接客','store_service_count',r.store_service_count)}
+        </section>
+
+        <section class="resolution-box">
+          <label class="vertical-field resolution-input">
+            <span class="vf-label"><span class="vf-no">④</span><span>に対して、1回で解決できた数</span></span>
+            <input type="number" min="0" step="1" inputmode="numeric" data-field="mail_first_resolution_count" value="${blankZero(r.mail_first_resolution_count)}" placeholder="0">
+          </label>
+          <div class="vertical-total resolution-total"><span>解決率（1回解決数 ÷ ④）</span><b data-metric="resolution">${pct(m.resolved,m.resolutionBase)}</b></div>
+        </section>
+
+        <div class="vertical-total cs-total"><span>CS対応数（電話合計＋メール合計）</span><b data-metric="overall">${m.total}</b></div>
         <label class="field note-row">備考<input type="text" data-field="note" value="${esc(r.note||'')}" placeholder="任意"></label>
       </div>`;
     root.appendChild(card);
   }
   root.querySelectorAll('input[data-field],select[data-field]').forEach(el=>{
     const evt=el.tagName==='SELECT'?'change':'input';
-    el.addEventListener(evt,()=>{const card=el.closest('.staff-card');if(['work_case_count','work_minutes'].includes(el.dataset.field))card.dataset.workAvg='';updateCardMetrics(card);scheduleReportSave(card)});
+    el.addEventListener(evt,()=>{const card=el.closest('.staff-card');updateCardMetrics(card);scheduleReportSave(card)});
     if(el.tagName==='INPUT')el.addEventListener('blur',()=>scheduleReportSave(el.closest('.staff-card'),true));
   });
   refreshDailyKpis();
 }
 function readCard(card){
+  const current=dailyRows.get(card.dataset.staff)||{};
   const out={};
   numericFields.forEach(f=>{
     const el=card.querySelector(`[data-field="${f}"]`);
-    out[f]=el?int(el.value):0;
+    out[f]=el?int(el.value):int(current[f]);
   });
   const b=card.querySelector('[data-field="complaint_within_20min"]');
-  out.complaint_within_20min=!b||b.value===''?null:b.value==='true';
-  out.note=card.querySelector('[data-field="note"]')?.value?.trim()||'';
-  const legacyAvg=Number(card.dataset.workAvg);
-  out.work_avg_minutes=out.work_case_count>0?Number((out.work_minutes/out.work_case_count).toFixed(1)):(Number.isFinite(legacyAvg)&&legacyAvg>0?legacyAvg:null);
+  out.complaint_within_20min=b?(b.value===''?null:b.value==='true'):(current.complaint_within_20min??null);
+  const noteEl=card.querySelector('[data-field="note"]');
+  out.note=noteEl?noteEl.value.trim():(current.note||'');
+  const legacyAvg=Number(current.work_avg_minutes);
+  out.work_avg_minutes=Number.isFinite(legacyAvg)&&legacyAvg>0?legacyAvg:null;
   return out;
 }
 function calcMetrics(v){
-  const phone=v.phone_customer_count+v.phone_partner_count+v.phone_complaint_count;
-  const mail=v.mail_relation_count+v.mail_store_manager_count+v.mail_complaint_count;
+  const phone=n(v.phone_customer_count)+n(v.phone_partner_count)+n(v.phone_complaint_count);
+  const mail=n(v.mail_relation_count)+n(v.mail_first_resolution_target_count)+n(v.mail_store_manager_count)+n(v.mail_complaint_count);
   const total=phone+mail;
-  const first=v.phone_first_resolution_count+v.mail_first_resolution_count;
-  return {phone,mail,total,first};
+  const resolved=n(v.mail_first_resolution_count);
+  const resolutionBase=n(v.mail_relation_count);
+  return {phone,mail,total,resolved,resolutionBase,first:resolved};
 }
 function updateCardMetrics(card){
   const v=readCard(card),m=calcMetrics(v);
-  const p=card.querySelector('[data-metric="phone"]');if(p)p.textContent=`合計 ${m.phone} / 初回解決率 ${pct(v.phone_first_resolution_count,m.phone)}`;
-  const e=card.querySelector('[data-metric="mail"]');if(e)e.textContent=`合計 ${m.mail} / 初回解決率 ${pct(v.mail_first_resolution_count,m.mail)}`;
-  const o=card.querySelector('[data-metric="overall"]');if(o)o.textContent=`CS対応 ${m.total} / 総合初回解決率 ${pct(m.first,m.total)}`;
-  const a=workAvgLabel(v.work_minutes,v.work_case_count,v.work_avg_minutes);
-  const t=card.querySelector('[data-metric="avg"]');if(t)t.textContent='1件タイム '+a;
-  const box=card.querySelector('[data-metric="avgbox"]');if(box)box.textContent=a;
+  const p=card.querySelector('[data-metric="phone"]');if(p)p.textContent=`合計 ${m.phone}`;
+  const pt=card.querySelector('[data-metric="phoneTotal"]');if(pt)pt.textContent=m.phone;
+  const e=card.querySelector('[data-metric="mail"]');if(e)e.textContent=`合計 ${m.mail}`;
+  const mt=card.querySelector('[data-metric="mailTotal"]');if(mt)mt.textContent=m.mail;
+  const o=card.querySelector('[data-metric="overall"]');if(o)o.textContent=m.total;
+  const rr=card.querySelector('[data-metric="resolution"]');if(rr)rr.textContent=pct(m.resolved,m.resolutionBase);
   refreshDailyKpis();
 }
 function setCardState(card,text,kind=''){const el=card?.querySelector('.staff-state');if(!el)return;el.className='staff-state'+(kind?' '+kind:'');el.textContent=text}
@@ -252,16 +250,16 @@ async function saveReport(card){
   }catch(e){setCardState(card,'保存エラー','error');setMessage('dailyMessage','保存に失敗しました: '+e.message,'bad')}
 }
 function refreshDailyKpis(){
-  let phone=0,mail=0,total=0,first=0,complaints=0;
+  let phone=0,mail=0,total=0,resolved=0,resolutionBase=0,complaints=0;
   document.querySelectorAll('#staffCards .staff-card').forEach(card=>{
     const v=readCard(card),m=calcMetrics(v);
-    phone+=m.phone;mail+=m.mail;total+=m.total;first+=m.first;complaints+=v.complaint_count;
+    phone+=m.phone;mail+=m.mail;total+=m.total;resolved+=m.resolved;resolutionBase+=m.resolutionBase;complaints+=v.complaint_count;
   });
   const orders=int($('orderCount').value);
   $('kPhone').textContent=phone.toLocaleString('ja-JP');
   $('kMail').textContent=mail.toLocaleString('ja-JP');
   $('kTotal').textContent=total.toLocaleString('ja-JP');
-  $('kFirstRate').textContent=pct(first,total);
+  $('kFirstRate').textContent=pct(resolved,resolutionBase);
   $('kResponseRate').textContent=pct(total,orders);
   $('kComplaints').textContent=complaints.toLocaleString('ja-JP');
 }
@@ -323,7 +321,7 @@ async function loadPeriod(){
     $('sPhone').textContent=totalM.phone.toLocaleString('ja-JP');
     $('sMail').textContent=totalM.mail.toLocaleString('ja-JP');
     $('sTotal').textContent=totalM.total.toLocaleString('ja-JP');
-    $('sFirstRate').textContent=pct(totalM.first,totalM.total);
+    $('sFirstRate').textContent=pct(totalM.resolved,totalM.resolutionBase);
     $('sResponseRate').textContent=pct(totalM.total,orders);
 
     const by=new Map(staff.map(s=>[s.id,emptyAgg()]));
@@ -335,10 +333,10 @@ async function loadPeriod(){
       if(!has&&!s.is_active&&s.retirement_date&&s.retirement_date<start)continue;
       const tr=document.createElement('tr');
       tr.innerHTML=`<td><b>${esc(s.name)}</b><div class="muted">${esc(s.employee_code)}</div></td>
-        <td>${m.phone}</td><td>${a.phone_first_resolution_count}</td><td>${m.mail}</td><td>${a.mail_first_resolution_count}</td>
-        <td><b>${m.total}</b></td><td>${pct(m.first,m.total)}</td><td>${a.returns_exchange_count}</td><td>${a.store_service_count}</td>
-        <td>${a.complaint_count}</td><td>${a.store_cancel_count}</td><td>${a.customer_cancel_count}</td>
-        <td>${a.work_case_count||'—'}</td><td>${a.work_minutes}</td><td>${periodWorkAvg(a)}</td>`;
+        <td>${m.phone}</td><td>${a.mail_relation_count}</td><td>${a.mail_first_resolution_target_count}</td><td>${a.mail_store_manager_count}</td>
+        <td>${a.mail_complaint_count}</td><td>${m.mail}</td><td><b>${m.total}</b></td><td>${a.mail_first_resolution_count}</td>
+        <td>${pct(a.mail_first_resolution_count,a.mail_relation_count)}</td><td>${a.returns_exchange_count}</td>
+        <td>${a.complaint_count}</td><td>${a.store_service_count}</td>`;
       tb.appendChild(tr);
     }
   }catch(e){setMessage('periodMessage','集計に失敗しました: '+e.message,'bad')}
