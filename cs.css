@@ -280,3 +280,10 @@ dialog{border:0;border-radius:14px;padding:0;box-shadow:0 18px 50px rgba(15,23,4
   #dailyTab .vf-label{font-size:12px}
   #dailyTab .vertical-body{padding:10px}
 }
+
+
+#shiftTab .shift-cell.manual-paid{
+  background:#fff7ed;
+  color:#c2410c;
+  border-color:#fdba74;
+}
