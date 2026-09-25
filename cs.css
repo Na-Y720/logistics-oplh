@@ -287,3 +287,89 @@ dialog{border:0;border-radius:14px;padding:0;box-shadow:0 18px 50px rgba(15,23,4
   color:#c2410c;
   border-color:#fdba74;
 }
+
+
+/* CS daily input: compact 3-person desktop layout */
+#dailyTab .staff-cards.vertical-form{
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  max-width:none;
+  margin:0;
+  gap:10px;
+}
+#dailyTab .vertical-card{min-width:0}
+#dailyTab .vertical-card .staff-head{padding:8px 10px}
+#dailyTab .vertical-card .staff-name{font-size:14px}
+#dailyTab .vertical-card .staff-meta{font-size:10px}
+#dailyTab .vertical-card .staff-state{font-size:10px;padding:4px 6px}
+#dailyTab .vertical-body{padding:8px}
+#dailyTab .vertical-section{
+  margin-bottom:8px;
+  border-radius:9px;
+}
+#dailyTab .vertical-section-head{
+  padding:6px 8px;
+  font-size:11px;
+  gap:6px;
+}
+#dailyTab .vertical-field{
+  grid-template-columns:minmax(0,1fr) 72px;
+  gap:6px;
+  min-height:35px;
+  padding:4px 7px;
+}
+#dailyTab .vf-label{
+  gap:5px;
+  font-size:11px;
+  line-height:1.2;
+}
+#dailyTab .vf-no{
+  width:20px;
+  min-width:20px;
+  height:20px;
+  font-size:10px;
+}
+#dailyTab .vertical-field input{
+  padding:5px 6px;
+  font-size:11px;
+  border-radius:6px;
+}
+#dailyTab .vertical-total{
+  gap:6px;
+  padding:6px 8px;
+  font-size:10px;
+}
+#dailyTab .vertical-total b{font-size:13px}
+#dailyTab .resolution-box{
+  margin:0;
+  border-radius:0;
+  border-left:0;
+  border-right:0;
+}
+#dailyTab .embedded-resolution{
+  border-top:1px solid #f5d48b;
+  border-bottom:1px solid #f5d48b;
+}
+#dailyTab .embedded-resolution .vertical-field{
+  min-height:38px;
+  background:#fffdf5;
+}
+#dailyTab .cs-total{
+  margin-bottom:7px;
+  border-radius:8px;
+}
+#dailyTab .cs-total b{font-size:16px}
+#dailyTab .vertical-card .note-row{
+  font-size:10px;
+  margin-top:6px;
+}
+#dailyTab .vertical-card .note-row input{
+  padding:6px;
+  font-size:11px;
+}
+@media(max-width:1200px){
+  #dailyTab .staff-cards.vertical-form{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:760px){
+  #dailyTab .staff-cards.vertical-form{grid-template-columns:1fr}
+  #dailyTab .vertical-field{grid-template-columns:minmax(0,1fr) 88px}
+}
