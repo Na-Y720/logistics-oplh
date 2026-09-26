@@ -62,7 +62,7 @@ function planPeriod(ym){
  return{start:f(start),end:f(end)};
 }
 function jpDate(v){return String(v||'').replaceAll('-','/')}
-function currentYm(){return new Date().toISOString().slice(0,7)}
+function currentYm(d=new Date()){let y=d.getFullYear(),m=d.getMonth()+1;if(d.getDate()>=21){m++;if(m===13){y++;m=1}}return y+'-'+String(m).padStart(2,'0')}
 
 async function login(){
  const email=$('email').value.trim(),password=$('password').value;
