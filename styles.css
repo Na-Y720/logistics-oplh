@@ -24,3 +24,5 @@ input,select{width:100%;padding:9px 10px;border:1px solid var(--line);border-rad
 .legend.retired{background:#111827;color:#fff;border-color:#111827}
 .shift-retired{background:#111827!important;border-color:#111827!important;color:#fff!important;cursor:not-allowed!important;opacity:1!important}
 .shift-retired:disabled{background:#111827!important;color:#fff!important;opacity:1!important}
+
+.staff-summaryrow{align-items:flex-start}.summaryvalue{text-align:right}.staff-breakdown{margin-top:3px;line-height:1.5;white-space:normal;max-width:360px;color:#667085}
