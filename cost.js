@@ -124,7 +124,7 @@ function metrics(b){const m=b?.monthly||{},ship=b?.shipping||[],tdRows=b?.td||[]
      packHours:(gHandPack.support+gAutoPack.support)/60,
      receivingHours:gReceiving.support/60,
      departments:tdDepartmentBreakdown(tdRows)
-   }}}
+   }}
 }
 
 function diff(now,old,betterLow=false,percent=false){if(now==null||old==null||Number(old)===0)return '—';const delta=Number(now)-Number(old),rate=(Number(now)/Number(old)-1)*100;let cls='neutral';if(delta!==0)cls=((betterLow?delta<0:delta>0)?'good':'bad');return `<span class="${cls}">${delta>=0?'+':''}${percent?(delta*100).toFixed(1)+'pt':fmt(delta,1)} (${rate>=0?'+':''}${rate.toFixed(1)}%)</span>`}
