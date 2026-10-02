@@ -35,7 +35,9 @@
     <div>
       <div class="eyebrow">対象月度</div>
       <div class="month-row">
+        <button id="prevMonthBtn" class="ghost" type="button" aria-label="前月度">＜</button>
         <input id="monthPick" type="month">
+        <button id="nextMonthBtn" class="ghost" type="button" aria-label="次月度">＞</button>
         <span id="statusBadge" class="badge">—</span>
       </div>
       <div id="monthRange" class="muted">—</div>
@@ -164,6 +166,7 @@
         <div>
           <h3>TimeDesigner 月次取込</h3>
           <div class="muted">選択月度（21日～翌20日）の社員作業時間を置き換え保存します。再取込しても二重計上しません。</div>
+          <div class="hint">所属判定はTimeDesignerの部署名を優先し、部署名が空欄の人だけ既存の従業員マスタで補完します。</div>
         </div>
       </div>
       <div id="tdLockedNotice" class="notice hidden"></div>
@@ -224,7 +227,7 @@
       <div class="section-head"><div><h3>作業時間詳細</h3><div class="muted">合計だけでなく、各作業の時間を個別に確認して問題箇所を特定します。社員＝TimeDesigner / PT＝物流PT作業時間管理 / タイミー＝月次入力</div></div></div>
       <div class="tablewrap">
         <table>
-          <thead><tr><th>区分</th><th>作業項目</th><th>社員</th><th>PT</th><th>タイミー</th><th>合計</th><th>OPLH対象</th></tr></thead>
+          <thead><tr><th>区分</th><th>作業項目</th><th>物流部社員</th><th>他部署応援</th><th>PT</th><th>タイミー</th><th>合計</th><th>OPLH対象</th></tr></thead>
           <tbody id="workDetailBody"></tbody>
         </table>
       </div>
@@ -241,11 +244,18 @@
     </section>
 
     <section class="card">
-      <div class="section-head"><div><h3>他部署応援詳細</h3><div class="muted">出荷・入庫への応援時間を分けて表示します。</div></div></div>
+      <div class="section-head"><div><h3>他部署応援詳細</h3><div class="muted">TimeDesignerの部署名から、物流部以外の応援時間を自動集計します。過去移行月は旧スプレッド値を表示します。</div></div></div>
       <div class="tablewrap">
         <table>
           <thead><tr><th>作業</th><th>応援時間</th><th>出荷総時間に対する比率</th></tr></thead>
           <tbody id="helpDetailBody"></tbody>
+        </table>
+      </div>
+      <h4 style="margin:18px 0 8px">部署別内訳</h4>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>部署</th><th>ピッキング</th><th>梱包</th><th>入庫</th><th>合計</th></tr></thead>
+          <tbody id="helpDepartmentBody"></tbody>
         </table>
       </div>
     </section>
