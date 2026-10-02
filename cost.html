@@ -150,6 +150,26 @@
         <span>税抜発送費合計 <b id="shipNetTotal">—</b></span>
         <span>1件当たり <b id="shipUnitTotal">—</b></span>
       </div>
+      <div class="notice" style="margin-top:12px">
+        <strong>佐川CSV取込</strong><br>
+        着店名称が「丸岡」で、かつ集荷店名称が「丸岡」ではない明細を除外します。集荷店・着店とも丸岡は弊社発送として残します。
+        <div class="form-grid" style="margin-top:10px">
+          <label>佐川請求CSV<input id="sagawaImportFiles" type="file" accept=".csv,text/csv" multiple></label>
+        </div>
+        <div class="actions">
+          <button id="sagawaPreviewBtn" class="ghost">内容確認</button>
+          <button id="sagawaImportBtn" class="primary" disabled>この月度へ取込</button>
+        </div>
+        <div id="sagawaImportMessage" class="message"></div>
+        <div id="sagawaPreviewWrap" class="hidden">
+          <div class="mini-kpis">
+            <div><span>請求明細件数</span><b id="sagawaPreviewCount">—</b></div>
+            <div><span>税抜発送費</span><b id="sagawaPreviewNet">—</b></div>
+            <div><span>平均税抜単価</span><b id="sagawaPreviewUnit">—</b></div>
+            <div><span>除外件数</span><b id="sagawaPreviewExcluded">—</b></div>
+          </div>
+        </div>
+      </div>
     </section>
 
     <div class="grid2">
