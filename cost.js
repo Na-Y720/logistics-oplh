@@ -22,7 +22,7 @@ const TD_ACTIVITY_MAP={
  'その他受注処理':{key:'order_next',label:'その他受注処理'},
  '夕方受注処理':{key:'order_evening',label:'夕方受注処理'}
 };
-const TD_ACTIVITY_ORDER=['picking','pass_sort','total_picking','shipping_check','hand_pack','auto_pack','receiving','stock_move','order_am','order_z','order_pm','order_next'];
+const TD_ACTIVITY_ORDER=['picking','pass_sort','total_picking','shipping_check','hand_pack','auto_pack','receiving','stock_move','order_am','order_z','order_pm','order_evening','order_next'];
 const TD_ACTIVITY_LABELS=Object.fromEntries(Object.values(TD_ACTIVITY_MAP).map(x=>[x.key,x.label]));
 let tdLastPreview=null;
 
@@ -73,6 +73,7 @@ function orderMinutes(td){const t=tdTotals(td);const byLabel={};for(const r of t
  am:(t.order_am||byLabel['AM受注処理']||0),
  z:(t.order_z||byLabel['Z受注処理']||0),
  pm:(t.order_pm||byLabel['PM受注処理']||0),
+ evening:(t.order_evening||byLabel['夕方受注処理']||0),
  next:(t.order_next||byLabel['その他受注処理']||0)
 }}
 function metrics(b){const m=b?.monthly||{},ship=b?.shipping||[],tdRows=b?.td||[],td=tdTotals(tdRows);
@@ -229,7 +230,7 @@ function renderDashboard(){const c=metrics(currentBundle),p=metrics(prevBundle),
  ];
  for(const [kid,cid,v,pv,yv,low,percent] of vals){$(kid).textContent=percent?pct(v):(kid==='kShipCost'?yen(v,2):fmt(v,kid==='kOplh'?2:1));$(cid).innerHTML='前月 '+diff(v,pv,low,percent)+'<br>前年 '+diff(v,yv,low,percent)}
  if(c.ppm!=null){$('kPpm').classList.toggle('good',c.ppm<=100);$('kPpm').classList.toggle('bad',c.ppm>100)}else{$('kPpm').classList.remove('good','bad')}
- const ord=c.ord;$('orderAm').textContent=hours(ord.am/60);$('orderZ').textContent=hours(ord.z/60);$('orderPm').textContent=hours(ord.pm/60);$('orderNext').textContent=hours(ord.next/60);
+ const ord=c.ord;$('orderAm').textContent=hours(ord.am/60);$('orderZ').textContent=hours(ord.z/60);$('orderPm').textContent=hours(ord.pm/60);$('orderEvening').textContent=hours(ord.evening/60);$('orderNext').textContent=hours(ord.next/60);
  const mth=currentBundle.monthly||{},ship=currentBundle.shipping||[],imports=currentBundle.imports||[];
  const ptSpan=dateSpan(currentBundle.pt),tdSpan=dateSpan(currentBundle.td);
  const status=[
