@@ -50,6 +50,7 @@
     <button class="tab active" data-tab="dashboard">ダッシュボード</button>
     <button class="tab" data-tab="monthly">月次入力</button>
     <button class="tab" data-tab="shipping">発送費</button>
+    <button class="tab" data-tab="timedesigner">TimeDesigner取込</button>
     <button class="tab" data-tab="work">作業時間</button>
     <button class="tab" data-tab="comparison">前月・前年比較</button>
   </nav>
@@ -117,6 +118,61 @@
       <div class="shipping-total">
         <span>税抜発送費合計 <b id="shipNetTotal">—</b></span>
         <span>1件当たり <b id="shipUnitTotal">—</b></span>
+      </div>
+    </section>
+  </section>
+
+  <section id="timedesignerTab" class="hidden">
+    <section class="card">
+      <div class="section-head">
+        <div>
+          <h3>TimeDesigner 月次取込</h3>
+          <div class="muted">選択月度（21日～翌20日）の社員作業時間を置き換え保存します。再取込しても二重計上しません。</div>
+        </div>
+      </div>
+      <div id="tdLockedNotice" class="notice hidden"></div>
+      <div class="form-grid">
+        <label>TimeDesigner CSV
+          <input id="tdImportFile" type="file" accept=".csv,text/csv">
+        </label>
+      </div>
+      <div class="actions">
+        <button id="tdImportBtn" class="primary">CSVを取込</button>
+      </div>
+      <div id="tdImportMessage" class="message"></div>
+    </section>
+
+    <section class="card">
+      <div class="section-head"><div><h3>自動振分</h3><div class="muted">CSVのタスク名から以下へ自動振分します。</div></div></div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>TimeDesignerタスク</th><th>保存項目</th><th>用途</th></tr></thead>
+          <tbody>
+            <tr><td>オーダーピッキング（送り状ピッキング）</td><td>picking</td><td>全ピッキング</td></tr>
+            <tr><td>パスソート</td><td>pass_sort</td><td>全ピッキング</td></tr>
+            <tr><td>トータルピッキング（トータル回収作業）</td><td>total_picking</td><td>全ピッキング</td></tr>
+            <tr><td>出荷検品（複数ピッキング）</td><td>shipping_check</td><td>全ピッキング</td></tr>
+            <tr><td>手動梱包</td><td>hand_pack</td><td>全梱包</td></tr>
+            <tr><td>自動梱包機</td><td>auto_pack</td><td>全梱包</td></tr>
+            <tr><td>入庫 / 調整入庫</td><td>receiving</td><td>在庫・入庫</td></tr>
+            <tr><td>在庫移動</td><td>stock_move</td><td>在庫移動</td></tr>
+            <tr><td>AM受注処理</td><td>order_am</td><td>受注課 AM</td></tr>
+            <tr><td>Z受注処理</td><td>order_z</td><td>受注課 Z</td></tr>
+            <tr><td>PM受注処理</td><td>order_pm</td><td>受注課 PM</td></tr>
+            <tr><td>その他受注処理</td><td>order_next</td><td>受注課 翌日</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="section-head"><div><h3>取込結果</h3><div class="muted">未振分タスクや社員マスタ未一致もここで確認できます。</div></div></div>
+      <div id="tdImportSummary" class="source-list"></div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>保存項目</th><th>時間</th><th>作業回数</th></tr></thead>
+          <tbody id="tdImportBody"></tbody>
+        </table>
       </div>
     </section>
   </section>
