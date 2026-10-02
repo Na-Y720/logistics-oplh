@@ -82,6 +82,23 @@
           <div><span>翌日</span><b id="orderNext">—</b></div>
         </div>
         <div class="hint">Z受注処理と夕方受注処理は別項目として保持します。「その他受注処理」は「翌日」として扱います。</div>
+        <h4 style="margin:18px 0 8px">9:45までに送り状</h4>
+        <div class="mini-kpis">
+          <div><span>達成日数</span><b id="orderDeadlineOk">—</b></div>
+          <div><span>対象日数</span><b id="orderDeadlineTotal">—</b></div>
+          <div><span>達成率</span><b id="orderDeadlineRate">—</b><small>目標90%以上</small></div>
+        </div>
+        <div id="orderDeadlineLegacyNote" class="hint"></div>
+        <div id="orderDailyEditor" class="hidden" style="margin-top:12px">
+          <div class="tablewrap">
+            <table>
+              <thead><tr><th>日付</th><th>受注件数</th><th>9:45までに送り状</th></tr></thead>
+              <tbody id="orderDailyBody"></tbody>
+            </table>
+          </div>
+          <div class="actions"><button id="saveOrderDailyBtn" class="primary">○/×を保存</button></div>
+          <div id="orderDailyMessage" class="message"></div>
+        </div>
       </section>
     </div>
   </section>
@@ -101,8 +118,6 @@
         <label>タイミー費<input id="mTimeeCost" type="number" min="0"></label>
         <label>タイミー ピッキング時間(h)<input id="mTimeePick" type="number" min="0" step="0.01"></label>
         <label>タイミー 梱包時間(h)<input id="mTimeePack" type="number" min="0" step="0.01"></label>
-        <label>9:55達成日数<input id="m955Ok" type="number" min="0"></label>
-        <label>9:55対象日数<input id="m955Total" type="number" min="0"></label>
         <label>Auto1 ポスト便 ラップタイム(秒)<input id="mAuto1Lap" type="number" min="0" step="0.01"></label>
         <label>Auto1 月間通過個数<input id="mAuto1Count" type="number" min="0"></label>
         <label>Auto2 ゆうパック ラップタイム(秒)<input id="mAuto2Lap" type="number" min="0" step="0.01"></label>
