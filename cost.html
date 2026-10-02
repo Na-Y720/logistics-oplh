@@ -80,8 +80,10 @@
           <div><span>PM</span><b id="orderPm">—</b></div>
           <div><span>夕方</span><b id="orderEvening">—</b></div>
           <div><span>翌日</span><b id="orderNext">—</b></div>
+          <div><span>受注処理総時間</span><b id="orderTotalHours">—</b></div>
+          <div><span>1時間あたり処理件数</span><b id="orderHourlyRate">—</b><small>件/h</small></div>
         </div>
-        <div class="hint">Z受注処理と夕方受注処理は別項目として保持します。「その他受注処理」は「翌日」として扱います。</div>
+        <div class="hint">受注処理能力＝受注件数 ÷（AM＋Z＋PM＋夕方＋翌日の合計時間）。月途中は入力済み受注件数とTimeDesigner取込済み時間で算出します。</div>
         <h4 style="margin:18px 0 8px">9:45までに送り状</h4>
         <div class="mini-kpis">
           <div><span>達成日数</span><b id="orderDeadlineOk">—</b></div>
