@@ -215,10 +215,14 @@ function renderDashboard(){const c=metrics(currentBundle),p=metrics(prevBundle),
  $('sourceStatus').innerHTML=status.map(x=>`<div class="source-row"><div><strong>${x[0]}</strong><small>${x[2]}</small></div><span class="badge ${x[1]?'auto':'missing'}">${x[1]?'取得済':'未完了'}</span></div>`).join('')
 }
 function setInput(id,v,percent=false){$(id).value=v==null?'':(percent?Number(v)*100:v)}
-function renderMonthly(){const m=currentBundle.monthly||{},locked=m.status==='confirmed'||m.origin==='legacy_spreadsheet';setInput('mOrders',m.orders);setInput('mComplaints',m.complaint_count);setInput('mReceiving',m.receiving_rate,true);setInput('mShippingWork',m.shipping_work_count);setInput('mPickComplaints',m.picking_complaint_count);setInput('mMaterialCost',m.material_cost);setInput('mSilverCost',m.silver_cost);setInput('mTimeeCost',m.timee_cost);setInput('mTimeePick',m.timee_picking_hours);setInput('mTimeePack',m.timee_packing_hours);setInput('m955Ok',m.label_955_ok_days);setInput('m955Total',m.label_955_total_days);
- ['mOrders','mComplaints','mReceiving','mShippingWork','mPickComplaints','mMaterialCost','mSilverCost','mTimeeCost','mTimeePick','mTimeePack','m955Ok','m955Total'].forEach(id=>$(id).disabled=locked);$('saveMonthlyBtn').disabled=locked;$('legacyNotice').classList.toggle('hidden',m.origin!=='legacy_spreadsheet');$('legacyNotice').textContent=m.origin==='legacy_spreadsheet'?'旧スプレッドシートから移行した確定値です。過去実績としてロックしています。':''}
+function renderMonthly(){const m=currentBundle.monthly||{},locked=m.status==='confirmed'||m.origin==='legacy_spreadsheet';
+ setInput('mOrders',m.orders);setInput('mComplaints',m.complaint_count);setInput('mReceiving',m.receiving_rate,true);setInput('mShippingWork',m.shipping_work_count);setInput('mPickComplaints',m.picking_complaint_count);setInput('mMaterialCost',m.material_cost);setInput('mSilverCost',m.silver_cost);setInput('mTimeeCost',m.timee_cost);setInput('mTimeePick',m.timee_picking_hours);setInput('mTimeePack',m.timee_packing_hours);setInput('m955Ok',m.label_955_ok_days);setInput('m955Total',m.label_955_total_days);
+ setInput('mAuto1Lap',m.auto1_lap_seconds);setInput('mAuto1Count',m.auto1_count);setInput('mAuto2Lap',m.auto2_lap_seconds);setInput('mAuto2Count',m.auto2_count);setInput('mHelpPick',m.help_picking_hours);setInput('mHelpPack',m.help_packing_hours);setInput('mHelpReceiving',m.help_receiving_hours);
+ ['mOrders','mComplaints','mReceiving','mShippingWork','mPickComplaints','mMaterialCost','mSilverCost','mTimeeCost','mTimeePick','mTimeePack','m955Ok','m955Total','mAuto1Lap','mAuto1Count','mAuto2Lap','mAuto2Count','mHelpPick','mHelpPack','mHelpReceiving'].forEach(id=>$(id).disabled=locked);
+ $('saveMonthlyBtn').disabled=locked;$('legacyNotice').classList.toggle('hidden',m.origin!=='legacy_spreadsheet');$('legacyNotice').textContent=m.origin==='legacy_spreadsheet'?'旧スプレッドシートから移行した確定値です。過去実績としてロックしています。':''
+}
 function inputNum(id,divide=1){const v=$(id).value.trim();return v===''?null:Number(v)/divide}
-async function saveMonthly(){const m=currentBundle.monthly;if(m.status==='confirmed'||m.origin==='legacy_spreadsheet')return;const body={owner_id:user.id,month_ym:currentBundle.ym,period_start:currentBundle.start,period_end:currentBundle.end,status:'open',origin:'app',orders:inputNum('mOrders'),complaint_count:inputNum('mComplaints'),receiving_rate:inputNum('mReceiving',100),shipping_work_count:inputNum('mShippingWork'),picking_complaint_count:inputNum('mPickComplaints'),material_cost:inputNum('mMaterialCost'),silver_cost:inputNum('mSilverCost'),timee_cost:inputNum('mTimeeCost'),timee_picking_hours:inputNum('mTimeePick'),timee_packing_hours:inputNum('mTimeePack'),label_955_ok_days:inputNum('m955Ok'),label_955_total_days:inputNum('m955Total'),updated_at:new Date().toISOString()};
+async function saveMonthly(){const m=currentBundle.monthly;if(m.status==='confirmed'||m.origin==='legacy_spreadsheet')return;const body={owner_id:user.id,month_ym:currentBundle.ym,period_start:currentBundle.start,period_end:currentBundle.end,status:'open',origin:'app',orders:inputNum('mOrders'),complaint_count:inputNum('mComplaints'),receiving_rate:inputNum('mReceiving',100),shipping_work_count:inputNum('mShippingWork'),picking_complaint_count:inputNum('mPickComplaints'),material_cost:inputNum('mMaterialCost'),silver_cost:inputNum('mSilverCost'),timee_cost:inputNum('mTimeeCost'),timee_picking_hours:inputNum('mTimeePick'),timee_packing_hours:inputNum('mTimeePack'),label_955_ok_days:inputNum('m955Ok'),label_955_total_days:inputNum('m955Total'),auto1_lap_seconds:inputNum('mAuto1Lap'),auto1_count:inputNum('mAuto1Count'),auto2_lap_seconds:inputNum('mAuto2Lap'),auto2_count:inputNum('mAuto2Count'),help_picking_hours:inputNum('mHelpPick'),help_packing_hours:inputNum('mHelpPack'),help_receiving_hours:inputNum('mHelpReceiving'),updated_at:new Date().toISOString()};
  try{await rest('logistics_cost_monthly','on_conflict=owner_id%2Cmonth_ym',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(body)});$('monthlyMessage').className='message ok';$('monthlyMessage').textContent='保存しました。';await loadAll()}catch(e){$('monthlyMessage').className='message bad';$('monthlyMessage').textContent=e.message}}
 
 async function parseSagawaFile(file){
@@ -334,7 +338,8 @@ function renderShipping(){const c=metrics(currentBundle),rows=['yamato','sagawa'
   jpRow?`<div class="source-row"><div><strong>日本郵便</strong><small>${esc(jpRow.source_filename||'—')} / 着払${fmt(jpm.cod_count||0)}件（着払金額は除外）</small></div><span class="badge auto">税抜 ${yen(jpRow.net_cost)}</span></div>`:'<div class="source-row"><div><strong>日本郵便</strong><small>未取込</small></div><span class="badge missing">未取込</span></div>'
  ].join('')
 }
-function renderWork(){const c=metrics(currentBundle),d=c.detail;$('wPick').textContent=hours(c.pickHours);$('wPack').textContent=hours(c.packHours);$('wTotal').textContent=hours(c.totalHours);$('wOplh').textContent=fmt(c.oplh,2);
+function renderWork(){const c=metrics(currentBundle),d=c.detail,m=currentBundle.monthly||{},ship=currentBundle.shipping||[];
+ $('wPick').textContent=hours(c.pickHours);$('wPack').textContent=hours(c.packHours);$('wTotal').textContent=hours(c.totalHours);$('wOplh').textContent=fmt(c.oplh,2);
  const rows=[
   ['ピッキング','オーダーピッキング',d.empOrderPick,d.ptOrderPick,0,true],
   ['ピッキング','パスソート',d.empPass,d.ptPass,0,true],
@@ -349,12 +354,27 @@ function renderWork(){const c=metrics(currentBundle),d=c.detail;$('wPick').textC
   ['在庫','在庫移動 / 入庫＆在庫移動',d.empStockMove,d.ptStockMove,0,false]
  ];
  $('workDetailBody').innerHTML=rows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${hours(r[2])}</td><td>${hours(r[3])}</td><td>${hours(r[4])}</td><td><b>${hours(r[2]+r[3]+r[4])}</b></td><td><span class="badge ${r[5]?'auto':''}">${r[5]?'含む':'対象外'}</span></td></tr>`).join('');
- const packs=[
-  ['手動梱包',d.empHandPack,d.ptHandPack,0],
-  ['自動梱包機',d.empAutoPack,d.ptAutoPack,0],
-  ['タイミー梱包',0,0,c.timeePackHours]
+
+ const yamato=ship.find(x=>x.carrier==='yamato'),jpRow=ship.find(x=>x.carrier==='japanpost'),sagawa=ship.find(x=>x.carrier==='sagawa');
+ const yCount=Number(yamato?.adopted_count)||0,jpCount=Number(jpRow?.adopted_count)||0,sCount=Number(sagawa?.adopted_count)||0;
+ const lap1=Number(m.auto1_lap_seconds)||0,lap2=Number(m.auto2_lap_seconds)||0,count1=Number(m.auto1_count)||0,count2=Number(m.auto2_count)||0;
+ const rate1=lap1?3600/lap1:null,rate2=lap2?3600/lap2:null;
+ const auto1Hours=rate1?yCount/rate1:null,auto2Hours=rate2?jpCount/rate2:null;
+ const handCount=Math.max(0,sCount+Math.max(0,yCount-count1)+Math.max(0,jpCount-count2));
+ let handHours=Math.max(0,(c.empPackHours+c.ptPackHours)-(auto1Hours||0)-(auto2Hours||0));
+ let handRate=handHours?handCount/handHours:null,handLap=handRate?3600/handRate:null;
+ if(m.origin==='legacy_spreadsheet'&&m.hand_pack_lap_seconds!=null){handLap=Number(m.hand_pack_lap_seconds);handRate=handLap?3600/handLap:null;if(handRate)handHours=handCount/handRate}
+ const packRows=[
+  ['Auto1 ポスト便',lap1||null,rate1,count1||null,auto1Hours,rate1?fmt(rate1/3,1)+'件/h（3名換算）':'—'],
+  ['Auto2 ゆうパック',lap2||null,rate2,count2||null,auto2Hours,rate2?fmt(rate2/3,1)+'件/h（3名換算）':'—'],
+  ['手梱包',handLap,handRate,handCount||null,handHours,'佐川＋自動機以外']
  ];
- $('packingDetailBody').innerHTML=packs.map(r=>`<tr><td>${r[0]}</td><td>${hours(r[1])}</td><td>${hours(r[2])}</td><td>${hours(r[3])}</td><td><b>${hours(r[1]+r[2]+r[3])}</b></td><td><span class="badge auto">含む</span></td></tr>`).join('')
+ $('packingDetailBody').innerHTML=packRows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]!=null?fmt(r[1],2)+'秒':'—'}</td><td>${r[2]!=null?fmt(r[2],1)+'件/h':'—'}</td><td>${fmt(r[3])}</td><td>${r[4]!=null?hours(r[4]):'—'}</td><td>${r[5]}</td></tr>`).join('');
+
+ const hp=Number(m.help_picking_hours)||0,hk=Number(m.help_packing_hours)||0,hr=Number(m.help_receiving_hours)||0;
+ $('helpDetailBody').innerHTML=[
+  ['ピッキング',hp,c.totalHours?hp/c.totalHours:null],['梱包',hk,c.totalHours?hk/c.totalHours:null],['入庫',hr,null]
+ ].map(r=>`<tr><td>${r[0]}</td><td>${hours(r[1])}</td><td>${r[2]!=null?pct(r[2]):'—'}</td></tr>`).join('')
 }
 function renderComparison(){const c=metrics(currentBundle),p=metrics(prevBundle),y=metrics(yearBundle),m=currentBundle.monthly||{},pm=prevBundle.monthly||{},ym=yearBundle.monthly||{};const rows=[['受注件数',n(m.orders),n(pm.orders),n(ym.orders),false,false],['出荷件数',c.shipments,p.shipments,y.shipments,false,false],['誤出荷PPM（低いほど良い）',c.ppm,p.ppm,y.ppm,true,false],['48H以内入庫率',n(m.receiving_rate),n(pm.receiving_rate),n(ym.receiving_rate),false,true],['発送費合計',c.shipNet,p.shipNet,y.shipNet,true,false],['発送費/件',c.shipPer,p.shipPer,y.shipPer,true,false],['資材費',n(m.material_cost),n(pm.material_cost),n(ym.material_cost),true,false],['タイミー費',n(m.timee_cost),n(pm.timee_cost),n(ym.timee_cost),true,false],['OPLH',c.oplh,p.oplh,y.oplh,false,false]];$('compareBody').innerHTML=rows.map(r=>`<tr><td>${r[0]}</td><td>${r[5]?pct(r[1]):fmt(r[1],1)}</td><td>${r[5]?pct(r[2]):fmt(r[2],1)}</td><td>${diff(r[1],r[2],r[4],r[5])}</td><td>${r[5]?pct(r[3]):fmt(r[3],1)}</td><td>${diff(r[1],r[3],r[4],r[5])}</td></tr>`).join('')}
 async function confirmMonth(){const m=currentBundle.monthly||{};if(m.origin==='legacy_spreadsheet'||m.status==='confirmed')return;const c=metrics(currentBundle);const missing=[];if(m.orders==null)missing.push('受注件数');if(m.complaint_count==null)missing.push('クレーム件数');if(m.receiving_rate==null)missing.push('48H以内入庫率');if(m.material_cost==null)missing.push('資材費');if(!currentBundle.td.length)missing.push('TimeDesigner');if(!currentBundle.pt.length)missing.push('物流PT');if(currentBundle.shipping.filter(x=>['yamato','sagawa','japanpost'].includes(x.carrier)&&x.adopted_count!=null&&x.net_cost!=null).length<3)missing.push('発送費3社');if(missing.length){alert('未完了: '+missing.join('、'));return}if(!confirm(currentBundle.ym+'月度を確定しますか？'))return;const body={status:'confirmed',confirmed_at:new Date().toISOString(),updated_at:new Date().toISOString()};await rest('logistics_cost_monthly',`owner_id=eq.${user.id}&month_ym=eq.${currentBundle.ym}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify(body)});await loadAll()}
