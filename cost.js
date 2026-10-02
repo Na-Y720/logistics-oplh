@@ -35,6 +35,7 @@ function localDateISO(d=new Date()){const y=d.getFullYear(),m=String(d.getMonth(
 function companyMonthToday(d=new Date()){let y=d.getFullYear(),m=d.getMonth()+1;if(d.getDate()>=21){m++;if(m===13){y++;m=1}}return y+'-'+String(m).padStart(2,'0')}
 function monthRange(ym){const[y,m]=ym.split('-').map(Number),end=new Date(y,m-1,20),start=new Date(y,m-2,21);return[localDateISO(start),localDateISO(end)]}
 function previousYm(ym){let[y,m]=ym.split('-').map(Number);m--;if(m===0){m=12;y--}return y+'-'+String(m).padStart(2,'0')}
+function shiftYm(ym,delta){let[y,m]=ym.split('-').map(Number);m+=delta;while(m<1){m+=12;y--}while(m>12){m-=12;y++}return y+'-'+String(m).padStart(2,'0')}
 function priorYearYm(ym){const[y,m]=ym.split('-');return (Number(y)-1)+'-'+m}
 function n(v){return v==null||v===''?null:Number(v)}
 function fmt(v,d=0){if(v==null||Number.isNaN(Number(v)))return '—';return Number(v).toLocaleString('ja-JP',{minimumFractionDigits:d,maximumFractionDigits:d})}
@@ -52,7 +53,7 @@ async function loadBundle(ym,{create=false}={}){let monthlyRows=await rest('logi
  const [shipping,pt,td,imports]=await Promise.all([
   rest('logistics_shipping_monthly',`owner_id=eq.${user.id}&month_ym=eq.${ym}&select=*`).catch(()=>[]),
   rest('logistics_work_time',`owner_id=eq.${user.id}&work_date=gte.${start}&work_date=lte.${end}&select=picking_minutes,total_picking_minutes,pass_sort_minutes,sorting_minutes,hand_pack_minutes,auto_pack_minutes,stock_move_minutes`).catch(()=>[]),
-  rest('oplh_timedesigner_daily',`owner_id=eq.${user.id}&work_date=gte.${start}&work_date=lte.${end}&select=activity_key,activity_label,work_minutes,event_count,worker_key,worker_name`).catch(()=>[]),
+  rest('oplh_timedesigner_daily',`owner_id=eq.${user.id}&work_date=gte.${start}&work_date=lte.${end}&select=activity_key,activity_label,work_minutes,event_count,worker_key,worker_name,employee_no,staff_id,source_department`).catch(()=>[]),
   rest('logistics_cost_import_batches',`owner_id=eq.${user.id}&month_ym=eq.${ym}&select=source,source_filename,source_rows,imported_at,metadata&order=imported_at.desc`).catch(()=>[])
  ]);
  return{ym,monthly,shipping:shipping||[],pt:pt||[],td:td||[],imports:imports||[],start,end}
@@ -61,6 +62,10 @@ async function loadBundle(ym,{create=false}={}){let monthlyRows=await rest('logi
 function sum(obj,key){return(obj||[]).reduce((a,r)=>a+(Number(r[key])||0),0)}
 function tdTotals(rows){const out={};for(const r of rows||[]){const key=r.activity_key||r.activity_label||'';out[key]=(out[key]||0)+(Number(r.work_minutes)||0)}return out}
 function tdMinutes(rows,keys=[],labels=[]){return(rows||[]).reduce((a,r)=>{const key=r.activity_key||'',label=r.activity_label||'';return a+((keys.includes(key)||labels.includes(label))?(Number(r.work_minutes)||0):0)},0)}
+function tdDepartment(r){const d=String(r?.source_department||'').trim();if(d)return d;return r?.staff_id?'物流部':'部署不明'}
+function tdIsLogistics(r){return tdDepartment(r)==='物流部'}
+function tdGroupMinutes(rows,keys=[],labels=[]){let logistics=0,support=0;for(const r of rows||[]){const key=r.activity_key||'',label=r.activity_label||'';if(!(keys.includes(key)||labels.includes(label)))continue;const mins=Number(r.work_minutes)||0;if(tdIsLogistics(r))logistics+=mins;else support+=mins}return{logistics,support,total:logistics+support}}
+function tdDepartmentBreakdown(rows){const out={};for(const r of rows||[]){const dept=tdDepartment(r);if(dept==='物流部')continue;const key=r.activity_key||'',mins=(Number(r.work_minutes)||0)/60,x=out[dept]||(out[dept]={pick:0,pack:0,receiving:0,total:0});if(['picking','pass_sort','total_picking','shipping_check'].includes(key))x.pick+=mins;else if(['hand_pack','auto_pack'].includes(key))x.pack+=mins;else if(key==='receiving')x.receiving+=mins;x.total+=mins}return out}
 function orderMinutes(td){const t=tdTotals(td);const byLabel={};for(const r of td||[]){byLabel[r.activity_label]=(byLabel[r.activity_label]||0)+(Number(r.work_minutes)||0)}return{
  am:(t.order_am||byLabel['AM受注処理']||0),
  z:(t.order_z||byLabel['Z受注処理']||0),
@@ -73,14 +78,16 @@ function metrics(b){const m=b?.monthly||{},ship=b?.shipping||[],tdRows=b?.td||[]
  const shipPer=shipments?shipNet/shipments:null;
  const ppm=shipments&&m.complaint_count!=null?Number(m.complaint_count)/shipments*1000000:null;
 
- const empOrderPickMin=tdMinutes(tdRows,['picking'],['オーダーピッキング（送り状ピッキング）','オーダーピッキング']);
- const empPassMin=tdMinutes(tdRows,['pass_sort'],['パスソート']);
- const empTotalPickMin=tdMinutes(tdRows,['total_picking'],['トータルピッキング（トータル回収作業）','トータルピッキング']);
- const empCheckMin=tdMinutes(tdRows,['shipping_check'],['出荷検品（複数ピッキング）','出荷検品']);
- const empHandPackMin=tdMinutes(tdRows,['hand_pack'],['手動梱包']);
- const empAutoPackMin=tdMinutes(tdRows,['auto_pack'],['自動梱包機']);
- const empReceivingMin=tdMinutes(tdRows,['receiving'],['入庫']);
- const empStockMoveMin=tdMinutes(tdRows,['stock_move'],['在庫移動']);
+ const gOrderPick=tdGroupMinutes(tdRows,['picking'],['オーダーピッキング（送り状ピッキング）','オーダーピッキング']);
+ const gPass=tdGroupMinutes(tdRows,['pass_sort'],['パスソート']);
+ const gTotalPick=tdGroupMinutes(tdRows,['total_picking'],['トータルピッキング（トータル回収作業）','トータルピッキング']);
+ const gCheck=tdGroupMinutes(tdRows,['shipping_check'],['出荷検品（複数ピッキング）','出荷検品']);
+ const gHandPack=tdGroupMinutes(tdRows,['hand_pack'],['手動梱包']);
+ const gAutoPack=tdGroupMinutes(tdRows,['auto_pack'],['自動梱包機']);
+ const gReceiving=tdGroupMinutes(tdRows,['receiving'],['入庫']);
+ const gStockMove=tdGroupMinutes(tdRows,['stock_move'],['在庫移動']);
+ const empOrderPickMin=gOrderPick.total,empPassMin=gPass.total,empTotalPickMin=gTotalPick.total,empCheckMin=gCheck.total;
+ const empHandPackMin=gHandPack.total,empAutoPackMin=gAutoPack.total,empReceivingMin=gReceiving.total,empStockMoveMin=gStockMove.total;
 
  const ptOrderPickMin=sum(b?.pt,'picking_minutes');
  const ptTotalPickMin=sum(b?.pt,'total_picking_minutes');
@@ -105,9 +112,19 @@ function metrics(b){const m=b?.monthly||{},ship=b?.shipping||[],tdRows=b?.td||[]
    detail:{
      empOrderPick:empOrderPickMin/60,empPass:empPassMin/60,empTotalPick:empTotalPickMin/60,empCheck:empCheckMin/60,
      empHandPack:empHandPackMin/60,empAutoPack:empAutoPackMin/60,empReceiving:empReceivingMin/60,empStockMove:empStockMoveMin/60,
+     logOrderPick:gOrderPick.logistics/60,helpOrderPick:gOrderPick.support/60,logPass:gPass.logistics/60,helpPass:gPass.support/60,
+     logTotalPick:gTotalPick.logistics/60,helpTotalPick:gTotalPick.support/60,logCheck:gCheck.logistics/60,helpCheck:gCheck.support/60,
+     logHandPack:gHandPack.logistics/60,helpHandPack:gHandPack.support/60,logAutoPack:gAutoPack.logistics/60,helpAutoPack:gAutoPack.support/60,
+     logReceiving:gReceiving.logistics/60,helpReceiving:gReceiving.support/60,logStockMove:gStockMove.logistics/60,helpStockMove:gStockMove.support/60,
      ptOrderPick:ptOrderPickMin/60,ptPass:ptPassMin/60,ptTotalPick:ptTotalPickMin/60,ptSorting:ptSortingMin/60,
      ptHandPack:ptHandPackMin/60,ptAutoPack:ptAutoPackMin/60,ptStockMove:ptStockMoveMin/60
-   }}
+   },
+   help:{
+     pickHours:(gOrderPick.support+gPass.support+gTotalPick.support+gCheck.support)/60,
+     packHours:(gHandPack.support+gAutoPack.support)/60,
+     receivingHours:gReceiving.support/60,
+     departments:tdDepartmentBreakdown(tdRows)
+   }}}
 }
 
 function diff(now,old,betterLow=false,percent=false){if(now==null||old==null||Number(old)===0)return '—';const delta=Number(now)-Number(old),rate=(Number(now)/Number(old)-1)*100;let cls='neutral';if(delta!==0)cls=((betterLow?delta<0:delta>0)?'good':'bad');return `<span class="${cls}">${delta>=0?'+':''}${percent?(delta*100).toFixed(1)+'pt':fmt(delta,1)} (${rate>=0?'+':''}${rate.toFixed(1)}%)</span>`}
@@ -135,12 +152,13 @@ async function parseTimeDesignerFile(file){
   const task=String(r[ix.task]||'').trim(),map=TD_ACTIVITY_MAP[task];
   const mins=Number(String(r[ix.min]||'0').replace(/,/g,''))||0;
   if(!map){if(task){const x=unmapped.get(task)||{count:0,minutes:0};x.count++;x.minutes+=mins;unmapped.set(task,x)}continue}
-  const employeeNo=String(r[ix.emp]||'').normalize('NFKC').trim()||null;
+  const employeeNo=(String(r[ix.emp]||'').normalize('NFKC').trim().replace(/\.0$/,'')||null);
+  const sourceDepartment=ix.dept>=0?(String(r[ix.dept]||'').normalize('NFKC').trim()||null):null;
   const workerName=normalizeWorkerName(r[ix.name])||String(r[ix.name]||'').trim()||'不明';
   const workerKey=employeeNo||workerName;
   const staffId=(employeeNo&&staff.byCode.get(employeeNo))||staff.byName.get(workerName)||null;
-  if(!staffId)unmatchedStaff.add((employeeNo?employeeNo+' ':'')+workerName);
-  const key=[date,workerKey,map.key].join('|'),x=agg.get(key)||{owner_id:user.id,work_date:date,staff_id:staffId,worker_key:workerKey,employee_no:employeeNo,worker_name:workerName,activity_key:map.key,activity_label:map.label,event_count:0,work_minutes:0};
+  if(!staffId&&sourceDepartment==='物流部')unmatchedStaff.add((employeeNo?employeeNo+' ':'')+workerName);
+  const key=[date,workerKey,map.key].join('|'),x=agg.get(key)||{owner_id:user.id,work_date:date,staff_id:staffId,worker_key:workerKey,employee_no:employeeNo,worker_name:workerName,source_department:sourceDepartment,activity_key:map.key,activity_label:map.label,event_count:0,work_minutes:0};
   x.event_count++;x.work_minutes+=mins;if(!x.staff_id&&staffId)x.staff_id=staffId;agg.set(key,x);mappedSourceRows++;
  }
  const rows=[...agg.values()].map(x=>({...x,work_minutes:Number(x.work_minutes.toFixed(4))}));
@@ -343,19 +361,19 @@ function renderShipping(){const c=metrics(currentBundle),rows=['yamato','sagawa'
 function renderWork(){const c=metrics(currentBundle),d=c.detail,m=currentBundle.monthly||{},ship=currentBundle.shipping||[];
  $('wPick').textContent=hours(c.pickHours);$('wPack').textContent=hours(c.packHours);$('wTotal').textContent=hours(c.totalHours);$('wOplh').textContent=fmt(c.oplh,2);
  const rows=[
-  ['ピッキング','オーダーピッキング',d.empOrderPick,d.ptOrderPick,0,true],
-  ['ピッキング','パスソート',d.empPass,d.ptPass,0,true],
-  ['ピッキング','トータルピッキング',d.empTotalPick,d.ptTotalPick,0,true],
-  ['ピッキング','出荷検品',d.empCheck,0,0,true],
-  ['ピッキング','タイミー ピッキング',0,0,c.timeePickHours,true],
-  ['梱包','手動梱包',d.empHandPack,d.ptHandPack,0,true],
-  ['梱包','自動梱包機',d.empAutoPack,d.ptAutoPack,0,true],
-  ['梱包','タイミー 梱包',0,0,c.timeePackHours,true],
-  ['その他','仕分け',0,d.ptSorting,0,false],
-  ['在庫','入庫',d.empReceiving,0,0,false],
-  ['在庫','在庫移動 / 入庫＆在庫移動',d.empStockMove,d.ptStockMove,0,false]
+  ['ピッキング','オーダーピッキング',d.logOrderPick,d.helpOrderPick,d.ptOrderPick,0,true],
+  ['ピッキング','パスソート',d.logPass,d.helpPass,d.ptPass,0,true],
+  ['ピッキング','トータルピッキング',d.logTotalPick,d.helpTotalPick,d.ptTotalPick,0,true],
+  ['ピッキング','出荷検品',d.logCheck,d.helpCheck,0,0,true],
+  ['ピッキング','タイミー ピッキング',0,0,0,c.timeePickHours,true],
+  ['梱包','手動梱包',d.logHandPack,d.helpHandPack,d.ptHandPack,0,true],
+  ['梱包','自動梱包機',d.logAutoPack,d.helpAutoPack,d.ptAutoPack,0,true],
+  ['梱包','タイミー 梱包',0,0,0,c.timeePackHours,true],
+  ['その他','仕分け',0,0,d.ptSorting,0,false],
+  ['在庫','入庫',d.logReceiving,d.helpReceiving,0,0,false],
+  ['在庫','在庫移動 / 入庫＆在庫移動',d.logStockMove,d.helpStockMove,d.ptStockMove,0,false]
  ];
- $('workDetailBody').innerHTML=rows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${hours(r[2])}</td><td>${hours(r[3])}</td><td>${hours(r[4])}</td><td><b>${hours(r[2]+r[3]+r[4])}</b></td><td><span class="badge ${r[5]?'auto':''}">${r[5]?'含む':'対象外'}</span></td></tr>`).join('');
+ $('workDetailBody').innerHTML=rows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${hours(r[2])}</td><td>${hours(r[3])}</td><td>${hours(r[4])}</td><td>${hours(r[5])}</td><td><b>${hours(r[2]+r[3]+r[4]+r[5])}</b></td><td><span class="badge ${r[6]?'auto':''}">${r[6]?'含む':'対象外'}</span></td></tr>`).join('');
 
  const yamato=ship.find(x=>x.carrier==='yamato'),jpRow=ship.find(x=>x.carrier==='japanpost'),sagawa=ship.find(x=>x.carrier==='sagawa');
  const yCount=Number(yamato?.adopted_count)||0,jpCount=Number(jpRow?.adopted_count)||0,sCount=Number(sagawa?.adopted_count)||0;
@@ -373,15 +391,20 @@ function renderWork(){const c=metrics(currentBundle),d=c.detail,m=currentBundle.
  ];
  $('packingDetailBody').innerHTML=packRows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]!=null?fmt(r[1],2)+'秒':'—'}</td><td>${r[2]!=null?fmt(r[2],1)+'件/h':'—'}</td><td>${fmt(r[3])}</td><td>${r[4]!=null?hours(r[4]):'—'}</td><td>${r[5]}</td></tr>`).join('');
 
- const hp=Number(m.help_picking_hours)||0,hk=Number(m.help_packing_hours)||0,hr=Number(m.help_receiving_hours)||0;
+ const legacy=m.origin==='legacy_spreadsheet';
+ const hp=legacy?(Number(m.help_picking_hours)||0):c.help.pickHours,hk=legacy?(Number(m.help_packing_hours)||0):c.help.packHours,hr=legacy?(Number(m.help_receiving_hours)||0):c.help.receivingHours;
  $('helpDetailBody').innerHTML=[
   ['ピッキング',hp,c.totalHours?hp/c.totalHours:null],['梱包',hk,c.totalHours?hk/c.totalHours:null],['入庫',hr,null]
- ].map(r=>`<tr><td>${r[0]}</td><td>${hours(r[1])}</td><td>${r[2]!=null?pct(r[2]):'—'}</td></tr>`).join('')
+ ].map(r=>`<tr><td>${r[0]}</td><td>${hours(r[1])}</td><td>${r[2]!=null?pct(r[2]):'—'}</td></tr>`).join('');
+ const deptRows=Object.entries(c.help.departments||{}).sort((a,b)=>b[1].total-a[1].total);
+ $('helpDepartmentBody').innerHTML=legacy
+   ? '<tr><td colspan="5">過去移行月は部署別データを保持していません。</td></tr>'
+   : (deptRows.length?deptRows.map(([dept,x])=>`<tr><td>${esc(dept)}</td><td>${hours(x.pick)}</td><td>${hours(x.pack)}</td><td>${hours(x.receiving)}</td><td><b>${hours(x.total)}</b></td></tr>`).join(''):'<tr><td colspan="5">他部署応援データはありません。</td></tr>')
 }
 function renderComparison(){const c=metrics(currentBundle),p=metrics(prevBundle),y=metrics(yearBundle),m=currentBundle.monthly||{},pm=prevBundle.monthly||{},ym=yearBundle.monthly||{};const rows=[['受注件数',n(m.orders),n(pm.orders),n(ym.orders),false,false],['出荷件数',c.shipments,p.shipments,y.shipments,false,false],['誤出荷PPM（低いほど良い）',c.ppm,p.ppm,y.ppm,true,false],['48H以内入庫率',n(m.receiving_rate),n(pm.receiving_rate),n(ym.receiving_rate),false,true],['発送費合計',c.shipNet,p.shipNet,y.shipNet,true,false],['発送費/件',c.shipPer,p.shipPer,y.shipPer,true,false],['資材費',n(m.material_cost),n(pm.material_cost),n(ym.material_cost),true,false],['タイミー費',n(m.timee_cost),n(pm.timee_cost),n(ym.timee_cost),true,false],['OPLH',c.oplh,p.oplh,y.oplh,false,false]];$('compareBody').innerHTML=rows.map(r=>`<tr><td>${r[0]}</td><td>${r[5]?pct(r[1]):fmt(r[1],1)}</td><td>${r[5]?pct(r[2]):fmt(r[2],1)}</td><td>${diff(r[1],r[2],r[4],r[5])}</td><td>${r[5]?pct(r[3]):fmt(r[3],1)}</td><td>${diff(r[1],r[3],r[4],r[5])}</td></tr>`).join('')}
 async function confirmMonth(){const m=currentBundle.monthly||{};if(m.origin==='legacy_spreadsheet'||m.status==='confirmed')return;const c=metrics(currentBundle);const missing=[];if(m.orders==null)missing.push('受注件数');if(m.complaint_count==null)missing.push('クレーム件数');if(m.receiving_rate==null)missing.push('48H以内入庫率');if(m.material_cost==null)missing.push('資材費');if(!currentBundle.td.length)missing.push('TimeDesigner');if(!currentBundle.pt.length)missing.push('物流PT');if(currentBundle.shipping.filter(x=>['yamato','sagawa','japanpost'].includes(x.carrier)&&x.adopted_count!=null&&x.net_cost!=null).length<3)missing.push('発送費3社');if(missing.length){alert('未完了: '+missing.join('、'));return}if(!confirm(currentBundle.ym+'月度を確定しますか？'))return;const body={status:'confirmed',confirmed_at:new Date().toISOString(),updated_at:new Date().toISOString()};await rest('logistics_cost_monthly',`owner_id=eq.${user.id}&month_ym=eq.${currentBundle.ym}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify(body)});await loadAll()}
 async function initApp(){$('monthPick').value=companyMonthToday();await loadAll()}
 
 document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===b));['dashboard','monthly','shipping','timedesigner','work','comparison'].forEach(t=>$(t+'Tab').classList.toggle('hidden',b.dataset.tab!==t))});
-$('loginBtn').onclick=login;$('logoutBtn').onclick=logout;$('reloadBtn').onclick=loadAll;$('monthPick').onchange=loadAll;$('saveMonthlyBtn').onclick=saveMonthly;$('confirmBtn').onclick=confirmMonth;$('tdImportBtn').onclick=importTimeDesigner;$('sagawaImportBtn').onclick=importSagawa;$('yamatoImportBtn').onclick=importYamato;$('japanPostImportBtn').onclick=importJapanPost;
+$('loginBtn').onclick=login;$('logoutBtn').onclick=logout;$('reloadBtn').onclick=loadAll;$('monthPick').onchange=loadAll;$('prevMonthBtn').onclick=()=>{$('monthPick').value=shiftYm($('monthPick').value,-1);loadAll()};$('nextMonthBtn').onclick=()=>{$('monthPick').value=shiftYm($('monthPick').value,1);loadAll()};$('saveMonthlyBtn').onclick=saveMonthly;$('confirmBtn').onclick=confirmMonth;$('tdImportBtn').onclick=importTimeDesigner;$('sagawaImportBtn').onclick=importSagawa;$('yamatoImportBtn').onclick=importYamato;$('japanPostImportBtn').onclick=importJapanPost;
 (async()=>{session=loadSession();if(session?.access_token){try{user=await req('/auth/v1/user');showApp();await initApp()}catch{saveSession(null);session=null;user=null;showApp()}}else showApp()})();
