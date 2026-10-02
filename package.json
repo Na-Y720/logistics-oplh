@@ -1,0 +1,9 @@
+{
+  "private": true,
+  "engines": {
+    "node": ">=22.3.0"
+  },
+  "dependencies": {
+    "pdf-parse": "2.4.5"
+  }
+}
