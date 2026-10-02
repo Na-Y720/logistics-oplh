@@ -232,10 +232,13 @@ function renderDashboard(){const c=metrics(currentBundle),p=metrics(prevBundle),
  if(c.ppm!=null){$('kPpm').classList.toggle('good',c.ppm<=100);$('kPpm').classList.toggle('bad',c.ppm>100)}else{$('kPpm').classList.remove('good','bad')}
  const ord=c.ord;$('orderAm').textContent=hours(ord.am/60);$('orderZ').textContent=hours(ord.z/60);$('orderPm').textContent=hours(ord.pm/60);$('orderEvening').textContent=hours(ord.evening/60);$('orderNext').textContent=hours(ord.next/60);
  const mth=currentBundle.monthly||{},ship=currentBundle.shipping||[],imports=currentBundle.imports||[];
- const ptSpan=dateSpan(currentBundle.pt),tdSpan=dateSpan(currentBundle.td);
+ const ptSpan=dateSpan(currentBundle.pt),tdSpan=dateSpan(currentBundle.td),tdImport=imports.find(x=>x.source==='timedesigner');
+ const tdPeriod=tdImport?.period_start&&tdImport?.period_end
+   ? mdLabel(tdImport.period_start)+'〜'+mdLabel(tdImport.period_end)
+   : mdLabel(tdSpan.min)+'〜'+mdLabel(tdSpan.max);
  const status=[
   ['月次手入力',mth.orders!=null&&mth.complaint_count!=null&&mth.receiving_rate!=null&&mth.material_cost!=null,'受注・品質・資材'],
-  ['TimeDesigner',currentBundle.td.length>0,currentBundle.td.length?`社員作業時間＋受注処理（${mdLabel(tdSpan.min)}〜${mdLabel(tdSpan.max)}）`:'社員作業時間＋受注処理：未取込'],
+  ['TimeDesigner',currentBundle.td.length>0,currentBundle.td.length?`社員作業時間＋受注処理（${tdPeriod}）`:'社員作業時間＋受注処理：未取込'],
   ['物流PT',currentBundle.pt.length>0,currentBundle.pt.length?`物流PT作業時間管理（${mdLabel(ptSpan.min)}〜${mdLabel(ptSpan.max)}・${currentBundle.pt.length}件）`:'物流PT作業時間管理：未入力'],
   ['発送費',ship.filter(x=>['yamato','sagawa','japanpost'].includes(x.carrier)&&x.adopted_count!=null&&x.net_cost!=null).length===3,'ヤマト・佐川・日本郵便']
  ];
