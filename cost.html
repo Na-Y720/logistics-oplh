@@ -100,6 +100,13 @@
         <label>タイミー 梱包時間(h)<input id="mTimeePack" type="number" min="0" step="0.01"></label>
         <label>9:55達成日数<input id="m955Ok" type="number" min="0"></label>
         <label>9:55対象日数<input id="m955Total" type="number" min="0"></label>
+        <label>Auto1 ポスト便 ラップタイム(秒)<input id="mAuto1Lap" type="number" min="0" step="0.01"></label>
+        <label>Auto1 月間通過個数<input id="mAuto1Count" type="number" min="0"></label>
+        <label>Auto2 ゆうパック ラップタイム(秒)<input id="mAuto2Lap" type="number" min="0" step="0.01"></label>
+        <label>Auto2 月間通過個数<input id="mAuto2Count" type="number" min="0"></label>
+        <label>他部署応援 ピッキング(h)<input id="mHelpPick" type="number" min="0" step="0.01"></label>
+        <label>他部署応援 梱包(h)<input id="mHelpPack" type="number" min="0" step="0.01"></label>
+        <label>他部署応援 入庫(h)<input id="mHelpReceiving" type="number" min="0" step="0.01"></label>
       </div>
       <div class="actions"><button id="saveMonthlyBtn" class="primary">保存</button></div>
       <div id="monthlyMessage" class="message"></div>
@@ -223,11 +230,21 @@
     </section>
 
     <section class="card">
-      <div class="section-head"><div><h3>梱包詳細</h3><div class="muted">手動梱包と自動梱包機を分けて確認します。</div></div></div>
+      <div class="section-head"><div><h3>梱包詳細</h3><div class="muted">旧スプレッドの梱包詳細を再現し、Auto1・Auto2・手梱包の能力を個別に確認します。</div></div></div>
       <div class="tablewrap">
         <table>
-          <thead><tr><th>梱包項目</th><th>社員</th><th>PT</th><th>タイミー</th><th>合計</th><th>全梱包に含む</th></tr></thead>
+          <thead><tr><th>梱包区分</th><th>1件ラップタイム</th><th>1時間処理数</th><th>月間通過/対象個数</th><th>要時間</th><th>補足指標</th></tr></thead>
           <tbody id="packingDetailBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="section-head"><div><h3>他部署応援詳細</h3><div class="muted">出荷・入庫への応援時間を分けて表示します。</div></div></div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>作業</th><th>応援時間</th><th>出荷総時間に対する比率</th></tr></thead>
+          <tbody id="helpDetailBody"></tbody>
         </table>
       </div>
     </section>
