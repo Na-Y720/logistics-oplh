@@ -373,8 +373,8 @@ function renderWork(){const c=metrics(currentBundle),d=c.detail,m=currentBundle.
   ['梱包','自動梱包機',d.logAutoPack,d.helpAutoPack,d.ptAutoPack,0,true],
   ['梱包','タイミー 梱包',0,0,0,c.timeePackHours,true],
   ['その他','仕分け',0,0,d.ptSorting,0,false],
-  ['在庫','入庫',d.logReceiving,d.helpReceiving,0,0,false],
-  ['在庫','在庫移動 / 入庫＆在庫移動',d.logStockMove,d.helpStockMove,d.ptStockMove,0,false]
+  ['在庫','入庫',d.logReceiving,d.helpReceiving,d.ptStockMove,0,false],
+  ['在庫','在庫移動',d.logStockMove,d.helpStockMove,0,0,false]
  ];
  $('workDetailBody').innerHTML=rows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${hours(r[2])}</td><td>${hours(r[3])}</td><td>${hours(r[4])}</td><td>${hours(r[5])}</td><td><b>${hours(r[2]+r[3]+r[4]+r[5])}</b></td><td><span class="badge ${r[6]?'auto':''}">${r[6]?'含む':'対象外'}</span></td></tr>`).join('');
 
