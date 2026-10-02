@@ -24,3 +24,4 @@ button.primary{background:var(--blue);border-color:var(--blue);color:#fff;font-w
 .shipping-total{display:flex;justify-content:flex-end;gap:22px;padding-top:12px;font-size:12px}.shipping-total b{font-size:16px}.good{color:var(--green);font-weight:800}.bad{color:var(--red);font-weight:800}.neutral{color:#475467}
 @media(max-width:1200px){.kpis.six{grid-template-columns:repeat(3,1fr)}.form-grid{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}}
 @media(max-width:760px){.topbar{align-items:flex-start;flex-direction:column}.kpis.six,.kpis.four{grid-template-columns:repeat(2,1fr)}.form-grid{grid-template-columns:1fr}.mini-kpis{grid-template-columns:repeat(2,1fr)}main{padding:14px}}
+.order-count-input{width:110px;max-width:100%;text-align:right;padding:7px 8px}.order-deadline-select{min-width:96px;padding:7px 8px;border:1px solid #d0d5dd;border-radius:8px;background:#fff;color:var(--text)}
