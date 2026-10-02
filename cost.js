@@ -266,16 +266,28 @@ async function extractPdfText(file,retry=true){
  const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||('PDF解析エラー '+r.status));return j.text||''
 }
 function parseYamatoText(text){
- const totals=[...text.matchAll(/合計[（(]税込[）)]\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)/g)];
- if(!totals.length)throw new Error('ヤマト請求書の「合計(税込)」を読み取れませんでした。');
- const t=totals[totals.length-1],toNum=x=>Number(String(x).replace(/,/g,''));
+ const toNum=x=>Number(String(x||'').replace(/,/g,''));
+ let invoiceCount=null,grossCost=null,netCost=null;
+ const normal=[...text.matchAll(/合計[（(]税込[）)]\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)/g)];
+ if(normal.length){const t=normal[normal.length-1];invoiceCount=toNum(t[1]);grossCost=toNum(t[2]);netCost=toNum(t[3])}
+ if(invoiceCount==null){
+  const compact=[...text.matchAll(/(\d{1,3},\d{3})(\d{1,3},\d{3},\d{3})(\d{1,3},\d{3},\d{3})\s+0\s+0\s+(\d{1,3},\d{3})\s*合計[（(]税込[）)]/g)];
+  if(compact.length){const t=compact[compact.length-1];invoiceCount=toNum(t[1]);grossCost=toNum(t[2]);netCost=toNum(t[3])}
+ }
  let adoptedCount=0;
  for(const line of text.replace(/\r/g,'').split('\n')){
   if(!line.includes('ネコポス'))continue;
-  const m=line.trim().match(/^\d{4}\s+\d{4}-\d{4}-\d{4}\s+ネコポス\s+.+?\s+(\d+)\s+[\d,]+\s+[\d,]+\s+[\d,]+\s+[\d,]+\s*$/);
-  if(m)adoptedCount+=Number(m[1])||0;
+  const after=line.split('ネコポス').slice(1).join('ネコポス');
+  const nums=[...after.matchAll(/\d[\d,]*/g)].map(m=>toNum(m[0])).filter(Number.isFinite);
+  if(nums.length<5)continue;
+  const tail=nums.slice(-5);
+  let count=0;
+  if(tail[0]>=0&&tail[0]<=50&&tail[1]>=50)count=tail[0];
+  else if(tail[1]>=0&&tail[1]<=50&&tail[0]>=50)count=tail[1];
+  else if(tail[0]>=0&&tail[0]<=50)count=tail[0];
+  else if(tail[1]>=0&&tail[1]<=50)count=tail[1];
+  adoptedCount+=count||0;
  }
- const invoiceCount=toNum(t[1]),grossCost=toNum(t[2]),netCost=toNum(t[3]);
  if(!adoptedCount||!invoiceCount||!grossCost||!netCost)throw new Error('ヤマト請求書の件数または金額を読み取れませんでした。');
  return{adoptedCount,invoiceCount,grossCost,netCost,otherCount:invoiceCount-adoptedCount}
 }
