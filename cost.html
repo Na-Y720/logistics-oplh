@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>物流コスト管理</title>
+<link rel="stylesheet" href="cost.css">
+</head>
+<body>
+<header class="topbar">
+  <div>
+    <h1>物流コスト管理</h1>
+    <div class="sub">月次KPI・発送費・作業時間を一元管理</div>
+  </div>
+  <div class="top-actions">
+    <span id="userLabel" class="muted"></span>
+    <a class="linkbtn" href="worktime.html">物流PT 作業時間へ</a>
+    <a class="linkbtn" href="./">人時・シフト管理へ</a>
+    <button id="logoutBtn" class="ghost hidden">ログアウト</button>
+  </div>
+</header>
+
+<main>
+<section id="authView" class="card auth">
+  <h2>ログイン</h2>
+  <p class="muted">既存の物流アプリと同じアカウントを使用します。</p>
+  <label>メールアドレス<input id="email" type="email" autocomplete="username"></label>
+  <label>パスワード<input id="password" type="password" autocomplete="current-password"></label>
+  <button id="loginBtn" class="primary">ログイン</button>
+  <div id="authError" class="error"></div>
+</section>
+
+<div id="appView" class="hidden">
+  <section class="hero card">
+    <div>
+      <div class="eyebrow">対象月度</div>
+      <div class="month-row">
+        <input id="monthPick" type="month">
+        <span id="statusBadge" class="badge">—</span>
+      </div>
+      <div id="monthRange" class="muted">—</div>
+    </div>
+    <div class="hero-actions">
+      <button id="reloadBtn" class="ghost">再読み込み</button>
+      <button id="confirmBtn" class="primary">月度確定</button>
+    </div>
+  </section>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="dashboard">ダッシュボード</button>
+    <button class="tab" data-tab="monthly">月次入力</button>
+    <button class="tab" data-tab="shipping">発送費</button>
+    <button class="tab" data-tab="work">作業時間</button>
+    <button class="tab" data-tab="comparison">前月・前年比較</button>
+  </nav>
+
+  <section id="dashboardTab">
+    <section class="kpis six">
+      <div class="kpi"><span>受注件数</span><b id="kOrders">—</b><small id="cOrders">—</small></div>
+      <div class="kpi"><span>出荷件数</span><b id="kShipments">—</b><small id="cShipments">—</small></div>
+      <div class="kpi accent"><span>OPLH</span><b id="kOplh">—</b><small id="cOplh">—</small></div>
+      <div class="kpi"><span>発送費 / 件</span><b id="kShipCost">—</b><small id="cShipCost">—</small></div>
+      <div class="kpi"><span>48H以内入庫率</span><b id="kReceiving">—</b><small id="cReceiving">—</small></div>
+      <div class="kpi"><span>誤出荷PPM</span><b id="kPpm">—</b><small id="cPpm">—</small></div>
+    </section>
+
+    <div class="grid2">
+      <section class="card">
+        <div class="section-head"><div><h3>データ取得状況</h3><div class="muted">10月度以降はここが全部埋まれば月度確定できます。</div></div></div>
+        <div id="sourceStatus" class="source-list"></div>
+      </section>
+      <section class="card">
+        <div class="section-head"><div><h3>受注課</h3><div class="muted">TimeDesignerの受注処理時間</div></div></div>
+        <div class="mini-kpis">
+          <div><span>AM</span><b id="orderAm">—</b></div>
+          <div><span>Z</span><b id="orderZ">—</b></div>
+          <div><span>PM</span><b id="orderPm">—</b></div>
+          <div><span>翌日</span><b id="orderNext">—</b></div>
+        </div>
+        <div class="hint">「その他受注処理」は「翌日」として扱います。</div>
+      </section>
+    </div>
+  </section>
+
+  <section id="monthlyTab" class="hidden">
+    <section class="card">
+      <div class="section-head"><div><h3>月次手入力</h3><div class="muted">外部ファイルや既存アプリから取得できない項目だけ入力します。</div></div></div>
+      <div id="legacyNotice" class="notice hidden"></div>
+      <div class="form-grid">
+        <label>受注件数<input id="mOrders" type="number" min="0"></label>
+        <label>クレーム件数<input id="mComplaints" type="number" min="0"></label>
+        <label>48H以内入庫率（%）<input id="mReceiving" type="number" min="0" max="100" step="0.1"></label>
+        <label>出荷工数<input id="mShippingWork" type="number" min="0" step="0.1"></label>
+        <label>ピッキングクレーム<input id="mPickComplaints" type="number" min="0"></label>
+        <label>資材費<input id="mMaterialCost" type="number" min="0"></label>
+        <label>シルバー人材費<input id="mSilverCost" type="number" min="0"></label>
+        <label>タイミー費<input id="mTimeeCost" type="number" min="0"></label>
+        <label>タイミー ピッキング時間(h)<input id="mTimeePick" type="number" min="0" step="0.01"></label>
+        <label>タイミー 梱包時間(h)<input id="mTimeePack" type="number" min="0" step="0.01"></label>
+        <label>9:55達成日数<input id="m955Ok" type="number" min="0"></label>
+        <label>9:55対象日数<input id="m955Total" type="number" min="0"></label>
+      </div>
+      <div class="actions"><button id="saveMonthlyBtn" class="primary">保存</button></div>
+      <div id="monthlyMessage" class="message"></div>
+    </section>
+  </section>
+
+  <section id="shippingTab" class="hidden">
+    <section class="card">
+      <div class="section-head"><div><h3>配送会社別 発送費</h3><div class="muted">過去月はスプレッド移行値。10月度以降は各社ファイル取込へ切り替えます。</div></div></div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>配送会社</th><th>採用件数</th><th>請求明細件数</th><th>税込</th><th>税抜</th><th>税抜単価</th><th>構成比</th><th>データ元</th></tr></thead>
+          <tbody id="shippingBody"></tbody>
+        </table>
+      </div>
+      <div class="shipping-total">
+        <span>税抜発送費合計 <b id="shipNetTotal">—</b></span>
+        <span>1件当たり <b id="shipUnitTotal">—</b></span>
+      </div>
+    </section>
+  </section>
+
+  <section id="workTab" class="hidden">
+    <section class="kpis four">
+      <div class="kpi"><span>全ピッキング</span><b id="wPick">—</b></div>
+      <div class="kpi"><span>全梱包</span><b id="wPack">—</b></div>
+      <div class="kpi"><span>出荷総時間</span><b id="wTotal">—</b></div>
+      <div class="kpi accent"><span>OPLH</span><b id="wOplh">—</b></div>
+    </section>
+    <section class="card">
+      <div class="section-head"><div><h3>作業時間内訳</h3><div class="muted">社員＝TimeDesigner / PT＝物流PT作業時間管理 / タイミー＝月次入力</div></div></div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>作業</th><th>社員</th><th>PT</th><th>タイミー</th><th>合計</th></tr></thead>
+          <tbody id="workBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </section>
+
+  <section id="comparisonTab" class="hidden">
+    <section class="card">
+      <div class="section-head"><div><h3>前月・前年同月比較</h3><div class="muted">低い方が良い指標は差分色を反転しています。</div></div></div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>指標</th><th>当月</th><th>前月</th><th>前月差</th><th>前年同月</th><th>前年差</th></tr></thead>
+          <tbody id="compareBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </section>
+</div>
+</main>
+<script src="cost.js"></script>
+</body>
+</html>
