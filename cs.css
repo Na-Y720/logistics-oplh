@@ -401,3 +401,15 @@ dialog{border:0;border-radius:14px;padding:0;box-shadow:0 18px 50px rgba(15,23,4
   #dailyTab .staff-cards.vertical-form{row-gap:22px}
   #dailyTab .vertical-card:nth-child(n+4){margin-top:0}
 }
+
+
+#shiftTab .shift-cell.flex-off{
+  background:#fefce8;
+  color:#a16207;
+  border-color:#fde68a;
+}
+#shiftTab .shift-cell.flex-work{
+  background:#fef9c3;
+  color:#854d0e;
+  border-color:#facc15;
+}
