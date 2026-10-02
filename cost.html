@@ -49,7 +49,6 @@
   <nav class="tabs">
     <button class="tab active" data-tab="dashboard">ダッシュボード</button>
     <button class="tab" data-tab="monthly">月次入力</button>
-    <button class="tab" data-tab="import">TimeDesigner取込</button>
     <button class="tab" data-tab="shipping">発送費</button>
     <button class="tab" data-tab="timedesigner">TimeDesigner取込</button>
     <button class="tab" data-tab="work">作業時間</button>
@@ -114,29 +113,6 @@
     </section>
   </section>
 
-  <section id="importTab" class="hidden">
-    <section class="card">
-      <div class="section-head"><div><h3>TimeDesigner CSV取込</h3><div class="muted">社員作業時間と受注課 AM / Z / PM / 翌日を、選択月度へ一括保存します。</div></div></div>
-      <div class="notice">対象月度は上部の月度選択に従います。再取込時は、その月度のTimeDesignerデータを置き換えます。</div>
-      <div class="form-grid">
-        <label>TimeDesigner CSV<input id="tdImportFile" type="file" accept=".csv,text/csv"></label>
-      </div>
-      <div class="actions">
-        <button id="tdPreviewBtn" class="ghost">内容確認</button>
-        <button id="tdImportBtn" class="primary" disabled>この月度へ取込</button>
-      </div>
-      <div id="tdImportMessage" class="message"></div>
-      <div id="tdPreviewWrap" class="hidden">
-        <div class="tablewrap">
-          <table>
-            <thead><tr><th>項目</th><th>時間</th><th>件数</th></tr></thead>
-            <tbody id="tdPreviewBody"></tbody>
-          </table>
-        </div>
-      </div>
-    </section>
-  </section>
-
   <section id="shippingTab" class="hidden">
     <section class="card">
       <div class="section-head"><div><h3>配送会社別 発送費</h3><div class="muted">過去月はスプレッド移行値。10月度以降は各社ファイル取込へ切り替えます。</div></div></div>
@@ -150,26 +126,7 @@
         <span>税抜発送費合計 <b id="shipNetTotal">—</b></span>
         <span>1件当たり <b id="shipUnitTotal">—</b></span>
       </div>
-      <div class="notice" style="margin-top:12px">
-        <strong>佐川CSV取込</strong><br>
-        着店名称が「丸岡」で、かつ集荷店名称が「丸岡」ではない明細を除外します。集荷店・着店とも丸岡は弊社発送として残します。
-        <div class="form-grid" style="margin-top:10px">
-          <label>佐川請求CSV<input id="sagawaImportFiles" type="file" accept=".csv,text/csv" multiple></label>
-        </div>
-        <div class="actions">
-          <button id="sagawaPreviewBtn" class="ghost">内容確認</button>
-          <button id="sagawaImportBtn" class="primary" disabled>この月度へ取込</button>
-        </div>
-        <div id="sagawaImportMessage" class="message"></div>
-        <div id="sagawaPreviewWrap" class="hidden">
-          <div class="mini-kpis">
-            <div><span>請求明細件数</span><b id="sagawaPreviewCount">—</b></div>
-            <div><span>税抜発送費</span><b id="sagawaPreviewNet">—</b></div>
-            <div><span>平均税抜単価</span><b id="sagawaPreviewUnit">—</b></div>
-            <div><span>除外件数</span><b id="sagawaPreviewExcluded">—</b></div>
-          </div>
-        </div>
-      </div>
+
     </section>
 
     <div class="grid2">
