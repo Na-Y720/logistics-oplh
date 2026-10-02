@@ -198,10 +198,13 @@ function renderTDImport(){
  for(const r of currentBundle.td||[]){const key=r.activity_key||r.activity_label||'other',x=totals[key]||{minutes:0,count:0};x.minutes+=Number(r.work_minutes)||0;x.count+=Number(r.event_count)||0;totals[key]=x}
  $('tdImportBody').innerHTML=TD_ACTIVITY_ORDER.filter(k=>totals[k]).map(k=>`<tr><td>${TD_ACTIVITY_LABELS[k]||k}</td><td>${hours(totals[k].minutes/60)}</td><td>${fmt(totals[k].count)}</td></tr>`).join('')||'<tr><td colspan="3">対象データはありません。</td></tr>';
  const meta=latest?.metadata||{},unmapped=meta.unmapped_tasks||[],unmatched=meta.unmatched_staff||[];
+ const deptTotals={};for(const r of currentBundle.td||[]){const dept=tdDepartment(r);deptTotals[dept]=(deptTotals[dept]||0)+(Number(r.work_minutes)||0)}
+ const deptText=Object.entries(deptTotals).sort((a,b)=>b[1]-a[1]).map(([dept,min])=>esc(dept)+' '+hours(min/60)).join(' / ')||'—';
  $('tdImportSummary').innerHTML=[
   `<div class="source-row"><div><strong>最新ファイル</strong><small>${latest?.source_filename?esc(latest.source_filename):'—'}</small></div><span class="badge ${currentBundle.td.length?'auto':'missing'}">${currentBundle.td.length?'取込済':'未取込'}</span></div>`,
+  `<div class="source-row"><div><strong>部署別</strong><small>${deptText}</small></div><span class="badge auto">部署分離</span></div>`,
   `<div class="source-row"><div><strong>未振分タスク</strong><small>${unmapped.length?unmapped.map(x=>esc(x.task)+' ('+x.count+'件)').join(' / '):'なし'}</small></div><span class="badge ${unmapped.length?'missing':'auto'}">${unmapped.length}件</span></div>`,
-  `<div class="source-row"><div><strong>社員マスタ未一致</strong><small>${unmatched.length?unmatched.map(esc).join(' / '):'なし'}</small></div><span class="badge ${unmatched.length?'missing':'auto'}">${unmatched.length}名</span></div>`
+  `<div class="source-row"><div><strong>物流部でマスタ未一致</strong><small>${unmatched.length?unmatched.map(esc).join(' / '):'なし'}</small></div><span class="badge ${unmatched.length?'missing':'auto'}">${unmatched.length}名</span></div>`
  ].join('')
 }
 
