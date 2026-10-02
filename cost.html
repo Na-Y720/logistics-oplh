@@ -120,6 +120,28 @@
         <span>1件当たり <b id="shipUnitTotal">—</b></span>
       </div>
     </section>
+
+    <div class="grid2">
+      <section class="card">
+        <div class="section-head"><div><h3>佐川急便 CSV取込</h3><div class="muted">運賃請求金額を合計し、メーカー着払いを除外して月度発送費へ保存します。</div></div></div>
+        <div id="sagawaLockedNotice" class="notice hidden"></div>
+        <div class="form-grid">
+          <label>佐川請求CSV<input id="sagawaImportFile" type="file" accept=".csv,text/csv"></label>
+        </div>
+        <div class="actions"><button id="sagawaImportBtn" class="primary">佐川CSVを取込</button></div>
+        <div id="sagawaImportMessage" class="message"></div>
+        <div id="sagawaImportSummary" class="source-list"></div>
+      </section>
+
+      <section class="card">
+        <div class="section-head"><div><h3>PDF取込</h3><div class="muted">ヤマト・日本郵便はPDF自動読取へ接続します。</div></div></div>
+        <div class="form-grid">
+          <label>ヤマト Web請求書PDF<input id="yamatoImportFile" type="file" accept=".pdf" disabled></label>
+          <label>日本郵便 利用明細PDF<input id="japanPostImportFile" type="file" accept=".pdf" multiple disabled></label>
+        </div>
+        <div class="hint">ヤマト：請求件数＋税込請求額 → 税抜換算。日本郵便：前月21日～当月20日の元払金額のみ集計し、着払は除外。</div>
+      </section>
+    </div>
   </section>
 
   <section id="timedesignerTab" class="hidden">
