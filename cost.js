@@ -399,15 +399,17 @@ function renderWork(){const c=metrics(currentBundle),d=c.detail,m=currentBundle.
  ];
  $('packingDetailBody').innerHTML=packRows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]!=null?fmt(r[1],2)+'秒':'—'}</td><td>${r[2]!=null?fmt(r[2],1)+'件/h':'—'}</td><td>${fmt(r[3])}</td><td>${r[4]!=null?hours(r[4]):'—'}</td><td>${r[5]}</td></tr>`).join('');
 
- const legacy=m.origin==='legacy_spreadsheet';
- const hp=legacy?(Number(m.help_picking_hours)||0):c.help.pickHours,hk=legacy?(Number(m.help_packing_hours)||0):c.help.packHours,hr=legacy?(Number(m.help_receiving_hours)||0):c.help.receivingHours;
+ const legacy=m.origin==='legacy_spreadsheet',hasTdDept=(currentBundle.td||[]).some(r=>r.source_department);
+ const hp=hasTdDept?c.help.pickHours:(legacy?(Number(m.help_picking_hours)||0):c.help.pickHours),
+       hk=hasTdDept?c.help.packHours:(legacy?(Number(m.help_packing_hours)||0):c.help.packHours),
+       hr=hasTdDept?c.help.receivingHours:(legacy?(Number(m.help_receiving_hours)||0):c.help.receivingHours);
  $('helpDetailBody').innerHTML=[
   ['ピッキング',hp,c.totalHours?hp/c.totalHours:null],['梱包',hk,c.totalHours?hk/c.totalHours:null],['入庫',hr,null]
  ].map(r=>`<tr><td>${r[0]}</td><td>${hours(r[1])}</td><td>${r[2]!=null?pct(r[2]):'—'}</td></tr>`).join('');
  const deptRows=Object.entries(c.help.departments||{}).sort((a,b)=>b[1].total-a[1].total);
- $('helpDepartmentBody').innerHTML=legacy
-   ? '<tr><td colspan="5">過去移行月は部署別データを保持していません。</td></tr>'
-   : (deptRows.length?deptRows.map(([dept,x])=>`<tr><td>${esc(dept)}</td><td>${hours(x.pick)}</td><td>${hours(x.pack)}</td><td>${hours(x.receiving)}</td><td><b>${hours(x.total)}</b></td></tr>`).join(''):'<tr><td colspan="5">他部署応援データはありません。</td></tr>')
+ $('helpDepartmentBody').innerHTML=deptRows.length
+   ? deptRows.map(([dept,x])=>`<tr><td>${esc(dept)}</td><td>${hours(x.pick)}</td><td>${hours(x.pack)}</td><td>${hours(x.receiving)}</td><td><b>${hours(x.total)}</b></td></tr>`).join('')
+   : (legacy?'<tr><td colspan="5">この過去月は部署別TimeDesignerデータ未登録です。</td></tr>':'<tr><td colspan="5">他部署応援データはありません。</td></tr>')
 }
 function renderComparison(){const c=metrics(currentBundle),p=metrics(prevBundle),y=metrics(yearBundle),m=currentBundle.monthly||{},pm=prevBundle.monthly||{},ym=yearBundle.monthly||{};const rows=[['受注件数',n(m.orders),n(pm.orders),n(ym.orders),false,false],['出荷件数',c.shipments,p.shipments,y.shipments,false,false],['誤出荷PPM（低いほど良い）',c.ppm,p.ppm,y.ppm,true,false],['48H以内入庫率',n(m.receiving_rate),n(pm.receiving_rate),n(ym.receiving_rate),false,true],['発送費合計',c.shipNet,p.shipNet,y.shipNet,true,false],['発送費/件',c.shipPer,p.shipPer,y.shipPer,true,false],['資材費',n(m.material_cost),n(pm.material_cost),n(ym.material_cost),true,false],['タイミー費',n(m.timee_cost),n(pm.timee_cost),n(ym.timee_cost),true,false],['OPLH',c.oplh,p.oplh,y.oplh,false,false]];$('compareBody').innerHTML=rows.map(r=>`<tr><td>${r[0]}</td><td>${r[5]?pct(r[1]):fmt(r[1],1)}</td><td>${r[5]?pct(r[2]):fmt(r[2],1)}</td><td>${diff(r[1],r[2],r[4],r[5])}</td><td>${r[5]?pct(r[3]):fmt(r[3],1)}</td><td>${diff(r[1],r[3],r[4],r[5])}</td></tr>`).join('')}
 async function confirmMonth(){const m=currentBundle.monthly||{};if(m.origin==='legacy_spreadsheet'||m.status==='confirmed')return;const c=metrics(currentBundle);const missing=[];if(m.orders==null)missing.push('受注件数');if(m.complaint_count==null)missing.push('クレーム件数');if(m.receiving_rate==null)missing.push('48H以内入庫率');if(m.material_cost==null)missing.push('資材費');if(!currentBundle.td.length)missing.push('TimeDesigner');if(!currentBundle.pt.length)missing.push('物流PT');if(currentBundle.shipping.filter(x=>['yamato','sagawa','japanpost'].includes(x.carrier)&&x.adopted_count!=null&&x.net_cost!=null).length<3)missing.push('発送費3社');if(missing.length){alert('未完了: '+missing.join('、'));return}if(!confirm(currentBundle.ym+'月度を確定しますか？'))return;const body={status:'confirmed',confirmed_at:new Date().toISOString(),updated_at:new Date().toISOString()};await rest('logistics_cost_monthly',`owner_id=eq.${user.id}&month_ym=eq.${currentBundle.ym}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify(body)});await loadAll()}
