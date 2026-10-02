@@ -49,6 +49,7 @@
   <nav class="tabs">
     <button class="tab active" data-tab="dashboard">ダッシュボード</button>
     <button class="tab" data-tab="monthly">月次入力</button>
+    <button class="tab" data-tab="import">TimeDesigner取込</button>
     <button class="tab" data-tab="shipping">発送費</button>
     <button class="tab" data-tab="timedesigner">TimeDesigner取込</button>
     <button class="tab" data-tab="work">作業時間</button>
@@ -110,6 +111,29 @@
       </div>
       <div class="actions"><button id="saveMonthlyBtn" class="primary">保存</button></div>
       <div id="monthlyMessage" class="message"></div>
+    </section>
+  </section>
+
+  <section id="importTab" class="hidden">
+    <section class="card">
+      <div class="section-head"><div><h3>TimeDesigner CSV取込</h3><div class="muted">社員作業時間と受注課 AM / Z / PM / 翌日を、選択月度へ一括保存します。</div></div></div>
+      <div class="notice">対象月度は上部の月度選択に従います。再取込時は、その月度のTimeDesignerデータを置き換えます。</div>
+      <div class="form-grid">
+        <label>TimeDesigner CSV<input id="tdImportFile" type="file" accept=".csv,text/csv"></label>
+      </div>
+      <div class="actions">
+        <button id="tdPreviewBtn" class="ghost">内容確認</button>
+        <button id="tdImportBtn" class="primary" disabled>この月度へ取込</button>
+      </div>
+      <div id="tdImportMessage" class="message"></div>
+      <div id="tdPreviewWrap" class="hidden">
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>項目</th><th>時間</th><th>件数</th></tr></thead>
+            <tbody id="tdPreviewBody"></tbody>
+          </table>
+        </div>
+      </div>
     </section>
   </section>
 
