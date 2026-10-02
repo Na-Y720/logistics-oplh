@@ -134,12 +134,18 @@
       </section>
 
       <section class="card">
-        <div class="section-head"><div><h3>PDF取込</h3><div class="muted">ヤマト・日本郵便はPDF自動読取へ接続します。</div></div></div>
+        <div class="section-head"><div><h3>ヤマト・日本郵便 PDF取込</h3><div class="muted">請求書PDFを読み取り、既存スプレッドと同じ採用ルールで自動計算します。</div></div></div>
         <div class="form-grid">
-          <label>ヤマト Web請求書PDF<input id="yamatoImportFile" type="file" accept=".pdf" disabled></label>
-          <label>日本郵便 利用明細PDF<input id="japanPostImportFile" type="file" accept=".pdf" multiple disabled></label>
+          <label>ヤマト Web請求書PDF<input id="yamatoImportFile" type="file" accept=".pdf"></label>
+          <label>日本郵便 利用明細PDF<input id="japanPostImportFile" type="file" accept=".pdf" multiple></label>
         </div>
-        <div class="hint">ヤマト：請求件数＋税込請求額 → 税抜換算。日本郵便：前月21日～当月20日の元払金額のみ集計し、着払は除外。</div>
+        <div class="actions">
+          <button id="yamatoImportBtn" class="primary">ヤマトPDFを取込</button>
+          <button id="japanPostImportBtn" class="primary">日本郵便PDFを取込</button>
+        </div>
+        <div id="pdfImportMessage" class="message"></div>
+        <div id="pdfImportSummary" class="source-list"></div>
+        <div class="hint">ヤマト：ネコポス件数を採用件数、請求書全体の税込・税抜額を発送費。日本郵便：元払＋着払の個数を採用件数、発送費は元払金額のみ。対象期間は21日～翌20日。</div>
       </section>
     </div>
   </section>
