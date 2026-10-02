@@ -19,7 +19,8 @@ const TD_ACTIVITY_MAP={
  'AM受注処理':{key:'order_am',label:'AM受注処理'},
  'Z受注処理':{key:'order_z',label:'Z受注処理'},
  'PM受注処理':{key:'order_pm',label:'PM受注処理'},
- 'その他受注処理':{key:'order_next',label:'その他受注処理'}
+ 'その他受注処理':{key:'order_next',label:'その他受注処理'},
+ '夕方受注処理':{key:'order_evening',label:'夕方受注処理'}
 };
 const TD_ACTIVITY_ORDER=['picking','pass_sort','total_picking','shipping_check','hand_pack','auto_pack','receiving','stock_move','order_am','order_z','order_pm','order_next'];
 const TD_ACTIVITY_LABELS=Object.fromEntries(Object.values(TD_ACTIVITY_MAP).map(x=>[x.key,x.label]));
