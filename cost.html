@@ -126,14 +126,24 @@
       <div class="kpi"><span>全ピッキング</span><b id="wPick">—</b></div>
       <div class="kpi"><span>全梱包</span><b id="wPack">—</b></div>
       <div class="kpi"><span>出荷総時間</span><b id="wTotal">—</b></div>
-      <div class="kpi accent"><span>OPLH</span><b id="wOplh">—</b></div>
+      <div class="kpi accent"><span>一時間一人当たりの出荷処理能力（件数）</span><b id="wOplh">—</b><small>Orders per Labor Hour</small></div>
     </section>
     <section class="card">
-      <div class="section-head"><div><h3>作業時間内訳</h3><div class="muted">社員＝TimeDesigner / PT＝物流PT作業時間管理 / タイミー＝月次入力</div></div></div>
+      <div class="section-head"><div><h3>作業時間詳細</h3><div class="muted">合計だけでなく、各作業の時間を個別に確認して問題箇所を特定します。社員＝TimeDesigner / PT＝物流PT作業時間管理 / タイミー＝月次入力</div></div></div>
       <div class="tablewrap">
         <table>
-          <thead><tr><th>作業</th><th>社員</th><th>PT</th><th>タイミー</th><th>合計</th></tr></thead>
-          <tbody id="workBody"></tbody>
+          <thead><tr><th>区分</th><th>作業項目</th><th>社員</th><th>PT</th><th>タイミー</th><th>合計</th><th>OPLH対象</th></tr></thead>
+          <tbody id="workDetailBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="section-head"><div><h3>梱包詳細</h3><div class="muted">手動梱包と自動梱包機を分けて確認します。</div></div></div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>梱包項目</th><th>社員</th><th>PT</th><th>タイミー</th><th>合計</th><th>全梱包に含む</th></tr></thead>
+          <tbody id="packingDetailBody"></tbody>
         </table>
       </div>
     </section>
