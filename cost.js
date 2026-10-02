@@ -110,81 +110,6 @@ function metrics(b){const m=b?.monthly||{},ship=b?.shipping||[],tdRows=b?.td||[]
    }}
 }
 
-let tdPreviewRows=null,tdPreviewMeta=null;
-const TD_ACTIVITY_MAP={
- 'オーダーピッキング（送り状ピッキング）':{key:'picking',label:'オーダーピッキング（送り状ピッキング）'},
- 'オーダーピッキング':{key:'picking',label:'オーダーピッキング（送り状ピッキング）'},
- 'パスソート':{key:'pass_sort',label:'パスソート'},
- 'トータルピッキング（トータル回収作業）':{key:'total_picking',label:'トータルピッキング（トータル回収作業）'},
- 'トータルピッキング':{key:'total_picking',label:'トータルピッキング（トータル回収作業）'},
- '出荷検品（複数ピッキング）':{key:'shipping_check',label:'出荷検品（複数ピッキング）'},
- '出荷検品':{key:'shipping_check',label:'出荷検品（複数ピッキング）'},
- '手動梱包':{key:'hand_pack',label:'手動梱包'},
- '自動梱包機':{key:'auto_pack',label:'自動梱包機'},
- '入庫':{key:'receiving',label:'入庫'},
- '在庫移動':{key:'stock_move',label:'在庫移動'},
- 'AM受注処理':{key:'order_am',label:'AM受注処理'},
- 'Z受注処理':{key:'order_z',label:'Z受注処理'},
- 'PM受注処理':{key:'order_pm',label:'PM受注処理'},
- 'その他受注処理':{key:'order_next',label:'その他受注処理'}
-};
-function parseCsvLine(line){const out=[];let cur='',q=false;for(let i=0;i<line.length;i++){const ch=line[i];if(ch==='"'){if(q&&line[i+1]==='"'){cur+='"';i++}else q=!q}else if(ch===','&&!q){out.push(cur);cur=''}else cur+=ch}out.push(cur);return out}
-function normalizeWorkerName(s){return String(s||'').replace(/[\\s　]+/g,'').trim()}
-function tdDateOnly(s){const m=String(s||'').match(/(\\d{4})[\\/\\-](\\d{1,2})[\\/\\-](\\d{1,2})/);return m?m[1]+'-'+String(m[2]).padStart(2,'0')+'-'+String(m[3]).padStart(2,'0'):''}
-async function previewTDImport(){
- const f=$('tdImportFile').files?.[0];if(!f){$('tdImportMessage').className='message bad';$('tdImportMessage').textContent='CSVを選択してください。';return}
- const [start,end]=monthRange($('monthPick').value);
- try{
-  const buf=await f.arrayBuffer();const text=new TextDecoder('shift_jis').decode(buf).replace(/\\r/g,'');const lines=text.split('\\n').filter(x=>x.trim());
-  if(!lines.length)throw new Error('CSVが空です。');
-  const head=parseCsvLine(lines[0]);const idx={
-   person:head.indexOf('作業履歴_作業担当者'),
-   employee:head.indexOf('作業履歴_作業担当者_従業員番号'),
-   date:head.indexOf('作業履歴_作業開始日時'),
-   minutes:head.indexOf('作業履歴_作業時間(分)'),
-   task:head.indexOf('タスク_タスク名')
-  };
-  if(Object.values(idx).some(v=>v<0))throw new Error('TimeDesignerの必要列が見つかりません。');
-  const grouped=new Map(),summary={};let sourceRows=0,periodRows=0,ignoredRows=0;
-  for(let i=1;i<lines.length;i++){
-   const r=parseCsvLine(lines[i]);sourceRows++;const dt=tdDateOnly(r[idx.date]);if(!dt||dt<start||dt>end)continue;periodRows++;
-   const task=String(r[idx.task]||'').trim(),map=TD_ACTIVITY_MAP[task];if(!map){ignoredRows++;continue}
-   const person=String(r[idx.person]||'').trim();if(!person)continue;const employee=String(r[idx.employee]||'').trim()||null;const minutes=Number(r[idx.minutes])||0;
-   const workerKey=employee||normalizeWorkerName(person),gkey=[dt,workerKey,map.key].join('|');
-   if(!grouped.has(gkey))grouped.set(gkey,{work_date:dt,worker_key:workerKey,employee_no:employee,worker_name:person,activity_key:map.key,activity_label:map.label,event_count:0,work_minutes:0});
-   const g=grouped.get(gkey);g.event_count++;g.work_minutes+=minutes;
-   summary[map.key]=summary[map.key]||{label:map.label,minutes:0,count:0};summary[map.key].minutes+=minutes;summary[map.key].count++;
-  }
-  tdPreviewRows=[...grouped.values()].map(r=>({...r,work_minutes:Number(r.work_minutes.toFixed(4))}));
-  tdPreviewMeta={file:f.name,sourceRows,periodRows,ignoredRows,start,end,summary};
-  const order=['picking','pass_sort','total_picking','shipping_check','hand_pack','auto_pack','receiving','stock_move','order_am','order_z','order_pm','order_next'];
-  $('tdPreviewBody').innerHTML=order.map(k=>{const x=summary[k];return x?`<tr><td>${esc(x.label)}<br><small class="muted">${k}</small></td><td>${hours(x.minutes/60)}</td><td>${fmt(x.count)}</td></tr>`:''}).join('');
-  $('tdPreviewWrap').classList.remove('hidden');$('tdImportBtn').disabled=!tdPreviewRows.length;
-  $('tdImportMessage').className='message ok';$('tdImportMessage').textContent=`${f.name}：月度内 ${periodRows.toLocaleString()}行 → DB保存 ${tdPreviewRows.length.toLocaleString()}集計行（対象外 ${ignoredRows.toLocaleString()}行）`;
- }catch(e){tdPreviewRows=null;tdPreviewMeta=null;$('tdImportBtn').disabled=true;$('tdImportMessage').className='message bad';$('tdImportMessage').textContent=e.message}
-}
-async function importTD(){
- if(!tdPreviewRows?.length||!tdPreviewMeta)return;
- const m=currentBundle?.monthly||{};if(m.status==='confirmed'||m.origin==='legacy_spreadsheet'){alert('確定済み月度には取り込めません。');return}
- if(!confirm(`${currentBundle.ym}月度のTimeDesignerデータを置き換えます。よろしいですか？`))return;
- const b=$('tdImportBtn');b.disabled=true;$('tdImportMessage').className='message';$('tdImportMessage').textContent='取込中…';
- try{
-  await rest('oplh_timedesigner_daily',`owner_id=eq.${user.id}&work_date=gte.${tdPreviewMeta.start}&work_date=lte.${tdPreviewMeta.end}`,{method:'DELETE',headers:{Prefer:'return=minimal'}});
-  const rows=tdPreviewRows.map(r=>({...r,owner_id:user.id,staff_id:null,updated_at:new Date().toISOString()}));
-  for(let i=0;i<rows.length;i+=250){
-   await rest('oplh_timedesigner_daily','',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify(rows.slice(i,i+250))});
-  }
-  const meta={summary:tdPreviewMeta.summary,ignored_rows:tdPreviewMeta.ignoredRows,aggregated_rows:rows.length};
-  await rest('logistics_cost_import_batches','',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({
-   owner_id:user.id,month_ym:currentBundle.ym,source:'timedesigner',source_filename:tdPreviewMeta.file,source_rows:tdPreviewMeta.sourceRows,
-   period_start:tdPreviewMeta.start,period_end:tdPreviewMeta.end,metadata:meta
-  })});
-  $('tdImportMessage').className='message ok';$('tdImportMessage').textContent=`取込完了：${rows.length.toLocaleString()}集計行を保存しました。`;
-  tdPreviewRows=null;tdPreviewMeta=null;$('tdImportBtn').disabled=true;await loadAll();
- }catch(e){console.error(e);$('tdImportMessage').className='message bad';$('tdImportMessage').textContent='取込失敗: '+e.message}
- finally{b.disabled=!tdPreviewRows?.length}
-}
-
 function diff(now,old,betterLow=false,percent=false){if(now==null||old==null||Number(old)===0)return '—';const delta=Number(now)-Number(old),rate=(Number(now)/Number(old)-1)*100;let cls='neutral';if(delta!==0)cls=((betterLow?delta<0:delta>0)?'good':'bad');return `<span class="${cls}">${delta>=0?'+':''}${percent?(delta*100).toFixed(1)+'pt':fmt(delta,1)} (${rate>=0?'+':''}${rate.toFixed(1)}%)</span>`}
 
 
@@ -405,52 +330,6 @@ async function importJapanPost(){
 }
 
 
-let sagawaPreview=null;
-async function previewSagawa(){
- const files=[...($('sagawaImportFiles').files||[])];if(!files.length){$('sagawaImportMessage').className='message bad';$('sagawaImportMessage').textContent='佐川CSVを選択してください。';return}
- let count=0,excluded=0,net=0,sourceRows=0;
- try{
-  for(const f of files){
-   const buf=await f.arrayBuffer();const text=new TextDecoder('shift_jis').decode(buf).replace(/\\r/g,'');const lines=text.split('\\n').filter(x=>x.trim());
-   if(!lines.length)continue;
-   const head=parseCsvLine(lines[0]);const find=(s)=>head.findIndex(h=>String(h||'').includes(s));
-   const iCost=find('運賃請求金額'),iDest=find('着店名称'),iFrom=find('集荷店名称');
-   if(iCost<0)throw new Error(f.name+'：運賃請求金額列が見つかりません。');
-   for(let i=1;i<lines.length;i++){
-    const r=parseCsvLine(lines[i]);sourceRows++;
-    const dest=iDest>=0?String(r[iDest]||''):'',from=iFrom>=0?String(r[iFrom]||''):'';
-    if(dest.includes('丸岡')&&!from.includes('丸岡')){excluded++;continue}
-    const v=Number(String(r[iCost]||'').replace(/,/g,'').trim());
-    if(Number.isFinite(v)){net+=v;count++}
-   }
-  }
-  sagawaPreview={files:files.map(f=>f.name),count,excluded,net,sourceRows};
-  $('sagawaPreviewCount').textContent=fmt(count);$('sagawaPreviewNet').textContent=yen(net);$('sagawaPreviewUnit').textContent=count?yen(net/count,2):'—';$('sagawaPreviewExcluded').textContent=fmt(excluded);
-  $('sagawaPreviewWrap').classList.remove('hidden');$('sagawaImportBtn').disabled=count===0;
-  $('sagawaImportMessage').className='message ok';$('sagawaImportMessage').textContent=`${files.length}ファイル / 対象 ${count.toLocaleString()}件 / 除外 ${excluded.toLocaleString()}件`;
- }catch(e){sagawaPreview=null;$('sagawaImportBtn').disabled=true;$('sagawaImportMessage').className='message bad';$('sagawaImportMessage').textContent=e.message}
-}
-async function importSagawa(){
- if(!sagawaPreview)return;const m=currentBundle?.monthly||{};if(m.status==='confirmed'||m.origin==='legacy_spreadsheet'){alert('確定済み月度には取り込めません。');return}
- if(!confirm(`${currentBundle.ym}月度の佐川発送費を更新します。よろしいですか？`))return;
- const b=$('sagawaImportBtn');b.disabled=true;
- try{
-  const existing=currentBundle.shipping.find(x=>x.carrier==='sagawa');
-  const adopted=existing?.adopted_count!=null?Number(existing.adopted_count):sagawaPreview.count;
-  const body={owner_id:user.id,month_ym:currentBundle.ym,carrier:'sagawa',adopted_count:adopted,invoice_count:sagawaPreview.count,
-    net_cost:sagawaPreview.net,gross_cost:sagawaPreview.net*1.1,source_kind:'invoice_file',
-    source_filename:sagawaPreview.files.join(' / '),imported_at:new Date().toISOString(),
-    metadata:{excluded_maruo_count:sagawaPreview.excluded,source_rows:sagawaPreview.sourceRows,adopted_count_source:existing?.adopted_count!=null?'existing':'invoice_count_fallback'}};
-  await rest('logistics_shipping_monthly','on_conflict=owner_id%2Cmonth_ym%2Ccarrier',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(body)});
-  await rest('logistics_cost_import_batches','',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({
-    owner_id:user.id,month_ym:currentBundle.ym,source:'sagawa',source_filename:sagawaPreview.files.join(' / '),source_rows:sagawaPreview.sourceRows,
-    period_start:currentBundle.start,period_end:currentBundle.end,metadata:{invoice_count:sagawaPreview.count,excluded_maruo_count:sagawaPreview.excluded,net_cost:sagawaPreview.net}
-  })});
-  $('sagawaImportMessage').className='message ok';$('sagawaImportMessage').textContent='佐川CSVを保存しました。';
-  sagawaPreview=null;$('sagawaImportBtn').disabled=true;await loadAll();
- }catch(e){console.error(e);$('sagawaImportMessage').className='message bad';$('sagawaImportMessage').textContent='取込失敗: '+e.message}
-}
-
 function renderShipping(){const c=metrics(currentBundle),rows=['yamato','sagawa','japanpost'].map(car=>currentBundle.shipping.find(x=>x.carrier===car)||{carrier:car});const labels={yamato:'ヤマト運輸',sagawa:'佐川急便',japanpost:'日本郵便'};$('shippingBody').innerHTML=rows.map(r=>{const count=n(r.adopted_count),net=n(r.net_cost),gross=n(r.gross_cost),unit=count&&net?net/count:null;return `<tr><td>${labels[r.carrier]}</td><td>${fmt(count)}</td><td>${fmt(n(r.invoice_count))}</td><td>${yen(gross)}</td><td>${yen(net)}</td><td>${yen(unit,2)}</td><td>${c.shipments&&count?pct(count/c.shipments):'—'}</td><td>${r.source_kind==='legacy_spreadsheet'?'旧スプレッド':(r.source_filename?esc(r.source_filename):'—')}</td></tr>`}).join('');$('shipNetTotal').textContent=yen(c.shipNet);$('shipUnitTotal').textContent=yen(c.shipPer,2);
  const m=currentBundle.monthly||{},locked=m.status==='confirmed'||m.origin==='legacy_spreadsheet';$('sagawaImportBtn').disabled=locked;$('sagawaImportFile').disabled=locked;$('sagawaLockedNotice').classList.toggle('hidden',!locked);$('sagawaLockedNotice').textContent=locked?'確定済み・過去移行月の発送費は変更できません。':'';
  const sagawa=currentBundle.shipping.find(r=>r.carrier==='sagawa'),meta=sagawa?.metadata||{};$('sagawaImportSummary').innerHTML=sagawa?`<div class="source-row"><div><strong>現在の佐川データ</strong><small>${esc(sagawa.source_filename||'—')}</small></div><span class="badge auto">取込済</span></div><div class="source-row"><div><strong>請求明細 / 丸岡除外</strong><small>${fmt(sagawa.invoice_count)}件 / ${fmt(meta.excluded_maruoka||0)}件除外</small></div><span class="badge">税抜 ${yen(sagawa.net_cost)}</span></div>`:'<div class="source-row"><div><strong>現在の佐川データ</strong><small>未取込</small></div><span class="badge missing">未取込</span></div>';
@@ -504,5 +383,5 @@ async function confirmMonth(){const m=currentBundle.monthly||{};if(m.origin==='l
 async function initApp(){$('monthPick').value=companyMonthToday();await loadAll()}
 
 document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===b));['dashboard','monthly','shipping','timedesigner','work','comparison'].forEach(t=>$(t+'Tab').classList.toggle('hidden',b.dataset.tab!==t))});
-$('loginBtn').onclick=login;$('logoutBtn').onclick=logout;$('reloadBtn').onclick=loadAll;$('monthPick').onchange=()=>{tdPreviewRows=null;tdPreviewMeta=null;sagawaPreview=null;$('tdImportBtn').disabled=true;$('sagawaImportBtn').disabled=true;$('tdPreviewWrap').classList.add('hidden');$('sagawaPreviewWrap').classList.add('hidden');loadAll()};$('saveMonthlyBtn').onclick=saveMonthly;$('confirmBtn').onclick=confirmMonth;$('tdPreviewBtn').onclick=previewTDImport;$('tdImportBtn').onclick=importTD;$('sagawaPreviewBtn').onclick=previewSagawa;$('sagawaImportBtn').onclick=importSagawa;$('tdImportBtn').onclick=importTimeDesigner;$('sagawaImportBtn').onclick=importSagawa;$('yamatoImportBtn').onclick=importYamato;$('japanPostImportBtn').onclick=importJapanPost;
+$('loginBtn').onclick=login;$('logoutBtn').onclick=logout;$('reloadBtn').onclick=loadAll;$('monthPick').onchange=loadAll;$('saveMonthlyBtn').onclick=saveMonthly;$('confirmBtn').onclick=confirmMonth;$('tdImportBtn').onclick=importTimeDesigner;$('sagawaImportBtn').onclick=importSagawa;$('yamatoImportBtn').onclick=importYamato;$('japanPostImportBtn').onclick=importJapanPost;
 (async()=>{session=loadSession();if(session?.access_token){try{user=await req('/auth/v1/user');showApp();await initApp()}catch{saveSession(null);session=null;user=null;showApp()}}else showApp()})();
