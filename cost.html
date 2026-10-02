@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>物流コスト管理</title>
+<link rel="stylesheet" href="cost.css">
+</head>
+<body>
+<header class="topbar">
+  <div>
+    <h1>物流コスト管理</h1>
+    <div class="sub">月次KPI・発送費・作業時間を一元管理</div>
+  </div>
+  <div class="top-actions">
+    <span id="userLabel" class="muted"></span>
+    <a class="linkbtn" href="worktime.html">物流PT 作業時間へ</a>
+    <a class="linkbtn" href="./">人時・シフト管理へ</a>
+    <button id="logoutBtn" class="ghost hidden">ログアウト</button>
+  </div>
+</header>
+
+<main>
+<section id="authView" class="card auth hidden">
+  <h2>ログイン</h2>
+  <p class="muted">既存の物流アプリと同じアカウントを使用します。</p>
+  <label>メールアドレス<input id="email" type="email" autocomplete="username"></label>
+  <label>パスワード<input id="password" type="password" autocomplete="current-password"></label>
+  <button id="loginBtn" class="primary">ログイン</button>
+  <div id="authError" class="error"></div>
+</section>
+
+<div id="appView" class="hidden">
+  <section class="hero card">
+    <div>
+      <div class="eyebrow">対象月度</div>
+      <div class="month-row">
+        <button id="prevMonthBtn" class="ghost" type="button" aria-label="前月度">＜</button>
+        <input id="monthPick" type="month">
+        <button id="nextMonthBtn" class="ghost" type="button" aria-label="次月度">＞</button>
+        <span id="statusBadge" class="badge">—</span>
+      </div>
+      <div id="monthRange" class="muted">—</div>
+    </div>
+    <div class="hero-actions">
+      <button id="reloadBtn" class="ghost">再読み込み</button>
+      <button id="confirmBtn" class="primary">月度確定</button>
+    </div>
+  </section>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="dashboard">ダッシュボード</button>
+    <button class="tab" data-tab="monthly">月次入力</button>
+    <button class="tab" data-tab="shipping">発送費</button>
+    <button class="tab" data-tab="timedesigner">TimeDesigner取込</button>
+    <button class="tab" data-tab="work">作業時間</button>
+    <button class="tab" data-tab="comparison">前月・前年比較</button>
+  </nav>
+
+  <section id="dashboardTab">
+    <section class="kpis six">
+      <div class="kpi"><span>受注件数</span><b id="kOrders">—</b><small id="cOrders">—</small></div>
+      <div class="kpi"><span>出荷件数</span><b id="kShipments">—</b><small id="cShipments">—</small></div>
+      <div class="kpi accent"><span>OPLH</span><b id="kOplh">—</b><small id="cOplh">—</small></div>
+      <div class="kpi"><span>発送費 / 件</span><b id="kShipCost">—</b><small id="cShipCost">—</small></div>
+      <div class="kpi"><span>48H以内入庫率</span><b id="kReceiving">—</b><small id="cReceiving">—</small></div>
+      <div class="kpi"><span>誤出荷PPM</span><b id="kPpm">—</b><small id="ppmTarget">目標100以下・0が最良</small><small id="cPpm">—</small></div>
+    </section>
+
+    <div class="grid2">
+      <section class="card">
+        <div class="section-head"><div><h3>データ取得状況</h3><div class="muted">10月度以降はここが全部埋まれば月度確定できます。</div></div></div>
+        <div id="sourceStatus" class="source-list"></div>
+      </section>
+      <section class="card">
+        <div class="section-head"><div><h3>受注課</h3><div class="muted">TimeDesignerの受注処理時間</div></div></div>
+        <div class="mini-kpis">
+          <div><span>AM</span><b id="orderAm">—</b></div>
+          <div><span>Z</span><b id="orderZ">—</b></div>
+          <div><span>PM</span><b id="orderPm">—</b></div>
+          <div><span>夕方</span><b id="orderEvening">—</b></div>
+          <div><span>翌日</span><b id="orderNext">—</b></div>
+        </div>
+        <div class="hint">Z受注処理と夕方受注処理は別項目として保持します。「その他受注処理」は「翌日」として扱います。</div>
+        <h4 style="margin:18px 0 8px">9:45までに送り状</h4>
+        <div class="mini-kpis">
+          <div><span>達成日数</span><b id="orderDeadlineOk">—</b></div>
+          <div><span>対象日数</span><b id="orderDeadlineTotal">—</b></div>
+          <div><span>達成率</span><b id="orderDeadlineRate">—</b><small>目標90%以上</small></div>
+        </div>
+        <div id="orderDeadlineLegacyNote" class="hint"></div>
+        <div id="orderDailyEditor" class="hidden" style="margin-top:12px">
+          <div class="tablewrap">
+            <table>
+              <thead><tr><th>日付</th><th>受注件数</th><th>9:45までに送り状</th></tr></thead>
+              <tbody id="orderDailyBody"></tbody>
+            </table>
+          </div>
+          <div class="actions"><button id="saveOrderDailyBtn" class="primary">○/×を保存</button></div>
+          <div id="orderDailyMessage" class="message"></div>
+        </div>
+      </section>
+    </div>
+  </section>
+
+  <section id="monthlyTab" class="hidden">
+    <section class="card">
+      <div class="section-head"><div><h3>月次手入力</h3><div class="muted">外部ファイルや既存アプリから取得できない項目だけ入力します。</div></div></div>
+      <div id="legacyNotice" class="notice hidden"></div>
+      <div class="form-grid">
+        <label>受注件数<input id="mOrders" type="number" min="0"></label>
+        <label>クレーム件数<input id="mComplaints" type="number" min="0"></label>
+        <label>48H以内入庫率（%）<input id="mReceiving" type="number" min="0" max="100" step="0.1"></label>
+        <label>出荷工数<input id="mShippingWork" type="number" min="0" step="0.1"></label>
+        <label>ピッキングクレーム<input id="mPickComplaints" type="number" min="0"></label>
+        <label>資材費<input id="mMaterialCost" type="number" min="0"></label>
+        <label>シルバー人材費<input id="mSilverCost" type="number" min="0"></label>
+        <label>タイミー費<input id="mTimeeCost" type="number" min="0"></label>
+        <label>タイミー ピッキング時間(h)<input id="mTimeePick" type="number" min="0" step="0.01"></label>
+        <label>タイミー 梱包時間(h)<input id="mTimeePack" type="number" min="0" step="0.01"></label>
+        <label>Auto1 ポスト便 ラップタイム(秒)<input id="mAuto1Lap" type="number" min="0" step="0.01"></label>
+        <label>Auto1 月間通過個数<input id="mAuto1Count" type="number" min="0"></label>
+        <label>Auto2 ゆうパック ラップタイム(秒)<input id="mAuto2Lap" type="number" min="0" step="0.01"></label>
+        <label>Auto2 月間通過個数<input id="mAuto2Count" type="number" min="0"></label>
+      </div>
+      <div class="actions"><button id="saveMonthlyBtn" class="primary">保存</button></div>
+      <div id="monthlyMessage" class="message"></div>
+    </section>
+  </section>
+
+  <section id="shippingTab" class="hidden">
+    <section class="card">
+      <div class="section-head"><div><h3>配送会社別 発送費</h3><div class="muted">過去月はスプレッド移行値。10月度以降は各社ファイル取込へ切り替えます。</div></div></div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>配送会社</th><th>採用件数</th><th>請求明細件数</th><th>税込</th><th>税抜</th><th>税抜単価</th><th>構成比</th><th>データ元</th></tr></thead>
+          <tbody id="shippingBody"></tbody>
+        </table>
+      </div>
+      <div class="shipping-total">
+        <span>税抜発送費合計 <b id="shipNetTotal">—</b></span>
+        <span>1件当たり <b id="shipUnitTotal">—</b></span>
+      </div>
+
+    </section>
+
+    <div class="grid2">
+      <section class="card">
+        <div class="section-head"><div><h3>佐川急便 CSV取込</h3><div class="muted">運賃請求金額を合計し、メーカー着払いを除外して月度発送費へ保存します。</div></div></div>
+        <div id="sagawaLockedNotice" class="notice hidden"></div>
+        <div class="form-grid">
+          <label>佐川請求CSV<input id="sagawaImportFile" type="file" accept=".csv,text/csv"></label>
+        </div>
+        <div class="actions"><button id="sagawaImportBtn" class="primary">佐川CSVを取込</button></div>
+        <div id="sagawaImportMessage" class="message"></div>
+        <div id="sagawaImportSummary" class="source-list"></div>
+      </section>
+
+      <section class="card">
+        <div class="section-head"><div><h3>ヤマト・日本郵便 PDF取込</h3><div class="muted">請求書PDFを読み取り、既存スプレッドと同じ採用ルールで自動計算します。</div></div></div>
+        <div class="form-grid">
+          <label>ヤマト Web請求書PDF<input id="yamatoImportFile" type="file" accept=".pdf"></label>
+          <label>日本郵便 利用明細PDF<input id="japanPostImportFile" type="file" accept=".pdf" multiple></label>
+        </div>
+        <div class="actions">
+          <button id="yamatoImportBtn" class="primary">ヤマトPDFを取込</button>
+          <button id="japanPostImportBtn" class="primary">日本郵便PDFを取込</button>
+        </div>
+        <div id="pdfImportMessage" class="message"></div>
+        <div id="pdfImportSummary" class="source-list"></div>
+        <div class="hint">ヤマト：ネコポス件数を採用件数、請求書全体の税込・税抜額を発送費。日本郵便：元払＋着払の個数を採用件数、発送費は元払金額のみ。対象期間は21日～翌20日。</div>
+      </section>
+    </div>
+  </section>
+
+  <section id="timedesignerTab" class="hidden">
+    <section class="card">
+      <div class="section-head">
+        <div>
+          <h3>TimeDesigner 月次取込</h3>
+          <div class="muted">選択月度（21日～翌20日）の社員作業時間を置き換え保存します。再取込しても二重計上しません。</div>
+          <div class="hint">所属判定はTimeDesignerの部署名を優先し、部署名が空欄の人だけ既存の従業員マスタで補完します。</div>
+        </div>
+      </div>
+      <div id="tdLockedNotice" class="notice hidden"></div>
+      <div class="form-grid">
+        <label>TimeDesigner CSV
+          <input id="tdImportFile" type="file" accept=".csv,text/csv">
+        </label>
+      </div>
+      <div class="actions">
+        <button id="tdImportBtn" class="primary">CSVを取込</button>
+      </div>
+      <div id="tdImportMessage" class="message"></div>
+    </section>
+
+    <section class="card">
+      <div class="section-head"><div><h3>自動振分</h3><div class="muted">CSVのタスク名から以下へ自動振分します。</div></div></div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>TimeDesignerタスク</th><th>保存項目</th><th>用途</th></tr></thead>
+          <tbody>
+            <tr><td>オーダーピッキング（送り状ピッキング）</td><td>picking</td><td>全ピッキング</td></tr>
+            <tr><td>パスソート</td><td>pass_sort</td><td>全ピッキング</td></tr>
+            <tr><td>トータルピッキング（トータル回収作業）</td><td>total_picking</td><td>全ピッキング</td></tr>
+            <tr><td>出荷検品（複数ピッキング）</td><td>shipping_check</td><td>全ピッキング</td></tr>
+            <tr><td>手動梱包</td><td>hand_pack</td><td>全梱包</td></tr>
+            <tr><td>自動梱包機</td><td>auto_pack</td><td>全梱包</td></tr>
+            <tr><td>入庫 / 調整入庫</td><td>receiving</td><td>在庫・入庫</td></tr>
+            <tr><td>在庫移動</td><td>stock_move</td><td>在庫移動</td></tr>
+            <tr><td>AM受注処理</td><td>order_am</td><td>受注課 AM</td></tr>
+            <tr><td>Z受注処理</td><td>order_z</td><td>受注課 Z</td></tr>
+            <tr><td>PM受注処理</td><td>order_pm</td><td>受注課 PM</td></tr>
+            <tr><td>夕方受注処理</td><td>order_evening</td><td>受注課 夕方</td></tr>
+            <tr><td>その他受注処理</td><td>order_next</td><td>受注課 翌日</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="section-head"><div><h3>取込結果</h3><div class="muted">未振分タスクや社員マスタ未一致もここで確認できます。</div></div></div>
+      <div id="tdImportSummary" class="source-list"></div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>保存項目</th><th>時間</th><th>作業回数</th></tr></thead>
+          <tbody id="tdImportBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </section>
+
+  <section id="workTab" class="hidden">
+    <section class="kpis four">
+      <div class="kpi"><span>全ピッキング</span><b id="wPick">—</b></div>
+      <div class="kpi"><span>全梱包</span><b id="wPack">—</b></div>
+      <div class="kpi"><span>出荷総時間</span><b id="wTotal">—</b></div>
+      <div class="kpi accent"><span>一時間一人当たりの出荷処理能力（件数）</span><b id="wOplh">—</b><small>Orders per Labor Hour</small></div>
+    </section>
+    <section class="card">
+      <div class="section-head"><div><h3>作業時間詳細</h3><div class="muted">合計だけでなく、各作業の時間を個別に確認して問題箇所を特定します。社員＝TimeDesigner / PT＝物流PT作業時間管理 / タイミー＝月次入力</div></div></div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>区分</th><th>作業項目</th><th>物流部社員</th><th>他部署応援</th><th>PT</th><th>タイミー</th><th>合計</th><th>OPLH対象</th></tr></thead>
+          <tbody id="workDetailBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="section-head"><div><h3>梱包詳細</h3><div class="muted">旧スプレッドの梱包詳細を再現し、Auto1・Auto2・手梱包の能力を個別に確認します。</div></div></div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>梱包区分</th><th>1件ラップタイム</th><th>1時間処理数</th><th>月間通過/対象個数</th><th>要時間</th><th>補足指標</th></tr></thead>
+          <tbody id="packingDetailBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="section-head"><div><h3>他部署応援詳細</h3><div class="muted">TimeDesignerの部署名から、物流部以外の応援時間を自動集計します。過去移行月は旧スプレッド値を表示します。</div></div></div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>作業</th><th>応援時間</th><th>出荷総時間に対する比率</th></tr></thead>
+          <tbody id="helpDetailBody"></tbody>
+        </table>
+      </div>
+      <h4 style="margin:18px 0 8px">部署別内訳</h4>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>部署</th><th>ピッキング</th><th>梱包</th><th>入庫</th><th>合計</th></tr></thead>
+          <tbody id="helpDepartmentBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </section>
+
+  <section id="comparisonTab" class="hidden">
+    <section class="card">
+      <div class="section-head"><div><h3>前月・前年同月比較</h3><div class="muted">誤出荷PPM・発送費など、低い方が良い指標は差分色を反転しています。誤出荷PPMは0が最良、目標100以下です。</div></div></div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>指標</th><th>当月</th><th>前月</th><th>前月差</th><th>前年同月</th><th>前年差</th></tr></thead>
+          <tbody id="compareBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </section>
+</div>
+</main>
+<script src="cost.js"></script>
+</body>
+</html>
