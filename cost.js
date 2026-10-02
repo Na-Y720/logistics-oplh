@@ -52,7 +52,7 @@ async function ensureMonth(ym){let rows=await rest('logistics_cost_monthly',`own
 async function loadBundle(ym,{create=false}={}){let monthlyRows=await rest('logistics_cost_monthly',`owner_id=eq.${user.id}&month_ym=eq.${ym}&select=*`);let monthly=monthlyRows?.[0]||null;if(!monthly&&create)monthly=await ensureMonth(ym);const[start,end]=monthly?[monthly.period_start,monthly.period_end]:monthRange(ym);
  const [shipping,pt,td,imports]=await Promise.all([
   rest('logistics_shipping_monthly',`owner_id=eq.${user.id}&month_ym=eq.${ym}&select=*`).catch(()=>[]),
-  rest('logistics_work_time',`owner_id=eq.${user.id}&work_date=gte.${start}&work_date=lte.${end}&select=picking_minutes,total_picking_minutes,pass_sort_minutes,sorting_minutes,hand_pack_minutes,auto_pack_minutes,stock_move_minutes`).catch(()=>[]),
+  rest('logistics_work_time',`owner_id=eq.${user.id}&work_date=gte.${start}&work_date=lte.${end}&select=work_date,picking_minutes,total_picking_minutes,pass_sort_minutes,sorting_minutes,hand_pack_minutes,auto_pack_minutes,stock_move_minutes`).catch(()=>[]),
   rest('oplh_timedesigner_daily',`owner_id=eq.${user.id}&work_date=gte.${start}&work_date=lte.${end}&select=activity_key,activity_label,work_minutes,event_count,worker_key,worker_name,employee_no,staff_id,source_department`).catch(()=>[]),
   rest('logistics_cost_import_batches',`owner_id=eq.${user.id}&month_ym=eq.${ym}&select=source,source_filename,source_rows,imported_at,metadata&order=imported_at.desc`).catch(()=>[])
  ]);
@@ -60,6 +60,8 @@ async function loadBundle(ym,{create=false}={}){let monthlyRows=await rest('logi
 }
 
 function sum(obj,key){return(obj||[]).reduce((a,r)=>a+(Number(r[key])||0),0)}
+function dateSpan(rows){const ds=(rows||[]).map(r=>r.work_date).filter(Boolean).sort();return ds.length?{min:ds[0],max:ds[ds.length-1]}:{min:null,max:null}}
+function mdLabel(iso){if(!iso)return '—';const p=String(iso).split('-');return Number(p[1])+'/'+Number(p[2])}
 function tdTotals(rows){const out={};for(const r of rows||[]){const key=r.activity_key||r.activity_label||'';out[key]=(out[key]||0)+(Number(r.work_minutes)||0)}return out}
 function tdMinutes(rows,keys=[],labels=[]){return(rows||[]).reduce((a,r)=>{const key=r.activity_key||'',label=r.activity_label||'';return a+((keys.includes(key)||labels.includes(label))?(Number(r.work_minutes)||0):0)},0)}
 function tdDepartment(r){const d=String(r?.source_department||'').trim();if(d)return d;return r?.staff_id?'物流部':'部署不明'}
@@ -228,10 +230,11 @@ function renderDashboard(){const c=metrics(currentBundle),p=metrics(prevBundle),
  if(c.ppm!=null){$('kPpm').classList.toggle('good',c.ppm<=100);$('kPpm').classList.toggle('bad',c.ppm>100)}else{$('kPpm').classList.remove('good','bad')}
  const ord=c.ord;$('orderAm').textContent=hours(ord.am/60);$('orderZ').textContent=hours(ord.z/60);$('orderPm').textContent=hours(ord.pm/60);$('orderNext').textContent=hours(ord.next/60);
  const mth=currentBundle.monthly||{},ship=currentBundle.shipping||[],imports=currentBundle.imports||[];
+ const ptSpan=dateSpan(currentBundle.pt),tdSpan=dateSpan(currentBundle.td);
  const status=[
   ['月次手入力',mth.orders!=null&&mth.complaint_count!=null&&mth.receiving_rate!=null&&mth.material_cost!=null,'受注・品質・資材'],
-  ['TimeDesigner',currentBundle.td.length>0,'社員作業時間＋受注処理'],
-  ['物流PT',currentBundle.pt.length>0,'物流PT作業時間管理'],
+  ['TimeDesigner',currentBundle.td.length>0,currentBundle.td.length?`社員作業時間＋受注処理（${mdLabel(tdSpan.min)}〜${mdLabel(tdSpan.max)}）`:'社員作業時間＋受注処理：未取込'],
+  ['物流PT',currentBundle.pt.length>0,currentBundle.pt.length?`物流PT作業時間管理（${mdLabel(ptSpan.min)}〜${mdLabel(ptSpan.max)}・${currentBundle.pt.length}件）`:'物流PT作業時間管理：未入力'],
   ['発送費',ship.filter(x=>['yamato','sagawa','japanpost'].includes(x.carrier)&&x.adopted_count!=null&&x.net_cost!=null).length===3,'ヤマト・佐川・日本郵便']
  ];
  $('sourceStatus').innerHTML=status.map(x=>`<div class="source-row"><div><strong>${x[0]}</strong><small>${x[2]}</small></div><span class="badge ${x[1]?'auto':'missing'}">${x[1]?'取得済':'未完了'}</span></div>`).join('')
