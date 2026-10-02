@@ -257,9 +257,70 @@ async function importSagawa(){
  finally{btn.disabled=false}
 }
 
+
+function fileAsBase64(file){return new Promise((resolve,reject)=>{const fr=new FileReader();fr.onerror=()=>reject(fr.error||new Error('ファイル読込に失敗しました'));fr.onload=()=>resolve(String(fr.result||'').split(',')[1]||'');fr.readAsDataURL(file)})}
+async function extractPdfText(file,retry=true){
+ const data=await fileAsBase64(file);
+ let r=await fetch('/api/parse-pdf',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+session.access_token},body:JSON.stringify({name:file.name,data})});
+ if(r.status===401&&retry&&await refreshSession())return extractPdfText(file,false);
+ const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||('PDF解析エラー '+r.status));return j.text||''
+}
+function parseYamatoText(text){
+ const totals=[...text.matchAll(/合計[（(]税込[）)]\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)/g)];
+ if(!totals.length)throw new Error('ヤマト請求書の「合計(税込)」を読み取れませんでした。');
+ const t=totals[totals.length-1],toNum=x=>Number(String(x).replace(/,/g,''));
+ let adoptedCount=0;
+ for(const line of text.replace(/\r/g,'').split('\n')){
+  if(!line.includes('ネコポス'))continue;
+  const m=line.trim().match(/^\d{4}\s+\d{4}-\d{4}-\d{4}\s+ネコポス\s+.+?\s+(\d+)\s+[\d,]+\s+[\d,]+\s+[\d,]+\s+[\d,]+\s*$/);
+  if(m)adoptedCount+=Number(m[1])||0;
+ }
+ const invoiceCount=toNum(t[1]),grossCost=toNum(t[2]),netCost=toNum(t[3]);
+ if(!adoptedCount||!invoiceCount||!grossCost||!netCost)throw new Error('ヤマト請求書の件数または金額を読み取れませんでした。');
+ return{adoptedCount,invoiceCount,grossCost,netCost,otherCount:invoiceCount-adoptedCount}
+}
+function isoDate(y,m,d){return Number(y)+'-'+String(Number(m)).padStart(2,'0')+'-'+String(Number(d)).padStart(2,'0')}
+function parseJapanPostTexts(texts,start,end){
+ const byDate=new Map();
+ const re=/(\d{4})\/\s*(\d{1,2})\/\s*(\d{1,2})\s+([\d,]+)\s+([\d,]+)\s+(\d{4})\/\s*(\d{1,2})\/\s*(\d{1,2})\s+([\d,]+)\s+([\d,]+)/g;
+ for(const text of texts){for(const m of text.matchAll(re)){const date=isoDate(m[1],m[2],m[3]);byDate.set(date,{prepaidCount:Number(m[4].replace(/,/g,''))||0,prepaidCost:Number(m[5].replace(/,/g,''))||0,codCount:Number(m[9].replace(/,/g,''))||0,codCost:Number(m[10].replace(/,/g,''))||0})}}
+ let prepaidCount=0,codCount=0,grossCost=0,codCost=0,days=0;
+ for(const [date,x] of byDate){if(date<start||date>end)continue;days++;prepaidCount+=x.prepaidCount;codCount+=x.codCount;grossCost+=x.prepaidCost;codCost+=x.codCost}
+ if(!days||!(prepaidCount+codCount))throw new Error(start+'～'+end+' の日本郵便日別明細を読み取れませんでした。');
+ return{adoptedCount:prepaidCount+codCount,invoiceCount:prepaidCount+codCount,prepaidCount,codCount,grossCost,netCost:grossCost/1.1,codCost,days}
+}
+async function saveShippingImport(carrier,fileNames,x,metadata){
+ const body={owner_id:user.id,month_ym:currentBundle.ym,carrier,adopted_count:x.adoptedCount,invoice_count:x.invoiceCount,gross_cost:x.grossCost,net_cost:x.netCost,source_kind:'invoice_file',source_filename:fileNames,imported_at:new Date().toISOString(),metadata,updated_at:new Date().toISOString()};
+ await rest('logistics_shipping_monthly','on_conflict=owner_id%2Cmonth_ym%2Ccarrier',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(body)});
+ await rest('logistics_cost_import_batches','',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({owner_id:user.id,month_ym:currentBundle.ym,source:carrier,source_filename:fileNames,source_rows:x.invoiceCount||0,period_start:currentBundle.start,period_end:currentBundle.end,metadata})})
+}
+async function importYamato(){
+ const m=currentBundle?.monthly||{};if(m.status==='confirmed'||m.origin==='legacy_spreadsheet')return;
+ const file=$('yamatoImportFile').files?.[0];if(!file){$('pdfImportMessage').className='message bad';$('pdfImportMessage').textContent='ヤマトPDFを選択してください。';return}
+ const btn=$('yamatoImportBtn');btn.disabled=true;$('pdfImportMessage').className='message';$('pdfImportMessage').textContent='ヤマトPDFを解析しています…';
+ try{const text=await extractPdfText(file),x=parseYamatoText(text),metadata={rule:'ネコポス明細個数を採用件数。請求書合計(税込)の税込・税抜総額を発送費',non_neko_count:x.otherCount};
+  await saveShippingImport('yamato',file.name,x,metadata);$('pdfImportMessage').className='message ok';$('pdfImportMessage').textContent=`ヤマト取込完了：ネコポス ${fmt(x.adoptedCount)}件 / 税抜 ${yen(x.netCost)}`;await loadAll()
+ }catch(e){console.error(e);$('pdfImportMessage').className='message bad';$('pdfImportMessage').textContent=e.message}finally{btn.disabled=false}
+}
+async function importJapanPost(){
+ const m=currentBundle?.monthly||{};if(m.status==='confirmed'||m.origin==='legacy_spreadsheet')return;
+ const files=[...($('japanPostImportFile').files||[])];if(!files.length){$('pdfImportMessage').className='message bad';$('pdfImportMessage').textContent='日本郵便PDFを選択してください。';return}
+ const btn=$('japanPostImportBtn');btn.disabled=true;$('pdfImportMessage').className='message';$('pdfImportMessage').textContent='日本郵便PDFを解析しています…';
+ try{const texts=[];for(const f of files){$('pdfImportMessage').textContent='日本郵便PDFを解析中：'+f.name;texts.push(await extractPdfText(f))}
+  const x=parseJapanPostTexts(texts,currentBundle.start,currentBundle.end),metadata={rule:'21日～翌20日。採用件数=元払+着払個数、発送費=元払金額のみ（着払金額除外）',prepaid_count:x.prepaidCount,cod_count:x.codCount,cod_cost_excluded:x.codCost,days:x.days};
+  await saveShippingImport('japanpost',files.map(f=>f.name).join(' / '),x,metadata);$('pdfImportMessage').className='message ok';$('pdfImportMessage').textContent=`日本郵便取込完了：${fmt(x.adoptedCount)}件 / 元払税込 ${yen(x.grossCost)}`;await loadAll()
+ }catch(e){console.error(e);$('pdfImportMessage').className='message bad';$('pdfImportMessage').textContent=e.message}finally{btn.disabled=false}
+}
+
 function renderShipping(){const c=metrics(currentBundle),rows=['yamato','sagawa','japanpost'].map(car=>currentBundle.shipping.find(x=>x.carrier===car)||{carrier:car});const labels={yamato:'ヤマト運輸',sagawa:'佐川急便',japanpost:'日本郵便'};$('shippingBody').innerHTML=rows.map(r=>{const count=n(r.adopted_count),net=n(r.net_cost),gross=n(r.gross_cost),unit=count&&net?net/count:null;return `<tr><td>${labels[r.carrier]}</td><td>${fmt(count)}</td><td>${fmt(n(r.invoice_count))}</td><td>${yen(gross)}</td><td>${yen(net)}</td><td>${yen(unit,2)}</td><td>${c.shipments&&count?pct(count/c.shipments):'—'}</td><td>${r.source_kind==='legacy_spreadsheet'?'旧スプレッド':(r.source_filename?esc(r.source_filename):'—')}</td></tr>`}).join('');$('shipNetTotal').textContent=yen(c.shipNet);$('shipUnitTotal').textContent=yen(c.shipPer,2);
  const m=currentBundle.monthly||{},locked=m.status==='confirmed'||m.origin==='legacy_spreadsheet';$('sagawaImportBtn').disabled=locked;$('sagawaImportFile').disabled=locked;$('sagawaLockedNotice').classList.toggle('hidden',!locked);$('sagawaLockedNotice').textContent=locked?'確定済み・過去移行月の発送費は変更できません。':'';
- const sagawa=currentBundle.shipping.find(r=>r.carrier==='sagawa'),meta=sagawa?.metadata||{};$('sagawaImportSummary').innerHTML=sagawa?`<div class="source-row"><div><strong>現在の佐川データ</strong><small>${esc(sagawa.source_filename||'—')}</small></div><span class="badge auto">取込済</span></div><div class="source-row"><div><strong>請求明細 / 丸岡除外</strong><small>${fmt(sagawa.invoice_count)}件 / ${fmt(meta.excluded_maruoka||0)}件除外</small></div><span class="badge">税抜 ${yen(sagawa.net_cost)}</span></div>`:'<div class="source-row"><div><strong>現在の佐川データ</strong><small>未取込</small></div><span class="badge missing">未取込</span></div>'
+ const sagawa=currentBundle.shipping.find(r=>r.carrier==='sagawa'),meta=sagawa?.metadata||{};$('sagawaImportSummary').innerHTML=sagawa?`<div class="source-row"><div><strong>現在の佐川データ</strong><small>${esc(sagawa.source_filename||'—')}</small></div><span class="badge auto">取込済</span></div><div class="source-row"><div><strong>請求明細 / 丸岡除外</strong><small>${fmt(sagawa.invoice_count)}件 / ${fmt(meta.excluded_maruoka||0)}件除外</small></div><span class="badge">税抜 ${yen(sagawa.net_cost)}</span></div>`:'<div class="source-row"><div><strong>現在の佐川データ</strong><small>未取込</small></div><span class="badge missing">未取込</span></div>';
+ ['yamatoImportBtn','japanPostImportBtn','yamatoImportFile','japanPostImportFile'].forEach(id=>$(id).disabled=locked);
+ const ya=currentBundle.shipping.find(r=>r.carrier==='yamato'),jpRow=currentBundle.shipping.find(r=>r.carrier==='japanpost'),yam=ya?.metadata||{},jpm=jpRow?.metadata||{};
+ $('pdfImportSummary').innerHTML=[
+  ya?`<div class="source-row"><div><strong>ヤマト</strong><small>${esc(ya.source_filename||'—')} / 請求${fmt(ya.invoice_count)}件・ネコポス${fmt(ya.adopted_count)}件</small></div><span class="badge auto">税抜 ${yen(ya.net_cost)}</span></div>`:'<div class="source-row"><div><strong>ヤマト</strong><small>未取込</small></div><span class="badge missing">未取込</span></div>',
+  jpRow?`<div class="source-row"><div><strong>日本郵便</strong><small>${esc(jpRow.source_filename||'—')} / 着払${fmt(jpm.cod_count||0)}件（着払金額は除外）</small></div><span class="badge auto">税抜 ${yen(jpRow.net_cost)}</span></div>`:'<div class="source-row"><div><strong>日本郵便</strong><small>未取込</small></div><span class="badge missing">未取込</span></div>'
+ ].join('')
 }
 function renderWork(){const c=metrics(currentBundle),d=c.detail;$('wPick').textContent=hours(c.pickHours);$('wPack').textContent=hours(c.packHours);$('wTotal').textContent=hours(c.totalHours);$('wOplh').textContent=fmt(c.oplh,2);
  const rows=[
@@ -288,5 +349,5 @@ async function confirmMonth(){const m=currentBundle.monthly||{};if(m.origin==='l
 async function initApp(){$('monthPick').value=companyMonthToday();await loadAll()}
 
 document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===b));['dashboard','monthly','shipping','timedesigner','work','comparison'].forEach(t=>$(t+'Tab').classList.toggle('hidden',b.dataset.tab!==t))});
-$('loginBtn').onclick=login;$('logoutBtn').onclick=logout;$('reloadBtn').onclick=loadAll;$('monthPick').onchange=loadAll;$('saveMonthlyBtn').onclick=saveMonthly;$('confirmBtn').onclick=confirmMonth;$('tdImportBtn').onclick=importTimeDesigner;$('sagawaImportBtn').onclick=importSagawa;
+$('loginBtn').onclick=login;$('logoutBtn').onclick=logout;$('reloadBtn').onclick=loadAll;$('monthPick').onchange=loadAll;$('saveMonthlyBtn').onclick=saveMonthly;$('confirmBtn').onclick=confirmMonth;$('tdImportBtn').onclick=importTimeDesigner;$('sagawaImportBtn').onclick=importSagawa$('yamatoImportBtn').onclick=importYamato;$('japanPostImportBtn').onclick=importJapanPost;
 (async()=>{session=loadSession();if(session?.access_token){try{user=await req('/auth/v1/user');showApp();await initApp()}catch{saveSession(null);session=null;user=null;showApp()}}else showApp()})();
