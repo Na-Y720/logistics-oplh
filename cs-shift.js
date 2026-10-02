@@ -190,6 +190,7 @@
   function cellText(c){
     if(!c.exists&&c.lock_type==='auto')return '―';
     if(c.lock_type==='manual_off')return '休★';
+    if(c.lock_type==='flex_off')return c.assignment==='work'?'出△':'可休';
     if(c.lock_type==='manual_work')return '出★';
     if(c.lock_type==='manual_paid')return '有';
     return c.assignment==='work'?'出':'休';
@@ -197,12 +198,14 @@
   function cellClass(c){
     if(!c.exists&&c.lock_type==='auto')return 'unset';
     if(c.lock_type==='manual_off')return 'manual-off';
+    if(c.lock_type==='flex_off')return c.assignment==='work'?'flex-work':'flex-off';
     if(c.lock_type==='manual_work')return 'manual-work';
     if(c.lock_type==='manual_paid')return 'manual-paid';
     return c.assignment==='work'?'work':'off';
   }
   function cellMode(c){
     if(c.lock_type==='manual_off')return '休み固定';
+    if(c.lock_type==='flex_off')return c.assignment==='work'?'変更可休み→自動で出勤':'変更可休み';
     if(c.lock_type==='manual_work')return '出勤固定';
     if(c.lock_type==='manual_paid')return '有給';
     return c.exists?'自動':'未作成';
@@ -224,7 +227,8 @@
         state.shifts.delete(key(sid,date));render();setNotice('未作成状態に戻しました。','good');return;
       }
       if(c.lock_type==='auto'){c.lock_type='manual_off';c.assignment='off'}
-      else if(c.lock_type==='manual_off'){c.lock_type='manual_work';c.assignment='work'}
+      else if(c.lock_type==='manual_off'){c.lock_type='flex_off';c.assignment='off'}
+      else if(c.lock_type==='flex_off'){c.lock_type='manual_work';c.assignment='work'}
       else if(c.lock_type==='manual_work'){c.lock_type='manual_paid';c.assignment='paid'}
       c.exists=true;c.plan_month=state.planMonth;c.updated_at=new Date().toISOString();
       render();await saveCells([c]);setNotice('固定を保存しました。','good');
@@ -241,7 +245,7 @@
   function feasibleDates(p){
     return state.dates.filter(d=>{
       const c=getCell(p.s.id,d);
-      return c.lock_type==='auto'&&c.assignment!=='work'&&autoAllowed(p.s.id,d);
+      return (c.lock_type==='auto'||c.lock_type==='flex_off')&&c.assignment!=='work'&&autoAllowed(p.s.id,d);
     });
   }
   function chooseProfile(profiles){
@@ -257,7 +261,8 @@
     let best=null,bestScore=Infinity;
     for(const d of dates){
       const inf=dateInfo(d),streak=projectedStreak(p.s.id,d);
-      let score=assignedCount(d)*1000 + streak*25 + (inf.weekend?weekends*35:0) + stableTie(p.s.id,d);
+      const c=getCell(p.s.id,d);
+      let score=assignedCount(d)*1000 + streak*25 + (inf.weekend?weekends*35:0) + stableTie(p.s.id,d) + (c.lock_type==='flex_off'?100000:0);
       if(streak>=6)score+=5000;else if(streak>=5)score+=1000;
       if(score<bestScore){bestScore=score;best=d}
     }
@@ -271,6 +276,7 @@
         if(afterRetirement(s.id,d))continue;
         const c=getCell(s.id,d);
         if(c.lock_type==='auto'){c.assignment='off';c.exists=true;c.plan_month=state.planMonth}
+        else if(c.lock_type==='flex_off'){c.assignment='off';c.exists=true;c.plan_month=state.planMonth}
       }
       const profiles=profileData();
       let guard=0;
@@ -290,7 +296,7 @@
   }
   async function clearAll(){
     if(!state.loaded)return;
-    if(!confirm('この月度のCSシフトをすべてクリアします。休み固定・出勤固定・有給も削除されます。よろしいですか？'))return;
+    if(!confirm('この月度のCSシフトをすべてクリアします。休み固定・変更可休み・出勤固定・有給も削除されます。よろしいですか？'))return;
     setBusy(true,'クリア中…');
     try{
       await rest('cs_daily_shifts',`owner_id=eq.${user.id}&shift_date=gte.${state.start}&shift_date=lte.${state.end}`,{method:'DELETE'});
