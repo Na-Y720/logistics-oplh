@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/cost", "destination": "/cost.html" },
+    { "source": "/worktime", "destination": "/worktime.html" }
+  ]
+}
