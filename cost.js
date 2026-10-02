@@ -220,7 +220,47 @@ function renderMonthly(){const m=currentBundle.monthly||{},locked=m.status==='co
 function inputNum(id,divide=1){const v=$(id).value.trim();return v===''?null:Number(v)/divide}
 async function saveMonthly(){const m=currentBundle.monthly;if(m.status==='confirmed'||m.origin==='legacy_spreadsheet')return;const body={owner_id:user.id,month_ym:currentBundle.ym,period_start:currentBundle.start,period_end:currentBundle.end,status:'open',origin:'app',orders:inputNum('mOrders'),complaint_count:inputNum('mComplaints'),receiving_rate:inputNum('mReceiving',100),shipping_work_count:inputNum('mShippingWork'),picking_complaint_count:inputNum('mPickComplaints'),material_cost:inputNum('mMaterialCost'),silver_cost:inputNum('mSilverCost'),timee_cost:inputNum('mTimeeCost'),timee_picking_hours:inputNum('mTimeePick'),timee_packing_hours:inputNum('mTimeePack'),label_955_ok_days:inputNum('m955Ok'),label_955_total_days:inputNum('m955Total'),updated_at:new Date().toISOString()};
  try{await rest('logistics_cost_monthly','on_conflict=owner_id%2Cmonth_ym',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(body)});$('monthlyMessage').className='message ok';$('monthlyMessage').textContent='保存しました。';await loadAll()}catch(e){$('monthlyMessage').className='message bad';$('monthlyMessage').textContent=e.message}}
-function renderShipping(){const c=metrics(currentBundle),rows=['yamato','sagawa','japanpost'].map(car=>currentBundle.shipping.find(x=>x.carrier===car)||{carrier:car});const labels={yamato:'ヤマト運輸',sagawa:'佐川急便',japanpost:'日本郵便'};$('shippingBody').innerHTML=rows.map(r=>{const count=n(r.adopted_count),net=n(r.net_cost),gross=n(r.gross_cost),unit=count&&net?net/count:null;return `<tr><td>${labels[r.carrier]}</td><td>${fmt(count)}</td><td>${fmt(n(r.invoice_count))}</td><td>${yen(gross)}</td><td>${yen(net)}</td><td>${yen(unit,2)}</td><td>${c.shipments&&count?pct(count/c.shipments):'—'}</td><td>${r.source_kind==='legacy_spreadsheet'?'旧スプレッド':(r.source_filename?esc(r.source_filename):'—')}</td></tr>`}).join('');$('shipNetTotal').textContent=yen(c.shipNet);$('shipUnitTotal').textContent=yen(c.shipPer,2)}
+
+async function parseSagawaFile(file){
+ const text=await readShiftJisCsv(file),lines=text.replace(/\r/g,'').split('\n').filter(x=>x.trim());
+ if(lines.length<2)throw new Error('佐川CSVにデータがありません。');
+ const head=csvLine(lines[0]).map(normalizeHeader);
+ const findContains=word=>head.findIndex(h=>h.includes(word));
+ const ix={cost:findContains('運賃請求金額'),dest:findContains('着店名称'),from:findContains('集荷店名称')};
+ if(ix.cost<0)throw new Error('「運賃請求金額」列が見つかりません。');
+ let sourceRows=0,invoiceCount=0,excludedCount=0,netCost=0;
+ for(let i=1;i<lines.length;i++){
+  const r=csvLine(lines[i]);sourceRows++;
+  const dest=ix.dest>=0?String(r[ix.dest]||'').trim():'',from=ix.from>=0?String(r[ix.from]||'').trim():'';
+  if(dest.includes('丸岡')&&!from.includes('丸岡')){excludedCount++;continue}
+  const cost=Number(String(r[ix.cost]||'').replace(/[¥￥,\s]/g,''));
+  if(!Number.isFinite(cost))continue;
+  invoiceCount++;netCost+=cost;
+ }
+ if(!invoiceCount)throw new Error('集計対象の佐川明細がありません。');
+ return{fileName:file.name,sourceRows,invoiceCount,excludedCount,netCost:Number(netCost.toFixed(3)),grossCost:Number((netCost*1.1).toFixed(3))};
+}
+async function importSagawa(){
+ const m=currentBundle?.monthly||{};if(m.status==='confirmed'||m.origin==='legacy_spreadsheet'){alert('確定済み・過去移行月には取り込めません。');return}
+ const file=$('sagawaImportFile').files?.[0];if(!file){$('sagawaImportMessage').className='message bad';$('sagawaImportMessage').textContent='佐川CSVを選択してください。';return}
+ const btn=$('sagawaImportBtn');btn.disabled=true;$('sagawaImportMessage').className='message';$('sagawaImportMessage').textContent='佐川CSVを集計しています…';
+ try{
+  const x=await parseSagawaFile(file),old=currentBundle.shipping.find(r=>r.carrier==='sagawa');
+  const adoptedCount=(old?.metadata?.adopted_count_source==='wms'||old?.metadata?.adopted_count_source==='manual')?Number(old.adopted_count):x.invoiceCount;
+  const metadata={source_rows:x.sourceRows,excluded_maruoka:x.excludedCount,adopted_count_source:(adoptedCount===x.invoiceCount?'invoice_rows':old.metadata.adopted_count_source),rule:'着店=丸岡 かつ 集荷店≠丸岡を除外'};
+  const body={owner_id:user.id,month_ym:currentBundle.ym,carrier:'sagawa',adopted_count:adoptedCount,invoice_count:x.invoiceCount,gross_cost:x.grossCost,net_cost:x.netCost,source_kind:'invoice_file',source_filename:x.fileName,imported_at:new Date().toISOString(),metadata,updated_at:new Date().toISOString()};
+  await rest('logistics_shipping_monthly','on_conflict=owner_id%2Cmonth_ym%2Ccarrier',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(body)});
+  await rest('logistics_cost_import_batches','',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({owner_id:user.id,month_ym:currentBundle.ym,source:'sagawa',source_filename:x.fileName,source_rows:x.sourceRows,period_start:currentBundle.start,period_end:currentBundle.end,metadata})});
+  $('sagawaImportMessage').className='message ok';$('sagawaImportMessage').textContent=`取込完了：${x.invoiceCount.toLocaleString()}件 / 税抜 ${yen(x.netCost)}`;
+  await loadAll()
+ }catch(e){console.error(e);$('sagawaImportMessage').className='message bad';$('sagawaImportMessage').textContent=e.message}
+ finally{btn.disabled=false}
+}
+
+function renderShipping(){const c=metrics(currentBundle),rows=['yamato','sagawa','japanpost'].map(car=>currentBundle.shipping.find(x=>x.carrier===car)||{carrier:car});const labels={yamato:'ヤマト運輸',sagawa:'佐川急便',japanpost:'日本郵便'};$('shippingBody').innerHTML=rows.map(r=>{const count=n(r.adopted_count),net=n(r.net_cost),gross=n(r.gross_cost),unit=count&&net?net/count:null;return `<tr><td>${labels[r.carrier]}</td><td>${fmt(count)}</td><td>${fmt(n(r.invoice_count))}</td><td>${yen(gross)}</td><td>${yen(net)}</td><td>${yen(unit,2)}</td><td>${c.shipments&&count?pct(count/c.shipments):'—'}</td><td>${r.source_kind==='legacy_spreadsheet'?'旧スプレッド':(r.source_filename?esc(r.source_filename):'—')}</td></tr>`}).join('');$('shipNetTotal').textContent=yen(c.shipNet);$('shipUnitTotal').textContent=yen(c.shipPer,2);
+ const m=currentBundle.monthly||{},locked=m.status==='confirmed'||m.origin==='legacy_spreadsheet';$('sagawaImportBtn').disabled=locked;$('sagawaImportFile').disabled=locked;$('sagawaLockedNotice').classList.toggle('hidden',!locked);$('sagawaLockedNotice').textContent=locked?'確定済み・過去移行月の発送費は変更できません。':'';
+ const sagawa=currentBundle.shipping.find(r=>r.carrier==='sagawa'),meta=sagawa?.metadata||{};$('sagawaImportSummary').innerHTML=sagawa?`<div class="source-row"><div><strong>現在の佐川データ</strong><small>${esc(sagawa.source_filename||'—')}</small></div><span class="badge auto">取込済</span></div><div class="source-row"><div><strong>請求明細 / 丸岡除外</strong><small>${fmt(sagawa.invoice_count)}件 / ${fmt(meta.excluded_maruoka||0)}件除外</small></div><span class="badge">税抜 ${yen(sagawa.net_cost)}</span></div>`:'<div class="source-row"><div><strong>現在の佐川データ</strong><small>未取込</small></div><span class="badge missing">未取込</span></div>'
+}
 function renderWork(){const c=metrics(currentBundle),d=c.detail;$('wPick').textContent=hours(c.pickHours);$('wPack').textContent=hours(c.packHours);$('wTotal').textContent=hours(c.totalHours);$('wOplh').textContent=fmt(c.oplh,2);
  const rows=[
   ['ピッキング','オーダーピッキング',d.empOrderPick,d.ptOrderPick,0,true],
@@ -248,5 +288,5 @@ async function confirmMonth(){const m=currentBundle.monthly||{};if(m.origin==='l
 async function initApp(){$('monthPick').value=companyMonthToday();await loadAll()}
 
 document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===b));['dashboard','monthly','shipping','timedesigner','work','comparison'].forEach(t=>$(t+'Tab').classList.toggle('hidden',b.dataset.tab!==t))});
-$('loginBtn').onclick=login;$('logoutBtn').onclick=logout;$('reloadBtn').onclick=loadAll;$('monthPick').onchange=loadAll;$('saveMonthlyBtn').onclick=saveMonthly;$('confirmBtn').onclick=confirmMonth;$('tdImportBtn').onclick=importTimeDesigner;
+$('loginBtn').onclick=login;$('logoutBtn').onclick=logout;$('reloadBtn').onclick=loadAll;$('monthPick').onchange=loadAll;$('saveMonthlyBtn').onclick=saveMonthly;$('confirmBtn').onclick=confirmMonth;$('tdImportBtn').onclick=importTimeDesigner;$('sagawaImportBtn').onclick=importSagawa;
 (async()=>{session=loadSession();if(session?.access_token){try{user=await req('/auth/v1/user');showApp();await initApp()}catch{saveSession(null);session=null;user=null;showApp()}}else showApp()})();
