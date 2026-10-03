@@ -196,6 +196,10 @@ async function parseTimeDesignerFile(file){
  if(!rows.length)throw new Error(`${periodStart}～${periodEnd} に自動振分できるデータがありません。`);
  return{fileName:file.name,periodStart,periodEnd,periodRows,mappedSourceRows,outsideRows,rows,unmapped:[...unmapped.entries()].map(([task,v])=>({task,...v})),unmatchedStaff:[...unmatchedStaff].sort()};
 }
+async function replaceCostImportBatch(source,payload){
+ await rest('logistics_cost_import_batches',`owner_id=eq.${user.id}&month_ym=eq.${currentBundle.ym}&source=eq.${source}`,{method:'DELETE',headers:{Prefer:'return=minimal'}});
+ await rest('logistics_cost_import_batches','',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify(payload)});
+}
 async function importTimeDesigner(){
  const m=currentBundle?.monthly||{};if(m.status==='confirmed'||m.origin==='legacy_spreadsheet'){alert('確定済み・過去移行月には取り込めません。');return}
  const file=$('tdImportFile').files?.[0];if(!file){$('tdImportMessage').className='message bad';$('tdImportMessage').textContent='CSVを選択してください。';return}
@@ -215,7 +219,8 @@ async function importTimeDesigner(){
   const range=`owner_id=eq.${user.id}&work_date=gte.${parsed.periodStart}&work_date=lte.${parsed.periodEnd}`;
   await rest('oplh_timedesigner_daily',range+'&batch_id=is.null',{method:'DELETE',headers:{Prefer:'return=minimal'}});
   await rest('oplh_timedesigner_daily',range+`&batch_id=neq.${batchId}`,{method:'DELETE',headers:{Prefer:'return=minimal'}});
-  await rest('logistics_cost_import_batches','',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({owner_id:user.id,month_ym:currentBundle.ym,source:'timedesigner',source_filename:parsed.fileName,source_rows:parsed.mappedSourceRows,period_start:parsed.periodStart,period_end:parsed.periodEnd,metadata:{aggregate_rows:rows.length,period_rows:parsed.periodRows,outside_rows:parsed.outsideRows,unmapped_tasks:parsed.unmapped,unmatched_staff:parsed.unmatchedStaff}})});
+  await rest('oplh_import_batches',`owner_id=eq.${user.id}&source=eq.timedesigner&period_start=eq.${parsed.periodStart}&period_end=eq.${parsed.periodEnd}&id=neq.${batchId}`,{method:'DELETE',headers:{Prefer:'return=minimal'}});
+  await replaceCostImportBatch('timedesigner',{owner_id:user.id,month_ym:currentBundle.ym,source:'timedesigner',source_filename:parsed.fileName,source_rows:parsed.mappedSourceRows,period_start:parsed.periodStart,period_end:parsed.periodEnd,metadata:{aggregate_rows:rows.length,period_rows:parsed.periodRows,outside_rows:parsed.outsideRows,unmapped_tasks:parsed.unmapped,unmatched_staff:parsed.unmatchedStaff,replace_rule:'対象期間を置換。同一ファイル・同一期間の再取込は二重計上しない'}});
   $('tdImportMessage').className='message ok';$('tdImportMessage').textContent=`取込完了：${parsed.mappedSourceRows.toLocaleString()}行 → ${rows.length.toLocaleString()}集計行`;
   await loadAll()
  }catch(e){console.error(e);$('tdImportMessage').className='message bad';$('tdImportMessage').textContent=e.message}
@@ -312,7 +317,7 @@ async function importSagawa(){
   const metadata={source_rows:x.sourceRows,excluded_maruoka:x.excludedCount,adopted_count_source:(adoptedCount===x.invoiceCount?'invoice_rows':old.metadata.adopted_count_source),rule:'着店=丸岡 かつ 集荷店≠丸岡を除外'};
   const body={owner_id:user.id,month_ym:currentBundle.ym,carrier:'sagawa',adopted_count:adoptedCount,invoice_count:x.invoiceCount,gross_cost:x.grossCost,net_cost:x.netCost,source_kind:'invoice_file',source_filename:x.fileName,imported_at:new Date().toISOString(),metadata,updated_at:new Date().toISOString()};
   await rest('logistics_shipping_monthly','on_conflict=owner_id%2Cmonth_ym%2Ccarrier',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(body)});
-  await rest('logistics_cost_import_batches','',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({owner_id:user.id,month_ym:currentBundle.ym,source:'sagawa',source_filename:x.fileName,source_rows:x.sourceRows,period_start:currentBundle.start,period_end:currentBundle.end,metadata})});
+  await replaceCostImportBatch('sagawa',{owner_id:user.id,month_ym:currentBundle.ym,source:'sagawa',source_filename:x.fileName,source_rows:x.sourceRows,period_start:currentBundle.start,period_end:currentBundle.end,metadata:{...metadata,replace_rule:'同月度の佐川データを置換。同一ファイル再取込は二重計上しない'}});
   $('sagawaImportMessage').className='message ok';$('sagawaImportMessage').textContent=`取込完了：${x.invoiceCount.toLocaleString()}件 / 税抜 ${yen(x.netCost)}`;
   await loadAll()
  }catch(e){console.error(e);$('sagawaImportMessage').className='message bad';$('sagawaImportMessage').textContent=e.message}
@@ -371,7 +376,7 @@ function parseJapanPostTexts(texts,start,end){
 async function saveShippingImport(carrier,fileNames,x,metadata){
  const body={owner_id:user.id,month_ym:currentBundle.ym,carrier,adopted_count:x.adoptedCount,invoice_count:x.invoiceCount,gross_cost:x.grossCost,net_cost:x.netCost,source_kind:'invoice_file',source_filename:fileNames,imported_at:new Date().toISOString(),metadata,updated_at:new Date().toISOString()};
  await rest('logistics_shipping_monthly','on_conflict=owner_id%2Cmonth_ym%2Ccarrier',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(body)});
- await rest('logistics_cost_import_batches','',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({owner_id:user.id,month_ym:currentBundle.ym,source:carrier,source_filename:fileNames,source_rows:x.invoiceCount||0,period_start:currentBundle.start,period_end:currentBundle.end,metadata})})
+ await replaceCostImportBatch(carrier,{owner_id:user.id,month_ym:currentBundle.ym,source:carrier,source_filename:fileNames,source_rows:x.invoiceCount||0,period_start:currentBundle.start,period_end:currentBundle.end,metadata:{...metadata,replace_rule:carrier==='japanpost'?'日付単位で置換・追加。同日再取込は二重計上しない':'同月度の同一配送会社データを置換。同一ファイル再取込は二重計上しない'}})
 }
 async function importYamato(){
  const m=currentBundle?.monthly||{};if(m.status==='confirmed'||m.origin==='legacy_spreadsheet')return;
