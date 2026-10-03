@@ -354,14 +354,19 @@ function parseYamatoText(text){
  return{adoptedCount,invoiceCount,grossCost,netCost,otherCount:invoiceCount-adoptedCount}
 }
 function isoDate(y,m,d){return Number(y)+'-'+String(Number(m)).padStart(2,'0')+'-'+String(Number(d)).padStart(2,'0')}
+function summarizeJapanPostRows(rows){
+ let prepaidCount=0,codCount=0,grossCost=0,codCost=0;
+ for(const x of rows||[]){prepaidCount+=Number(x.prepaidCount)||0;codCount+=Number(x.codCount)||0;grossCost+=Number(x.prepaidCost)||0;codCost+=Number(x.codCost)||0}
+ return{adoptedCount:prepaidCount+codCount,invoiceCount:prepaidCount+codCount,prepaidCount,codCount,grossCost,netCost:grossCost/1.1,codCost,days:(rows||[]).length,dailyRows:rows||[]}
+}
 function parseJapanPostTexts(texts,start,end){
  const byDate=new Map();
  const re=/(\d{4})\/\s*(\d{1,2})\/\s*(\d{1,2})\s+([\d,]+)\s+([\d,]+)\s+(\d{4})\/\s*(\d{1,2})\/\s*(\d{1,2})\s+([\d,]+)\s+([\d,]+)/g;
- for(const text of texts){for(const m of text.matchAll(re)){const date=isoDate(m[1],m[2],m[3]);byDate.set(date,{prepaidCount:Number(m[4].replace(/,/g,''))||0,prepaidCost:Number(m[5].replace(/,/g,''))||0,codCount:Number(m[9].replace(/,/g,''))||0,codCost:Number(m[10].replace(/,/g,''))||0})}}
- let prepaidCount=0,codCount=0,grossCost=0,codCost=0,days=0;
- for(const [date,x] of byDate){if(date<start||date>end)continue;days++;prepaidCount+=x.prepaidCount;codCount+=x.codCount;grossCost+=x.prepaidCost;codCost+=x.codCost}
- if(!days||!(prepaidCount+codCount))throw new Error(start+'～'+end+' の日本郵便日別明細を読み取れませんでした。');
- return{adoptedCount:prepaidCount+codCount,invoiceCount:prepaidCount+codCount,prepaidCount,codCount,grossCost,netCost:grossCost/1.1,codCost,days}
+ for(const text of texts){for(const m of text.matchAll(re)){const date=isoDate(m[1],m[2],m[3]);if(date<start||date>end)continue;byDate.set(date,{date,prepaidCount:Number(m[4].replace(/,/g,''))||0,prepaidCost:Number(m[5].replace(/,/g,''))||0,codCount:Number(m[9].replace(/,/g,''))||0,codCost:Number(m[10].replace(/,/g,''))||0})}}
+ const dailyRows=[...byDate.values()].sort((a,b)=>a.date.localeCompare(b.date));
+ const x=summarizeJapanPostRows(dailyRows);
+ if(!x.days||!x.adoptedCount)throw new Error(start+'～'+end+' の日本郵便日別明細を読み取れませんでした。');
+ return x
 }
 async function saveShippingImport(carrier,fileNames,x,metadata){
  const body={owner_id:user.id,month_ym:currentBundle.ym,carrier,adopted_count:x.adoptedCount,invoice_count:x.invoiceCount,gross_cost:x.grossCost,net_cost:x.netCost,source_kind:'invoice_file',source_filename:fileNames,imported_at:new Date().toISOString(),metadata,updated_at:new Date().toISOString()};
@@ -380,9 +385,17 @@ async function importJapanPost(){
  const m=currentBundle?.monthly||{};if(m.status==='confirmed'||m.origin==='legacy_spreadsheet')return;
  const files=[...($('japanPostImportFile').files||[])];if(!files.length){$('pdfImportMessage').className='message bad';$('pdfImportMessage').textContent='日本郵便PDFを選択してください。';return}
  const btn=$('japanPostImportBtn');btn.disabled=true;$('pdfImportMessage').className='message';$('pdfImportMessage').textContent='日本郵便PDFを解析しています…';
- try{const texts=[];for(const f of files){$('pdfImportMessage').textContent='日本郵便PDFを解析中：'+f.name;texts.push(await extractPdfText(f))}
-  const x=parseJapanPostTexts(texts,currentBundle.start,currentBundle.end),metadata={rule:'21日～翌20日。採用件数=元払+着払個数、発送費=元払金額のみ（着払金額除外）',prepaid_count:x.prepaidCount,cod_count:x.codCount,cod_cost_excluded:x.codCost,days:x.days};
-  await saveShippingImport('japanpost',files.map(f=>f.name).join(' / '),x,metadata);$('pdfImportMessage').className='message ok';$('pdfImportMessage').textContent=`日本郵便取込完了：${fmt(x.adoptedCount)}件 / 元払税込 ${yen(x.grossCost)}`;await loadAll()
+ try{
+  const texts=[];for(const f of files){$('pdfImportMessage').textContent='日本郵便PDFを解析中：'+f.name;texts.push(await extractPdfText(f))}
+  const incoming=parseJapanPostTexts(texts,currentBundle.start,currentBundle.end),existing=currentBundle.shipping.find(r=>r.carrier==='japanpost'),oldMeta=existing?.metadata||{},oldRows=Array.isArray(oldMeta.daily_rows)?oldMeta.daily_rows:[];
+  const merged=new Map(oldRows.filter(r=>r?.date&&r.date>=currentBundle.start&&r.date<=currentBundle.end).map(r=>[r.date,r]));
+  for(const r of incoming.dailyRows)merged.set(r.date,r);
+  const mergedRows=[...merged.values()].sort((a,b)=>a.date.localeCompare(b.date)),x=summarizeJapanPostRows(mergedRows);
+  const oldFiles=Array.isArray(oldMeta.source_files)?oldMeta.source_files:(existing?.source_filename?[existing.source_filename]:[]),sourceFiles=[...new Set([...oldFiles,...files.map(f=>f.name)])];
+  const metadata={rule:'21日～翌20日。採用件数=元払+着払個数、発送費=元払金額のみ（着払金額除外）。日付単位で追加入力し、同日再取込は置換',prepaid_count:x.prepaidCount,cod_count:x.codCount,cod_cost_excluded:x.codCost,days:x.days,daily_rows:x.dailyRows,source_files:sourceFiles};
+  await saveShippingImport('japanpost',sourceFiles.join(' / '),x,metadata);
+  $('pdfImportMessage').className='message ok';$('pdfImportMessage').textContent=`日本郵便取込完了：今回${incoming.days}日分を反映 → 月度累計 ${x.days}日 / ${fmt(x.adoptedCount)}件 / 元払税込 ${yen(x.grossCost)}`;
+  await loadAll()
  }catch(e){console.error(e);$('pdfImportMessage').className='message bad';$('pdfImportMessage').textContent=e.message}finally{btn.disabled=false}
 }
 
