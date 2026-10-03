@@ -1,4 +1,4 @@
-const { PDFParse } = require('pdf-parse');
+const pdf = require('pdf-parse');
 
 const SB_URL='https://qfcgxefymdodjrprhfvu.supabase.co';
 const SB_KEY='sb_publishable_KzELBvq1CkhnHL_CXN99GA_5-an2G6m';
@@ -25,15 +25,14 @@ module.exports=async function handler(req,res){
     const data=Buffer.from(b64,'base64');
     if(!data.length||data.length>MAX_BYTES) return res.status(413).json({error:'PDF is too large'});
     if(data.subarray(0,4).toString()!=='%PDF') return res.status(400).json({error:'Invalid PDF'});
-    const parser=new PDFParse({data});
-    try{
-      const result=await parser.getText();
-      return res.status(200).json({name,text:result.text||'',pages:result.total||result.pages?.length||null});
-    }finally{
-      await parser.destroy().catch(()=>{});
-    }
+    const result=await pdf(data);
+    return res.status(200).json({
+      name,
+      text:result.text||'',
+      pages:result.numpages||null
+    });
   }catch(e){
-    console.error(e);
+    console.error('PDF_PARSE_ERROR',e);
     return res.status(500).json({error:e?.message||'PDF parse failed'});
   }
 };
