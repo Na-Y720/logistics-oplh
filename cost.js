@@ -461,7 +461,34 @@ function renderShipping(){const c=metrics(currentBundle),rows=['yamato','sagawa'
  $('pdfImportSummary').innerHTML=[
   ya?`<div class="source-row"><div><strong>ヤマト</strong><small>${esc(ya.source_filename||'—')} / 請求${fmt(ya.invoice_count)}件・ネコポス${fmt(ya.adopted_count)}件</small></div><span class="badge auto">税抜 ${yen(ya.net_cost)}</span></div>`:'<div class="source-row"><div><strong>ヤマト</strong><small>未取込</small></div><span class="badge missing">未取込</span></div>',
   jpRow?`<div class="source-row"><div><strong>日本郵便</strong><small>${esc(jpRow.source_filename||'—')} / 着払${fmt(jpm.cod_count||0)}件（着払金額は除外）</small></div><span class="badge auto">税抜 ${yen(jpRow.net_cost)}</span></div>`:'<div class="source-row"><div><strong>日本郵便</strong><small>未取込</small></div><span class="badge missing">未取込</span></div>'
- ].join('')
+ ].join('');
+ renderShippingFiscalMonthly()
+}
+function renderShippingFiscalMonthly(){
+ const fy=fiscalMeta?.fy||fiscalStartYear(companyMonthToday()),rows=fiscalMonthlyBundles||[];
+ $('shippingFiscalMonthlyNote').textContent=fy+'年度（'+fy+'年3月度～'+(fy+1)+'年2月度）';
+ $('shippingFiscalMonthlyBody').innerHTML=rows.map(b=>{
+  const m=b.monthly||{},exists=!!b.monthly,status=!exists?'未入力':(m.status==='confirmed'?'確定済':'運用中'),badgeClass=!exists?'missing':(m.status==='confirmed'?'confirmed':'open');
+  const byCarrier=Object.fromEntries(['yamato','sagawa','japanpost'].map(car=>[car,(b.shipping||[]).find(x=>x.carrier===car)||null]));
+  const cell=(r,type)=>{
+   if(!r)return '—';
+   const count=n(r.adopted_count),net=n(r.net_cost),unit=count&&net!=null?net/count:null;
+   if(type==='count')return count!=null?fmt(count):'—';
+   if(type==='net')return net!=null?yen(net):'—';
+   return unit!=null?yen(unit,2):'—'
+  };
+  const totalCount=(b.shipping||[]).reduce((a,r)=>a+(Number(r.adopted_count)||0),0);
+  const totalNet=(b.shipping||[]).reduce((a,r)=>a+(Number(r.net_cost)||0),0);
+  const totalUnit=totalCount?totalNet/totalCount:null,monthNum=Number(b.ym.split('-')[1]);
+  return `<tr>
+   <td><b>${monthNum}月度</b></td>
+   <td><span class="badge ${badgeClass}">${status}</span></td>
+   <td>${cell(byCarrier.yamato,'count')}</td><td>${cell(byCarrier.yamato,'net')}</td><td>${cell(byCarrier.yamato,'unit')}</td>
+   <td>${cell(byCarrier.sagawa,'count')}</td><td>${cell(byCarrier.sagawa,'net')}</td><td>${cell(byCarrier.sagawa,'unit')}</td>
+   <td>${cell(byCarrier.japanpost,'count')}</td><td>${cell(byCarrier.japanpost,'net')}</td><td>${cell(byCarrier.japanpost,'unit')}</td>
+   <td>${totalCount?fmt(totalCount):'—'}</td><td>${totalNet?yen(totalNet):'—'}</td><td>${totalUnit!=null?yen(totalUnit,2):'—'}</td>
+  </tr>`
+ }).join('')
 }
 function renderWork(){const c=metrics(currentBundle),d=c.detail,m=currentBundle.monthly||{},ship=currentBundle.shipping||[];
  $('wPick').textContent=hours(c.pickHours);$('wPack').textContent=hours(c.packHours);$('wTotal').textContent=hours(c.totalHours);$('wOplh').textContent=fmt(c.oplh,2);
