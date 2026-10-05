@@ -331,7 +331,7 @@ function setInput(id,v,percent=false){$(id).value=v==null?'':(percent?Number(v)*
 function renderMonthly(){const m=currentBundle.monthly||{},locked=m.status==='confirmed';
  setInput('mOrders',m.orders);setInput('mComplaints',m.complaint_count);setInput('mReceiving',m.receiving_rate,true);setInput('mShippingWork',m.shipping_work_count);setInput('mPickComplaints',m.picking_complaint_count);setInput('mMaterialCost',m.material_cost);setInput('mSilverCost',m.silver_cost);setInput('mTimeeCost',m.timee_cost);setInput('mTimeePick',m.timee_picking_hours);setInput('mTimeePack',m.timee_packing_hours);
  setInput('mAuto1Lap',m.auto1_lap_seconds);setInput('mAuto1Count',m.auto1_count);setInput('mAuto2Lap',m.auto2_lap_seconds);setInput('mAuto2Count',m.auto2_count);setInput('mHandPackLap',m.hand_pack_lap_seconds);
- ['mOrders','mComplaints','mReceiving','mShippingWork','mPickComplaints','mMaterialCost','mSilverCost','mTimeeCost','mTimeePick','mTimeePack','mAuto1Lap','mAuto1Count','mAuto2Lap','mAuto2Count'].forEach(id=>$(id).disabled=locked);
+ ['mOrders','mComplaints','mReceiving','mShippingWork','mPickComplaints','mMaterialCost','mSilverCost','mTimeeCost','mTimeePick','mTimeePack','mAuto1Lap','mAuto1Count','mAuto2Lap','mAuto2Count','mHandPackLap'].forEach(id=>$(id).disabled=locked);
  $('saveMonthlyBtn').disabled=locked;$('legacyNotice').classList.toggle('hidden',m.origin!=='legacy_spreadsheet');$('legacyNotice').textContent=m.origin==='legacy_spreadsheet'?(locked?'旧スプレッドシートから移行した値です。修正する場合は上部の「ロック解除」を押してください。':'旧スプレッドシート由来の月度をロック解除中です。修正後は「月度確定」で再ロックしてください。'):''
 }
 function inputNum(id,divide=1){const v=$(id).value.trim();return v===''?null:Number(v)/divide}
