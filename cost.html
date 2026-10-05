@@ -301,6 +301,29 @@
         <div class="hint">確定済み月だけを年度集計に採用します。年度途中は前年も同じ月数で比較します。48H以内入庫率は月次率の単純平均です。※は未入力月があり、入力済み月のみの合計です。</div>
       </section>
     </div>
+    <section class="card" style="margin-top:16px">
+      <div class="section-head"><div><h3>年度 月別一覧</h3><div id="fiscalMonthlyNote" class="muted">3月度～翌年2月度</div></div></div>
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr>
+              <th>月度</th>
+              <th>状態</th>
+              <th>受注件数</th>
+              <th>受注処理能力</th>
+              <th>9:45達成率</th>
+              <th>出荷件数</th>
+              <th>誤出荷PPM</th>
+              <th>48H入庫率</th>
+              <th>発送費/件</th>
+              <th>OPLH</th>
+            </tr>
+          </thead>
+          <tbody id="fiscalMonthlyBody"></tbody>
+        </table>
+      </div>
+      <div class="hint">運用中月は現時点の途中実績です。未入力月は「—」で表示します。</div>
+    </section>
   </section>
 </div>
 </main>
