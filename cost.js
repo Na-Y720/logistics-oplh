@@ -2,7 +2,7 @@ const SB_URL='https://qfcgxefymdodjrprhfvu.supabase.co';
 const SB_KEY='sb_publishable_KzELBvq1CkhnHL_CXN99GA_5-an2G6m';
 const SESSION_KEY='logistics_monthly_oplh_session_v1';
 const $=id=>document.getElementById(id);
-let session=null,user=null,currentBundle=null,prevBundle=null,yearBundle=null,refreshPromise=null,orderAutoSaveTimer=null,orderAutoSavePromise=null,orderDirty=false,orderSaveFailed=false;
+let session=null,user=null,currentBundle=null,prevBundle=null,yearBundle=null,fiscalCurrent=null,fiscalPrior=null,fiscalMeta=null,refreshPromise=null,orderAutoSaveTimer=null,orderAutoSavePromise=null,orderDirty=false,orderSaveFailed=false;
 const TD_ACTIVITY_MAP={
  'オーダーピッキング（送り状ピッキング）':{key:'picking',label:'オーダーピッキング（送り状ピッキング）'},
  'オーダーピッキング':{key:'picking',label:'オーダーピッキング（送り状ピッキング）'},
@@ -39,6 +39,9 @@ function monthRange(ym){const[y,m]=ym.split('-').map(Number),end=new Date(y,m-1,
 function previousYm(ym){let[y,m]=ym.split('-').map(Number);m--;if(m===0){m=12;y--}return y+'-'+String(m).padStart(2,'0')}
 function shiftYm(ym,delta){let[y,m]=ym.split('-').map(Number);m+=delta;while(m<1){m+=12;y--}while(m>12){m-=12;y++}return y+'-'+String(m).padStart(2,'0')}
 function priorYearYm(ym){const[y,m]=ym.split('-');return (Number(y)-1)+'-'+m}
+function companyYmFromDate(iso){let[y,m,d]=String(iso||'').split('-').map(Number);if(!y||!m||!d)return null;if(d>=21){m++;if(m===13){m=1;y++}}return y+'-'+String(m).padStart(2,'0')}
+function ymRange(startYm,endYm){const out=[];let x=startYm;while(x<=endYm){out.push(x);x=shiftYm(x,1);if(out.length>24)break}return out}
+function fiscalStartYear(ym){const[y,m]=ym.split('-').map(Number);return m>=3?y:y-1}
 function n(v){return v==null||v===''?null:Number(v)}
 function fmt(v,d=0){if(v==null||Number.isNaN(Number(v)))return '—';return Number(v).toLocaleString('ja-JP',{minimumFractionDigits:d,maximumFractionDigits:d})}
 function yen(v,d=0){return v==null?'—':'¥'+fmt(v,d)}
@@ -60,6 +63,49 @@ async function loadBundle(ym,{create=false}={}){let monthlyRows=await rest('logi
   rest('logistics_order_daily',`owner_id=eq.${user.id}&work_date=gte.${start}&work_date=lte.${end}&select=work_date,order_count,label_955_achieved,note&order=work_date.asc`).catch(()=>[])
  ]);
  return{ym,monthly,shipping:shipping||[],pt:pt||[],td:td||[],imports:imports||[],orderDaily:orderDaily||[],start,end}
+}
+async function loadBundleRange(startYm,endYm){
+ const months=ymRange(startYm,endYm),[startDate]=monthRange(startYm),[,endDate]=monthRange(endYm);
+ const [monthlyRows,shippingRows,ptRows,tdRows,orderRows]=await Promise.all([
+  rest('logistics_cost_monthly',`owner_id=eq.${user.id}&month_ym=gte.${startYm}&month_ym=lte.${endYm}&select=*&order=month_ym.asc`).catch(()=>[]),
+  rest('logistics_shipping_monthly',`owner_id=eq.${user.id}&month_ym=gte.${startYm}&month_ym=lte.${endYm}&select=*`).catch(()=>[]),
+  rest('logistics_work_time',`owner_id=eq.${user.id}&work_date=gte.${startDate}&work_date=lte.${endDate}&select=work_date,picking_minutes,total_picking_minutes,pass_sort_minutes,sorting_minutes,hand_pack_minutes,auto_pack_minutes,stock_move_minutes`).catch(()=>[]),
+  rest('oplh_timedesigner_daily',`owner_id=eq.${user.id}&work_date=gte.${startDate}&work_date=lte.${endDate}&select=work_date,activity_key,activity_label,work_minutes,event_count,worker_key,worker_name,employee_no,staff_id,source_department`).catch(()=>[]),
+  rest('logistics_order_daily',`owner_id=eq.${user.id}&work_date=gte.${startDate}&work_date=lte.${endDate}&select=work_date,order_count,label_955_achieved,note`).catch(()=>[])
+ ]);
+ const monthlyMap=new Map((monthlyRows||[]).map(r=>[r.month_ym,r])),shipMap=new Map(),ptMap=new Map(),tdMap=new Map(),orderMap=new Map();
+ const push=(map,key,row)=>{if(!key)return;const a=map.get(key)||[];a.push(row);map.set(key,a)};
+ for(const r of shippingRows||[])push(shipMap,r.month_ym,r);
+ for(const r of ptRows||[])push(ptMap,companyYmFromDate(r.work_date),r);
+ for(const r of tdRows||[])push(tdMap,companyYmFromDate(r.work_date),r);
+ for(const r of orderRows||[])push(orderMap,companyYmFromDate(r.work_date),r);
+ return months.map(ym=>{const monthly=monthlyMap.get(ym)||null,[start,end]=monthly?[monthly.period_start,monthly.period_end]:monthRange(ym);return{ym,monthly,shipping:shipMap.get(ym)||[],pt:ptMap.get(ym)||[],td:tdMap.get(ym)||[],imports:[],orderDaily:orderMap.get(ym)||[],start,end}})
+}
+function aggregateFiscal(bundles){
+ const bs=(bundles||[]).filter(b=>b?.monthly),ms=bs.map(metrics),monthCount=bs.length;
+ const sumKnown=(field)=>{const vals=bs.map(b=>n(b.monthly?.[field])).filter(v=>v!=null);return{value:vals.length?vals.reduce((a,v)=>a+v,0):null,count:vals.length,complete:vals.length===monthCount}};
+ const orders=sumKnown('orders'),complaints=sumKnown('complaint_count'),material=sumKnown('material_cost'),timee=sumKnown('timee_cost');
+ const shipments=ms.reduce((a,x)=>a+(Number(x.shipments)||0),0),shipNet=ms.reduce((a,x)=>a+(Number(x.shipNet)||0),0);
+ const receivingVals=bs.map(b=>n(b.monthly?.receiving_rate)).filter(v=>v!=null),receivingAvg=receivingVals.length?receivingVals.reduce((a,v)=>a+v,0)/receivingVals.length:null;
+ const deadline=bs.map(orderDeadlineStats).reduce((a,x)=>({ok:a.ok+(x.ok||0),total:a.total+(x.total||0)}),{ok:0,total:0});
+ const orderHours=ms.reduce((a,x)=>a+(Number(x.orderTotalHours)||0),0),orderHourlyRate=orders.value!=null&&orderHours>0?orders.value/orderHours:null;
+ let oplhHours=0,oplhShipments=0,oplhMonths=0,shipmentMonths=0;
+ ms.forEach(x=>{if(x.shipments>0)shipmentMonths++;if(x.shipments>0&&x.oplh>0){oplhHours+=x.shipments/x.oplh;oplhShipments+=x.shipments;oplhMonths++}});
+ return{
+  months:monthCount,orders:orders.value,ordersComplete:orders.complete,shipments,
+  complaints:complaints.value,ppm:(complaints.complete&&shipments)?complaints.value/shipments*1000000:null,
+  receivingAvg,receivingCount:receivingVals.length,shipNet,shipPer:shipments?shipNet/shipments:null,
+  materialCost:material.value,materialComplete:material.complete,timeeCost:timee.value,timeeComplete:timee.complete,
+  deadlineRate:deadline.total?deadline.ok/deadline.total:null,deadlineOk:deadline.ok,deadlineTotal:deadline.total,
+  orderHourlyRate,oplh:(shipmentMonths>0&&oplhMonths===shipmentMonths&&oplhHours>0)?oplhShipments/oplhHours:null
+ }
+}
+async function loadFiscalComparison(){
+ const currentYm=companyMonthToday(),fy=fiscalStartYear(currentYm),startYm=fy+'-03',candidate=await loadBundleRange(startYm,currentYm);
+ const consecutive=[];for(const b of candidate){if(b.monthly?.status==='confirmed')consecutive.push(b);else break}
+ if(!consecutive.length)return{current:null,prior:null,meta:{fy,startYm,endYm:null,priorFy:fy-1}};
+ const endYm=consecutive[consecutive.length-1].ym,priorStart=(fy-1)+'-03',priorEnd=shiftYm(endYm,-12),priorBundles=await loadBundleRange(priorStart,priorEnd);
+ return{current:aggregateFiscal(consecutive),prior:aggregateFiscal(priorBundles),meta:{fy,startYm,endYm,priorFy:fy-1,priorStart,priorEnd}}
 }
 
 function sum(obj,key){return(obj||[]).reduce((a,r)=>a+(Number(r[key])||0),0)}
@@ -245,7 +291,8 @@ function renderTDImport(){
 }
 
 async function loadAll(){const ym=$('monthPick').value||companyMonthToday();$('monthPick').value=ym;const[start,end]=monthRange(ym);$('monthRange').textContent=`${start} ～ ${end}（21日～翌20日）`;try{
- [currentBundle,prevBundle,yearBundle]=await Promise.all([loadBundle(ym,{create:true}),loadBundle(previousYm(ym)),loadBundle(priorYearYm(ym))]);
+ const [cb,pb,yb,fy]=await Promise.all([loadBundle(ym,{create:true}),loadBundle(previousYm(ym)),loadBundle(priorYearYm(ym)),loadFiscalComparison()]);
+ currentBundle=cb;prevBundle=pb;yearBundle=yb;fiscalCurrent=fy.current;fiscalPrior=fy.prior;fiscalMeta=fy.meta;
  clearTimeout(orderAutoSaveTimer);orderDirty=false;renderAll()
  }catch(e){console.error(e);alert('読み込みに失敗しました: '+e.message)}
 }
@@ -460,7 +507,32 @@ function renderWork(){const c=metrics(currentBundle),d=c.detail,m=currentBundle.
    ? deptRows.map(([dept,x])=>`<tr><td>${esc(dept)}</td><td>${hours(x.pick)}</td><td>${hours(x.pack)}</td><td>${hours(x.receiving)}</td><td><b>${hours(x.total)}</b></td></tr>`).join('')
    : (legacy?'<tr><td colspan="5">この過去月は部署別TimeDesignerデータ未登録です。</td></tr>':'<tr><td colspan="5">他部署応援データはありません。</td></tr>')
 }
-function renderComparison(){const c=metrics(currentBundle),p=metrics(prevBundle),y=metrics(yearBundle),m=currentBundle.monthly||{},pm=prevBundle.monthly||{},ym=yearBundle.monthly||{},od=orderDeadlineStats(currentBundle),op=orderDeadlineStats(prevBundle),oy=orderDeadlineStats(yearBundle);const rows=[['受注件数',n(m.orders),n(pm.orders),n(ym.orders),false,false],['受注処理能力（件/h）',c.orderHourlyRate,p.orderHourlyRate,y.orderHourlyRate,false,false],['送り状期限達成率',od.rate,op.rate,oy.rate,false,true],['出荷件数',c.shipments,p.shipments,y.shipments,false,false],['誤出荷PPM（低いほど良い）',c.ppm,p.ppm,y.ppm,true,false],['48H以内入庫率',n(m.receiving_rate),n(pm.receiving_rate),n(ym.receiving_rate),false,true],['発送費合計',c.shipNet,p.shipNet,y.shipNet,true,false],['発送費/件',c.shipPer,p.shipPer,y.shipPer,true,false],['資材費',n(m.material_cost),n(pm.material_cost),n(ym.material_cost),true,false],['タイミー費',n(m.timee_cost),n(pm.timee_cost),n(ym.timee_cost),true,false],['OPLH',c.oplh,p.oplh,y.oplh,false,false]];$('compareBody').innerHTML=rows.map(r=>`<tr><td>${r[0]}</td><td>${r[5]?pct(r[1]):fmt(r[1],1)}</td><td>${r[5]?pct(r[2]):fmt(r[2],1)}</td><td>${diff(r[1],r[2],r[4],r[5])}</td><td>${r[5]?pct(r[3]):fmt(r[3],1)}</td><td>${diff(r[1],r[3],r[4],r[5])}</td></tr>`).join('')}
+function fiscalValue(v,type='number',partial=false){let s=type==='percent'?pct(v):(type==='yen'?yen(v):fmt(v,1));if(v!=null&&partial)s+=' ※';return s}
+function renderComparison(){
+ const c=metrics(currentBundle),p=metrics(prevBundle),y=metrics(yearBundle),m=currentBundle.monthly||{},pm=prevBundle.monthly||{},ym=yearBundle.monthly||{},od=orderDeadlineStats(currentBundle),op=orderDeadlineStats(prevBundle),oy=orderDeadlineStats(yearBundle);
+ const rows=[['受注件数',n(m.orders),n(pm.orders),n(ym.orders),false,false],['受注処理能力（件/h）',c.orderHourlyRate,p.orderHourlyRate,y.orderHourlyRate,false,false],['送り状期限達成率',od.rate,op.rate,oy.rate,false,true],['出荷件数',c.shipments,p.shipments,y.shipments,false,false],['誤出荷PPM（低いほど良い）',c.ppm,p.ppm,y.ppm,true,false],['48H以内入庫率',n(m.receiving_rate),n(pm.receiving_rate),n(ym.receiving_rate),false,true],['発送費合計',c.shipNet,p.shipNet,y.shipNet,true,false],['発送費/件',c.shipPer,p.shipPer,y.shipPer,true,false],['資材費',n(m.material_cost),n(pm.material_cost),n(ym.material_cost),true,false],['タイミー費',n(m.timee_cost),n(pm.timee_cost),n(ym.timee_cost),true,false],['OPLH',c.oplh,p.oplh,y.oplh,false,false]];
+ $('compareBody').innerHTML=rows.map(r=>`<tr><td>${r[0]}</td><td>${r[5]?pct(r[1]):fmt(r[1],1)}</td><td>${r[5]?pct(r[2]):fmt(r[2],1)}</td><td>${diff(r[1],r[2],r[4],r[5])}</td><td>${r[5]?pct(r[3]):fmt(r[3],1)}</td><td>${diff(r[1],r[3],r[4],r[5])}</td></tr>`).join('');
+ if(!fiscalMeta?.endYm||!fiscalCurrent){$('fiscalPeriodNote').textContent='今年度の確定済み月はまだありません。';$('fiscalCompareBody').innerHTML='<tr><td colspan="4">年度集計データはありません。</td></tr>';return}
+ const endMonth=Number(fiscalMeta.endYm.split('-')[1]),monthsLabel='3〜'+endMonth+'月度';
+ $('fiscalCurrentHead').textContent=fiscalMeta.fy+'年度 '+monthsLabel;
+ $('fiscalPriorHead').textContent=fiscalMeta.priorFy+'年度 '+monthsLabel;
+ $('fiscalPeriodNote').textContent=fiscalMeta.fy+'年度 '+fiscalMeta.startYm.replace('-','/')+'〜'+fiscalMeta.endYm.replace('-','/')+'（確定済み '+fiscalCurrent.months+'か月）';
+ const fc=fiscalCurrent,fp=fiscalPrior||{};
+ const fyRows=[
+  ['受注件数',fc.orders,fp.orders,false,'number',!fc.ordersComplete,!fp.ordersComplete],
+  ['受注処理能力（件/h）',fc.orderHourlyRate,fp.orderHourlyRate,false,'number',false,false],
+  ['送り状期限達成率',fc.deadlineRate,fp.deadlineRate,false,'percent',false,false],
+  ['出荷件数',fc.shipments,fp.shipments,false,'number',false,false],
+  ['誤出荷PPM（低いほど良い）',fc.ppm,fp.ppm,true,'number',false,false],
+  ['48H以内入庫率（平均）',fc.receivingAvg,fp.receivingAvg,false,'percent',fc.receivingCount<fc.months,fp.receivingCount<fp.months],
+  ['発送費合計',fc.shipNet,fp.shipNet,true,'yen',false,false],
+  ['発送費/件',fc.shipPer,fp.shipPer,true,'yen',false,false],
+  ['資材費',fc.materialCost,fp.materialCost,true,'yen',!fc.materialComplete,!fp.materialComplete],
+  ['タイミー費',fc.timeeCost,fp.timeeCost,true,'yen',!fc.timeeComplete,!fp.timeeComplete],
+  ['OPLH',fc.oplh,fp.oplh,false,'number',false,false]
+ ];
+ $('fiscalCompareBody').innerHTML=fyRows.map(r=>`<tr><td>${r[0]}</td><td>${fiscalValue(r[1],r[4],r[5])}</td><td>${fiscalValue(r[2],r[4],r[6])}</td><td>${diff(r[1],r[2],r[3],r[4]==='percent')}</td></tr>`).join('')
+}
 async function unlockMonth(){
  const m=currentBundle.monthly||{};if(m.status!=='confirmed')return;
  if(!confirm(currentBundle.ym+'月度のロックを解除しますか？\nデータは変更せず、編集可能な状態にします。修正後は「月度確定」で再ロックしてください。'))return;
