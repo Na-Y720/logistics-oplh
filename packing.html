@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>梱包詳細</title>
+<link rel="stylesheet" href="cost.css">
+<style>
+.pack-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.pack-card h3{margin:0 0 4px}
+.pack-metrics{display:grid;grid-template-columns:1fr;gap:8px;margin-top:14px}
+.pack-row{display:flex;justify-content:space-between;gap:16px;padding:10px 12px;border:1px solid #e5e7eb;border-radius:10px;background:#f8fafc}
+.pack-row span{color:#667085;font-size:13px}
+.pack-row b{text-align:right}
+.pack-table-card{margin-top:16px}
+@media(max-width:900px){.pack-grid{grid-template-columns:1fr}.pack-row{align-items:flex-start}}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div>
+    <h1>梱包詳細</h1>
+    <div class="sub">自動梱包機・手梱包の月次能力と年度推移</div>
+  </div>
+  <div class="top-actions">
+    <span id="userLabel" class="muted"></span>
+    <a class="linkbtn" href="/cost">物流コスト管理へ</a>
+    <a class="linkbtn" href="/worktime">物流PT 作業時間へ</a>
+    <button id="logoutBtn" class="ghost hidden">ログアウト</button>
+  </div>
+</header>
+
+<main>
+<section id="authView" class="card auth hidden">
+  <h2>ログイン</h2>
+  <p class="muted">既存の物流アプリと同じアカウントを使用します。</p>
+  <label>メールアドレス<input id="email" type="email" autocomplete="username"></label>
+  <label>パスワード<input id="password" type="password" autocomplete="current-password"></label>
+  <button id="loginBtn" class="primary">ログイン</button>
+  <div id="authError" class="error"></div>
+</section>
+
+<div id="appView" class="hidden">
+  <section class="hero card">
+    <div>
+      <div class="eyebrow">対象月度</div>
+      <div class="month-row">
+        <button id="prevMonthBtn" class="ghost" type="button">＜</button>
+        <input id="monthPick" type="month">
+        <button id="nextMonthBtn" class="ghost" type="button">＞</button>
+        <span id="statusBadge" class="badge">—</span>
+      </div>
+      <div id="monthRange" class="muted">—</div>
+    </div>
+    <div class="hero-actions">
+      <button id="reloadBtn" class="ghost">再読み込み</button>
+    </div>
+  </section>
+
+  <section class="pack-grid">
+    <section class="card pack-card">
+      <h3>Auto1 ポスト便</h3>
+      <div class="muted">自動梱包機</div>
+      <div class="pack-metrics">
+        <div class="pack-row"><span>1件ラップタイム</span><b id="a1Lap">—</b></div>
+        <div class="pack-row"><span>1時間当たりの梱包数</span><b id="a1Hourly">—</b></div>
+        <div class="pack-row"><span>1ヵ月間で通した個数</span><b id="a1Count">—</b></div>
+        <div class="pack-row"><span>1ヵ月間で要した時間</span><b id="a1Hours">—</b></div>
+        <div class="pack-row"><span>仕分け含め3名で作業した場合の1時間個数</span><b id="a1Three">—</b></div>
+      </div>
+    </section>
+
+    <section class="card pack-card">
+      <h3>Auto2 ゆうパック</h3>
+      <div class="muted">自動梱包機</div>
+      <div class="pack-metrics">
+        <div class="pack-row"><span>1件ラップタイム</span><b id="a2Lap">—</b></div>
+        <div class="pack-row"><span>1時間当たりの梱包数</span><b id="a2Hourly">—</b></div>
+        <div class="pack-row"><span>1ヵ月間で通した個数</span><b id="a2Count">—</b></div>
+        <div class="pack-row"><span>1ヵ月間で要した時間</span><b id="a2Hours">—</b></div>
+        <div class="pack-row"><span>仕分け含め3名で作業した場合の1時間個数</span><b id="a2Three">—</b></div>
+      </div>
+    </section>
+
+    <section class="card pack-card">
+      <h3>手梱包</h3>
+      <div class="muted">TimeDesigner＋物流PT＋タイミー</div>
+      <div class="pack-metrics">
+        <div class="pack-row"><span>1件ラップタイム</span><b id="handLap">—</b></div>
+        <div class="pack-row"><span>1時間当たりの梱包数</span><b id="handHourly">—</b></div>
+        <div class="pack-row"><span>1ヵ月間で要した時間</span><b id="handHours">—</b></div>
+      </div>
+    </section>
+  </section>
+
+  <section class="card" style="margin-top:16px">
+    <div class="hint">
+      自動梱包機の月間所要時間＝通過個数×ラップタイム÷3600。3名作業時の1時間個数は、機械の1時間当たり処理数÷3で人時換算します。
+      手梱包の月間時間は社員・他部署・物流PT・タイミーの手梱包時間を合算します。
+    </div>
+  </section>
+
+  <section class="card pack-table-card">
+    <div class="section-head"><div><h3>Auto1 ポスト便 年度月別</h3><div id="fiscalNote1" class="muted">—</div></div></div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>月度</th><th>状態</th><th>ラップタイム/秒</th><th>1時間当たり/個</th><th>月間通過個数</th><th>月間時間/h</th><th>3名作業時/個・人時</th></tr></thead>
+      <tbody id="auto1FiscalBody"></tbody>
+    </table></div>
+  </section>
+
+  <section class="card pack-table-card">
+    <div class="section-head"><div><h3>Auto2 ゆうパック 年度月別</h3><div id="fiscalNote2" class="muted">—</div></div></div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>月度</th><th>状態</th><th>ラップタイム/秒</th><th>1時間当たり/個</th><th>月間通過個数</th><th>月間時間/h</th><th>3名作業時/個・人時</th></tr></thead>
+      <tbody id="auto2FiscalBody"></tbody>
+    </table></div>
+  </section>
+
+  <section class="card pack-table-card">
+    <div class="section-head"><div><h3>手梱包 年度月別</h3><div id="fiscalNote3" class="muted">—</div></div></div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>月度</th><th>状態</th><th>ラップタイム/秒</th><th>1時間当たり/個</th><th>月間時間/h</th></tr></thead>
+      <tbody id="handFiscalBody"></tbody>
+    </table></div>
+  </section>
+</div>
+</main>
+<script src="packing.js"></script>
+</body>
+</html>
