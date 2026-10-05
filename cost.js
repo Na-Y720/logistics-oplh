@@ -178,13 +178,14 @@ function metrics(b){const m=b?.monthly||{},ship=b?.shipping||[],tdRows=b?.td||[]
  const ptPackMin=ptHandPackMin+ptAutoPackMin;
  const timeePick=(Number(m.timee_picking_hours)||0)*60,timeePack=(Number(m.timee_packing_hours)||0)*60;
  const pickHours=(empPickMin+ptPickMin+timeePick)/60,packHours=(empPackMin+ptPackMin+timeePack)/60,totalHours=pickHours+packHours;
+ const pickingHourlyRate=shipments&&pickHours?shipments/pickHours:null;
  let oplh=shipments&&totalHours?shipments/totalHours:null;
  if(m.origin==='legacy_spreadsheet'&&m.oplh_legacy!=null)oplh=Number(m.oplh_legacy);
  const ord=orderMinutes(tdRows);
  const orderTotalMinutes=ord.am+ord.z+ord.pm+ord.evening+ord.next;
  const orderTotalHours=orderTotalMinutes/60;
  const orderHourlyRate=(m.orders!=null&&orderTotalHours>0)?Number(m.orders)/orderTotalHours:null;
- return{shipments,shipNet,shipPer,ppm,pickHours,packHours,totalHours,oplh,td,ord,orderTotalHours,orderHourlyRate,
+ return{shipments,shipNet,shipPer,ppm,pickHours,packHours,totalHours,oplh,pickingHourlyRate,td,ord,orderTotalHours,orderHourlyRate,
    empPickHours:empPickMin/60,empPackHours:empPackMin/60,ptPickHours:ptPickMin/60,ptPackHours:ptPackMin/60,
    timeePickHours:Number(m.timee_picking_hours)||0,timeePackHours:Number(m.timee_packing_hours)||0,
    detail:{
@@ -328,12 +329,12 @@ function renderDashboard(){const c=metrics(currentBundle),p=metrics(prevBundle),
 function setInput(id,v,percent=false){$(id).value=v==null?'':(percent?Number(v)*100:v)}
 function renderMonthly(){const m=currentBundle.monthly||{},locked=m.status==='confirmed';
  setInput('mOrders',m.orders);setInput('mComplaints',m.complaint_count);setInput('mReceiving',m.receiving_rate,true);setInput('mShippingWork',m.shipping_work_count);setInput('mPickComplaints',m.picking_complaint_count);setInput('mMaterialCost',m.material_cost);setInput('mSilverCost',m.silver_cost);setInput('mTimeeCost',m.timee_cost);setInput('mTimeePick',m.timee_picking_hours);setInput('mTimeePack',m.timee_packing_hours);
- setInput('mAuto1Lap',m.auto1_lap_seconds);setInput('mAuto1Count',m.auto1_count);setInput('mAuto2Lap',m.auto2_lap_seconds);setInput('mAuto2Count',m.auto2_count);
+ setInput('mAuto1Lap',m.auto1_lap_seconds);setInput('mAuto1Count',m.auto1_count);setInput('mAuto2Lap',m.auto2_lap_seconds);setInput('mAuto2Count',m.auto2_count);setInput('mHandPackLap',m.hand_pack_lap_seconds);
  ['mOrders','mComplaints','mReceiving','mShippingWork','mPickComplaints','mMaterialCost','mSilverCost','mTimeeCost','mTimeePick','mTimeePack','mAuto1Lap','mAuto1Count','mAuto2Lap','mAuto2Count'].forEach(id=>$(id).disabled=locked);
  $('saveMonthlyBtn').disabled=locked;$('legacyNotice').classList.toggle('hidden',m.origin!=='legacy_spreadsheet');$('legacyNotice').textContent=m.origin==='legacy_spreadsheet'?(locked?'旧スプレッドシートから移行した値です。修正する場合は上部の「ロック解除」を押してください。':'旧スプレッドシート由来の月度をロック解除中です。修正後は「月度確定」で再ロックしてください。'):''
 }
 function inputNum(id,divide=1){const v=$(id).value.trim();return v===''?null:Number(v)/divide}
-async function saveMonthly(){const m=currentBundle.monthly;if(m.status==='confirmed')return;const body={owner_id:user.id,month_ym:currentBundle.ym,period_start:currentBundle.start,period_end:currentBundle.end,status:'open',origin:m.origin||'app',orders:inputNum('mOrders'),complaint_count:inputNum('mComplaints'),receiving_rate:inputNum('mReceiving',100),shipping_work_count:inputNum('mShippingWork'),picking_complaint_count:inputNum('mPickComplaints'),material_cost:inputNum('mMaterialCost'),silver_cost:inputNum('mSilverCost'),timee_cost:inputNum('mTimeeCost'),timee_picking_hours:inputNum('mTimeePick'),timee_packing_hours:inputNum('mTimeePack'),auto1_lap_seconds:inputNum('mAuto1Lap'),auto1_count:inputNum('mAuto1Count'),auto2_lap_seconds:inputNum('mAuto2Lap'),auto2_count:inputNum('mAuto2Count'),updated_at:new Date().toISOString()};
+async function saveMonthly(){const m=currentBundle.monthly;if(m.status==='confirmed')return;const body={owner_id:user.id,month_ym:currentBundle.ym,period_start:currentBundle.start,period_end:currentBundle.end,status:'open',origin:m.origin||'app',orders:inputNum('mOrders'),complaint_count:inputNum('mComplaints'),receiving_rate:inputNum('mReceiving',100),shipping_work_count:inputNum('mShippingWork'),picking_complaint_count:inputNum('mPickComplaints'),material_cost:inputNum('mMaterialCost'),silver_cost:inputNum('mSilverCost'),timee_cost:inputNum('mTimeeCost'),timee_picking_hours:inputNum('mTimeePick'),timee_packing_hours:inputNum('mTimeePack'),auto1_lap_seconds:inputNum('mAuto1Lap'),auto1_count:inputNum('mAuto1Count'),auto2_lap_seconds:inputNum('mAuto2Lap'),auto2_count:inputNum('mAuto2Count'),hand_pack_lap_seconds:inputNum('mHandPackLap'),updated_at:new Date().toISOString()};
  try{await rest('logistics_cost_monthly','on_conflict=owner_id%2Cmonth_ym',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(body)});$('monthlyMessage').className='message ok';$('monthlyMessage').textContent='保存しました。';await loadAll()}catch(e){$('monthlyMessage').className='message bad';$('monthlyMessage').textContent=e.message}}
 
 async function parseSagawaFile(file){
@@ -574,6 +575,7 @@ function renderFiscalMonthly(){
    <td><span class="badge ${badgeClass}">${status}</span></td>
    <td>${fmt(n(m.orders))}</td>
    <td>${c.orderHourlyRate!=null?fmt(c.orderHourlyRate,1)+'件/h':'—'}</td>
+   <td>${c.pickingHourlyRate!=null?fmt(c.pickingHourlyRate,1)+'件/h':'—'}</td>
    <td>${pct(d.rate)}</td>
    <td>${c.shipments?fmt(c.shipments):'—'}</td>
    <td class="${c.ppm!=null?(c.ppm<=100?'good':'bad'):''}">${fmt(c.ppm,1)}</td>
