@@ -413,3 +413,57 @@ dialog{border:0;border-radius:14px;padding:0;box-shadow:0 18px 50px rgba(15,23,4
   color:#854d0e;
   border-color:#facc15;
 }
+
+
+/* Summary: use the available viewport width without shrinking the text. */
+main:has(#summaryTab:not(.hidden)){max-width:none;padding-inline:12px}
+#summaryTab{min-width:0}
+#summaryTab .card{padding:14px 10px}
+#summaryTab .tablewrap{overflow:visible}
+#summaryTab .summary-table{width:100%;min-width:0;table-layout:fixed}
+#summaryTab .summary-table th,
+#summaryTab .summary-table td{
+  padding:10px 4px;
+  white-space:normal;
+  overflow-wrap:anywhere;
+  font-size:16px;
+  line-height:1.4;
+  font-variant-numeric:tabular-nums;
+}
+#summaryTab .summary-table th{font-size:14px;vertical-align:middle}
+#summaryTab .summary-table th:first-child,
+#summaryTab .summary-table td:first-child{position:static;width:11%;padding-left:8px}
+#summaryTab .summary-table th:nth-child(3){width:12%}
+#summaryTab .summary-table th:nth-child(9){width:9%}
+#summaryTab .summary-table th:nth-child(10){width:8%}
+#summaryTab .summary-table th:nth-child(12){width:9%}
+#summaryTab .summary-table td .muted{font-size:14px}
+#summaryTab .kpi span,#summaryTab .period-controls label{font-size:14px}
+#summaryTab .kpi b{font-size:26px}
+#summaryTab .rangebox{min-width:0;overflow-wrap:anywhere}
+#summaryTab .period-controls>*{max-width:100%}
+/* Below tablet landscape width, keep every value readable in labelled rows. */
+@media(max-width:1000px){
+  #summaryTab .summary-table,
+  #summaryTab .summary-table tbody{display:block}
+  #summaryTab .summary-table thead{
+    position:absolute;width:1px;height:1px;padding:0;margin:-1px;
+    overflow:hidden;clip-path:inset(50%);white-space:nowrap;
+  }
+  #summaryTab .summary-table tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+  #summaryTab .summary-table tr+tr{border-top:2px solid var(--line)}
+  #summaryTab .summary-table td{
+    display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;
+    padding:9px 10px;min-width:0;border-bottom:1px solid #e5e7eb;
+  }
+  #summaryTab .summary-table td:first-child{
+    display:block;grid-column:1 / -1;width:auto;background:#eef2f6;padding:10px;
+  }
+  #summaryTab .summary-table td:not(:first-child)::before{
+    content:attr(data-label);text-align:left;font-size:14px;font-weight:600;color:#4b5563;
+  }
+}
+@media(max-width:540px){
+  #summaryTab .summary-table tr{grid-template-columns:minmax(0,1fr)}
+  #summaryTab .summary-table td{border-right:0}
+}

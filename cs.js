@@ -329,6 +329,7 @@ async function loadPeriod(){
     const by=new Map(staff.map(s=>[s.id,emptyAgg()]));
     (rows||[]).forEach(r=>{if(!by.has(r.staff_id))by.set(r.staff_id,emptyAgg());addReport(by.get(r.staff_id),r)});
     const tb=$('periodBody');tb.innerHTML='';
+    const labels=Array.from(document.querySelectorAll('.summary-table thead th'),th=>th.textContent);
     for(const s of staff){
       const a=by.get(s.id)||emptyAgg(),m=calcMetrics(a);
       const has=Object.values(a).some(v=>typeof v==='number'&&v>0);
@@ -339,6 +340,7 @@ async function loadPeriod(){
         <td>${a.mail_complaint_count}</td><td>${m.mail}</td><td><b>${m.total}</b></td><td>${a.site_return_first_resolution_count}</td>
         <td>${pct(a.site_return_first_resolution_count,a.mail_site_return_count)}</td><td>${a.returns_exchange_count}</td>
         <td>${a.complaint_count}</td><td>${a.store_service_count}</td>`;
+      Array.from(tr.cells).forEach((cell,i)=>{cell.dataset.label=labels[i]});
       tb.appendChild(tr);
     }
   }catch(e){setMessage('periodMessage','集計に失敗しました: '+e.message,'bad')}
