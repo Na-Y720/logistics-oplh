@@ -14,6 +14,7 @@
   </div>
   <div class="top-actions">
     <span id="userLabel" class="muted"></span>
+    <a class="linkbtn" href="/packing">梱包詳細へ</a>
     <a class="linkbtn" href="worktime.html">物流PT 作業時間へ</a>
     <a class="linkbtn" href="./">人時・シフト管理へ</a>
     <button id="logoutBtn" class="ghost hidden">ログアウト</button>
@@ -126,6 +127,7 @@
         <label>Auto1 月間通過個数<input id="mAuto1Count" type="number" min="0"></label>
         <label>Auto2 ゆうパック ラップタイム(秒)<input id="mAuto2Lap" type="number" min="0" step="0.01"></label>
         <label>Auto2 月間通過個数<input id="mAuto2Count" type="number" min="0"></label>
+        <label>手梱包 ラップタイム(秒)<input id="mHandPackLap" type="number" min="0" step="0.01"></label>
       </div>
       <div class="actions"><button id="saveMonthlyBtn" class="primary">保存</button></div>
       <div id="monthlyMessage" class="message"></div>
@@ -342,6 +344,7 @@
               <th>状態</th>
               <th>受注件数</th>
               <th>受注処理能力</th>
+              <th>ピッキング件数/h</th>
               <th>9:45達成率</th>
               <th>出荷件数</th>
               <th>誤出荷PPM</th>
