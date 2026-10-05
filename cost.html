@@ -280,15 +280,27 @@
   </section>
 
   <section id="comparisonTab" class="hidden">
-    <section class="card">
-      <div class="section-head"><div><h3>前月・前年同月比較</h3><div class="muted">誤出荷PPM・発送費など、低い方が良い指標は差分色を反転しています。誤出荷PPMは0が最良、目標100以下です。</div></div></div>
-      <div class="tablewrap">
-        <table>
-          <thead><tr><th>指標</th><th>当月</th><th>前月</th><th>前月差</th><th>前年同月</th><th>前年差</th></tr></thead>
-          <tbody id="compareBody"></tbody>
-        </table>
-      </div>
-    </section>
+    <div class="grid2">
+      <section class="card">
+        <div class="section-head"><div><h3>前月・前年同月比較</h3><div class="muted">誤出荷PPM・発送費など、低い方が良い指標は差分色を反転しています。誤出荷PPMは0が最良、目標100以下です。</div></div></div>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>指標</th><th>当月</th><th>前月</th><th>前月差</th><th>前年同月</th><th>前年差</th></tr></thead>
+            <tbody id="compareBody"></tbody>
+          </table>
+        </div>
+      </section>
+      <section class="card">
+        <div class="section-head"><div><h3>今年度累計・昨対</h3><div id="fiscalPeriodNote" class="muted">3月度～翌年2月度</div></div></div>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>指標</th><th id="fiscalCurrentHead">今年度</th><th id="fiscalPriorHead">前年度同期間</th><th>昨対</th></tr></thead>
+            <tbody id="fiscalCompareBody"></tbody>
+          </table>
+        </div>
+        <div class="hint">確定済み月だけを年度集計に採用します。年度途中は前年も同じ月数で比較します。48H以内入庫率は月次率の単純平均です。※は未入力月があり、入力済み月のみの合計です。</div>
+      </section>
+    </div>
   </section>
 </div>
 </main>
