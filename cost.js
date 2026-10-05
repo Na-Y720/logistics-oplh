@@ -2,7 +2,7 @@ const SB_URL='https://qfcgxefymdodjrprhfvu.supabase.co';
 const SB_KEY='sb_publishable_KzELBvq1CkhnHL_CXN99GA_5-an2G6m';
 const SESSION_KEY='logistics_monthly_oplh_session_v1';
 const $=id=>document.getElementById(id);
-let session=null,user=null,currentBundle=null,prevBundle=null,yearBundle=null,fiscalCurrent=null,fiscalPrior=null,fiscalMeta=null,refreshPromise=null,orderAutoSaveTimer=null,orderAutoSavePromise=null,orderDirty=false,orderSaveFailed=false;
+let session=null,user=null,currentBundle=null,prevBundle=null,yearBundle=null,fiscalCurrent=null,fiscalPrior=null,fiscalMeta=null,fiscalMonthlyBundles=[],refreshPromise=null,orderAutoSaveTimer=null,orderAutoSavePromise=null,orderDirty=false,orderSaveFailed=false;
 const TD_ACTIVITY_MAP={
  'オーダーピッキング（送り状ピッキング）':{key:'picking',label:'オーダーピッキング（送り状ピッキング）'},
  'オーダーピッキング':{key:'picking',label:'オーダーピッキング（送り状ピッキング）'},
@@ -101,11 +101,12 @@ function aggregateFiscal(bundles){
  }
 }
 async function loadFiscalComparison(){
- const currentYm=companyMonthToday(),fy=fiscalStartYear(currentYm),startYm=fy+'-03',candidate=await loadBundleRange(startYm,currentYm);
+ const currentYm=companyMonthToday(),fy=fiscalStartYear(currentYm),startYm=fy+'-03',fiscalEnd=(fy+1)+'-02';
+ const allCurrent=await loadBundleRange(startYm,fiscalEnd),candidate=allCurrent.filter(b=>b.ym<=currentYm);
  const consecutive=[];for(const b of candidate){if(b.monthly?.status==='confirmed')consecutive.push(b);else break}
- if(!consecutive.length)return{current:null,prior:null,meta:{fy,startYm,endYm:null,priorFy:fy-1}};
+ if(!consecutive.length)return{current:null,prior:null,monthly:allCurrent,meta:{fy,startYm,endYm:null,priorFy:fy-1,fiscalEnd}};
  const endYm=consecutive[consecutive.length-1].ym,priorStart=(fy-1)+'-03',priorEnd=shiftYm(endYm,-12),priorBundles=await loadBundleRange(priorStart,priorEnd);
- return{current:aggregateFiscal(consecutive),prior:aggregateFiscal(priorBundles),meta:{fy,startYm,endYm,priorFy:fy-1,priorStart,priorEnd}}
+ return{current:aggregateFiscal(consecutive),prior:aggregateFiscal(priorBundles),monthly:allCurrent,meta:{fy,startYm,endYm,priorFy:fy-1,priorStart,priorEnd,fiscalEnd}}
 }
 
 function sum(obj,key){return(obj||[]).reduce((a,r)=>a+(Number(r[key])||0),0)}
@@ -292,7 +293,7 @@ function renderTDImport(){
 
 async function loadAll(){const ym=$('monthPick').value||companyMonthToday();$('monthPick').value=ym;const[start,end]=monthRange(ym);$('monthRange').textContent=`${start} ～ ${end}（21日～翌20日）`;try{
  const [cb,pb,yb,fy]=await Promise.all([loadBundle(ym,{create:true}),loadBundle(previousYm(ym)),loadBundle(priorYearYm(ym)),loadFiscalComparison()]);
- currentBundle=cb;prevBundle=pb;yearBundle=yb;fiscalCurrent=fy.current;fiscalPrior=fy.prior;fiscalMeta=fy.meta;
+ currentBundle=cb;prevBundle=pb;yearBundle=yb;fiscalCurrent=fy.current;fiscalPrior=fy.prior;fiscalMeta=fy.meta;fiscalMonthlyBundles=fy.monthly||[];
  clearTimeout(orderAutoSaveTimer);orderDirty=false;renderAll()
  }catch(e){console.error(e);alert('読み込みに失敗しました: '+e.message)}
 }
@@ -512,7 +513,7 @@ function renderComparison(){
  const c=metrics(currentBundle),p=metrics(prevBundle),y=metrics(yearBundle),m=currentBundle.monthly||{},pm=prevBundle.monthly||{},ym=yearBundle.monthly||{},od=orderDeadlineStats(currentBundle),op=orderDeadlineStats(prevBundle),oy=orderDeadlineStats(yearBundle);
  const rows=[['受注件数',n(m.orders),n(pm.orders),n(ym.orders),false,false],['受注処理能力（件/h）',c.orderHourlyRate,p.orderHourlyRate,y.orderHourlyRate,false,false],['送り状期限達成率',od.rate,op.rate,oy.rate,false,true],['出荷件数',c.shipments,p.shipments,y.shipments,false,false],['誤出荷PPM（低いほど良い）',c.ppm,p.ppm,y.ppm,true,false],['48H以内入庫率',n(m.receiving_rate),n(pm.receiving_rate),n(ym.receiving_rate),false,true],['発送費合計',c.shipNet,p.shipNet,y.shipNet,true,false],['発送費/件',c.shipPer,p.shipPer,y.shipPer,true,false],['資材費',n(m.material_cost),n(pm.material_cost),n(ym.material_cost),true,false],['タイミー費',n(m.timee_cost),n(pm.timee_cost),n(ym.timee_cost),true,false],['OPLH',c.oplh,p.oplh,y.oplh,false,false]];
  $('compareBody').innerHTML=rows.map(r=>`<tr><td>${r[0]}</td><td>${r[5]?pct(r[1]):fmt(r[1],1)}</td><td>${r[5]?pct(r[2]):fmt(r[2],1)}</td><td>${diff(r[1],r[2],r[4],r[5])}</td><td>${r[5]?pct(r[3]):fmt(r[3],1)}</td><td>${diff(r[1],r[3],r[4],r[5])}</td></tr>`).join('');
- if(!fiscalMeta?.endYm||!fiscalCurrent){$('fiscalPeriodNote').textContent='今年度の確定済み月はまだありません。';$('fiscalCompareBody').innerHTML='<tr><td colspan="4">年度集計データはありません。</td></tr>';return}
+ if(!fiscalMeta?.endYm||!fiscalCurrent){$('fiscalPeriodNote').textContent='今年度の確定済み月はまだありません。';$('fiscalCompareBody').innerHTML='<tr><td colspan="4">年度集計データはありません。</td></tr>';renderFiscalMonthly();return}
  const endMonth=Number(fiscalMeta.endYm.split('-')[1]),monthsLabel='3〜'+endMonth+'月度';
  $('fiscalCurrentHead').textContent=fiscalMeta.fy+'年度 '+monthsLabel;
  $('fiscalPriorHead').textContent=fiscalMeta.priorFy+'年度 '+monthsLabel;
@@ -531,7 +532,29 @@ function renderComparison(){
   ['タイミー費',fc.timeeCost,fp.timeeCost,true,'yen',!fc.timeeComplete,!fp.timeeComplete],
   ['OPLH',fc.oplh,fp.oplh,false,'number',false,false]
  ];
- $('fiscalCompareBody').innerHTML=fyRows.map(r=>`<tr><td>${r[0]}</td><td>${fiscalValue(r[1],r[4],r[5])}</td><td>${fiscalValue(r[2],r[4],r[6])}</td><td>${diff(r[1],r[2],r[3],r[4]==='percent')}</td></tr>`).join('')
+ $('fiscalCompareBody').innerHTML=fyRows.map(r=>`<tr><td>${r[0]}</td><td>${fiscalValue(r[1],r[4],r[5])}</td><td>${fiscalValue(r[2],r[4],r[6])}</td><td>${diff(r[1],r[2],r[3],r[4]==='percent')}</td></tr>`).join('');
+ renderFiscalMonthly()
+}
+function renderFiscalMonthly(){
+ const fy=fiscalMeta?.fy||fiscalStartYear(companyMonthToday()),rows=fiscalMonthlyBundles||[];
+ $('fiscalMonthlyNote').textContent=fy+'年度（'+fy+'年3月度～'+(fy+1)+'年2月度）';
+ $('fiscalMonthlyBody').innerHTML=rows.map(b=>{
+  const m=b.monthly||{},c=metrics(b),d=orderDeadlineStats(b),exists=!!b.monthly,status=!exists?'未入力':(m.status==='confirmed'?'確定済':'運用中');
+  const badgeClass=!exists?'missing':(m.status==='confirmed'?'confirmed':'open');
+  const monthNum=Number(b.ym.split('-')[1]);
+  return `<tr>
+   <td><b>${monthNum}月度</b></td>
+   <td><span class="badge ${badgeClass}">${status}</span></td>
+   <td>${fmt(n(m.orders))}</td>
+   <td>${c.orderHourlyRate!=null?fmt(c.orderHourlyRate,1)+'件/h':'—'}</td>
+   <td>${pct(d.rate)}</td>
+   <td>${c.shipments?fmt(c.shipments):'—'}</td>
+   <td class="${c.ppm!=null?(c.ppm<=100?'good':'bad'):''}">${fmt(c.ppm,1)}</td>
+   <td>${pct(n(m.receiving_rate))}</td>
+   <td>${c.shipPer!=null?yen(c.shipPer,2):'—'}</td>
+   <td>${fmt(c.oplh,2)}</td>
+  </tr>`
+ }).join('')
 }
 async function unlockMonth(){
  const m=currentBundle.monthly||{};if(m.status!=='confirmed')return;
