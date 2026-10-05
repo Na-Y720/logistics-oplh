@@ -25,3 +25,16 @@ button.primary{background:var(--blue);border-color:var(--blue);color:#fff;font-w
 @media(max-width:1200px){.kpis.six{grid-template-columns:repeat(3,1fr)}.form-grid{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}}
 @media(max-width:760px){.topbar{align-items:flex-start;flex-direction:column}.kpis.six,.kpis.four{grid-template-columns:repeat(2,1fr)}.form-grid{grid-template-columns:1fr}.mini-kpis{grid-template-columns:repeat(2,1fr)}main{padding:14px}}
 .order-count-input{width:110px;max-width:100%;text-align:right;padding:7px 8px}.order-deadline-select{min-width:96px;padding:7px 8px;border:1px solid #d0d5dd;border-radius:8px;background:#fff;color:var(--text)}
+
+/* Keep each carrier's three columns visually grouped in the fiscal table. */
+table:has(> #shippingFiscalMonthlyBody) thead tr:first-child th[colspan]{
+ text-align:center;
+ border-left:2px solid #98a2b3;
+}
+table:has(> #shippingFiscalMonthlyBody) thead tr:nth-child(2) th{
+ text-align:center;
+}
+table:has(> #shippingFiscalMonthlyBody) thead tr:nth-child(2) th:nth-child(3n+1),
+#shippingFiscalMonthlyBody td:nth-child(3n+3){
+ border-left:2px solid #98a2b3;
+}
