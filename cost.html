@@ -175,6 +175,37 @@
         <div class="hint">ヤマト：ネコポス件数を採用件数、請求書全体の税込・税抜額を発送費。日本郵便：元払＋着払の個数を採用件数、発送費は元払金額のみ。対象期間は21日～翌20日。</div>
       </section>
     </div>
+
+    <section class="card" style="margin-top:16px">
+      <div class="section-head">
+        <div>
+          <h3>発送費 年度 月別一覧</h3>
+          <div id="shippingFiscalMonthlyNote" class="muted">3月度～翌年2月度</div>
+        </div>
+      </div>
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr>
+              <th rowspan="2">月度</th>
+              <th rowspan="2">状態</th>
+              <th colspan="3">ヤマト運輸</th>
+              <th colspan="3">佐川急便</th>
+              <th colspan="3">日本郵便</th>
+              <th colspan="3">合計</th>
+            </tr>
+            <tr>
+              <th>件数</th><th>税抜金額</th><th>単価</th>
+              <th>件数</th><th>税抜金額</th><th>単価</th>
+              <th>件数</th><th>税抜金額</th><th>単価</th>
+              <th>件数</th><th>税抜金額</th><th>単価</th>
+            </tr>
+          </thead>
+          <tbody id="shippingFiscalMonthlyBody"></tbody>
+        </table>
+      </div>
+      <div class="hint">運用中月は現時点の途中実績です。配送会社の未取込分は「—」で表示します。金額・単価は税抜です。</div>
+    </section>
   </section>
 
   <section id="timedesignerTab" class="hidden">
