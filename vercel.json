@@ -1,6 +1,16 @@
 {
   "rewrites": [
-    { "source": "/cost", "destination": "/cost.html" },
-    { "source": "/worktime", "destination": "/worktime.html" }
+    {
+      "source": "/cost",
+      "destination": "/cost.html"
+    },
+    {
+      "source": "/packing",
+      "destination": "/packing.html"
+    },
+    {
+      "source": "/worktime",
+      "destination": "/worktime.html"
+    }
   ]
 }
