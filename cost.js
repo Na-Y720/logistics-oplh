@@ -178,14 +178,15 @@ function metrics(b){const m=b?.monthly||{},ship=b?.shipping||[],tdRows=b?.td||[]
  const ptPackMin=ptHandPackMin+ptAutoPackMin;
  const timeePick=(Number(m.timee_picking_hours)||0)*60,timeePack=(Number(m.timee_packing_hours)||0)*60;
  const pickHours=(empPickMin+ptPickMin+timeePick)/60,packHours=(empPackMin+ptPackMin+timeePack)/60,totalHours=pickHours+packHours;
- const pickingHourlyRate=shipments&&pickHours?shipments/pickHours:null;
+ const pickingKpiHours=(empPickMin+ptOrderPickMin+timeePick)/60;
+ const pickingHourlyRate=shipments&&pickingKpiHours?shipments/pickingKpiHours:null;
  let oplh=shipments&&totalHours?shipments/totalHours:null;
  if(m.origin==='legacy_spreadsheet'&&m.oplh_legacy!=null)oplh=Number(m.oplh_legacy);
  const ord=orderMinutes(tdRows);
  const orderTotalMinutes=ord.am+ord.z+ord.pm+ord.evening+ord.next;
  const orderTotalHours=orderTotalMinutes/60;
  const orderHourlyRate=(m.orders!=null&&orderTotalHours>0)?Number(m.orders)/orderTotalHours:null;
- return{shipments,shipNet,shipPer,ppm,pickHours,packHours,totalHours,oplh,pickingHourlyRate,td,ord,orderTotalHours,orderHourlyRate,
+ return{shipments,shipNet,shipPer,ppm,pickHours,packHours,totalHours,oplh,pickingKpiHours,pickingHourlyRate,td,ord,orderTotalHours,orderHourlyRate,
    empPickHours:empPickMin/60,empPackHours:empPackMin/60,ptPickHours:ptPickMin/60,ptPackHours:ptPackMin/60,
    timeePickHours:Number(m.timee_picking_hours)||0,timeePackHours:Number(m.timee_packing_hours)||0,
    detail:{
