@@ -54,7 +54,7 @@
     <button class="tab active" data-tab="dashboard">ダッシュボード</button>
     <button class="tab" data-tab="monthly">月次入力</button>
     <button class="tab" data-tab="shipping">発送費</button>
-    <button class="tab" data-tab="timedesigner">TimeDesigner取込</button>
+    <button class="tab" data-tab="timedesigner">各種取り込み</button>
     <button class="tab" data-tab="work">作業時間</button>
     <button class="tab" data-tab="comparison">前月・前年比較</button>
   </nav>
@@ -123,11 +123,6 @@
         <label>タイミー費<input id="mTimeeCost" type="number" min="0"></label>
         <label>タイミー ピッキング時間(h)<input id="mTimeePick" type="number" min="0" step="0.01"></label>
         <label>タイミー 梱包時間(h)<input id="mTimeePack" type="number" min="0" step="0.01"></label>
-        <label>Auto1 ポスト便 ラップタイム(秒)<input id="mAuto1Lap" type="number" min="0" step="0.01"></label>
-        <label>Auto1 月間通過個数<input id="mAuto1Count" type="number" min="0"></label>
-        <label>Auto2 ゆうパック ラップタイム(秒)<input id="mAuto2Lap" type="number" min="0" step="0.01"></label>
-        <label>Auto2 月間通過個数<input id="mAuto2Count" type="number" min="0"></label>
-        <label>手梱包 ラップタイム(秒)<input id="mHandPackLap" type="number" min="0" step="0.01"></label>
       </div>
       <div class="actions"><button id="saveMonthlyBtn" class="primary">保存</button></div>
       <div id="monthlyMessage" class="message"></div>
@@ -214,7 +209,7 @@
     <section class="card">
       <div class="section-head">
         <div>
-          <h3>TimeDesigner 月次取込</h3>
+          <h3>各種取り込み：TimeDesigner</h3>
           <div class="muted">選択月度（21日～翌20日）の社員作業時間を置き換え保存します。再取込しても二重計上しません。</div>
           <div class="hint">所属判定はTimeDesignerの部署名を優先し、部署名が空欄の人だけ既存の従業員マスタで補完します。</div>
         </div>
@@ -229,6 +224,33 @@
         <button id="tdImportBtn" class="primary">CSVを取込</button>
       </div>
       <div id="tdImportMessage" class="message"></div>
+    </section>
+
+    <section class="card">
+      <div class="section-head">
+        <div>
+          <h3>各種取り込み：自動梱包機</h3>
+          <div class="muted">月1回、Auto01／Auto02／Hand01を含む元CSVを取り込みます。前回スキャンから15分以上空いた区間は休止として除外します。</div>
+          <div class="hint">Auto01・Auto02の月間通過数／実稼働時間／ラップタイム／1時間当たり処理数を自動集計します。Hand01は参考表示のみで、手梱包数は「全梱包数－Auto01－Auto02」で算出します。</div>
+        </div>
+      </div>
+      <div id="autoPackLockedNotice" class="notice hidden"></div>
+      <div class="form-grid">
+        <label>自動梱包機 CSV
+          <input id="autoPackImportFile" type="file" accept=".csv,text/csv">
+        </label>
+      </div>
+      <div class="actions">
+        <button id="autoPackImportBtn" class="primary">自動梱包機CSVを取込</button>
+      </div>
+      <div id="autoPackImportMessage" class="message"></div>
+      <div id="autoPackImportSummary" class="source-list"></div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>ライン</th><th>月間件数</th><th>実稼働時間</th><th>1件ラップタイム</th><th>1時間当たり</th></tr></thead>
+          <tbody id="autoPackImportBody"></tbody>
+        </table>
+      </div>
     </section>
 
     <section class="card">
