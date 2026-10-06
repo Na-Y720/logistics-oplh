@@ -88,6 +88,7 @@
       <div class="pack-metrics">
         <div class="pack-row"><span>1件ラップタイム</span><b id="handLap">—</b></div>
         <div class="pack-row"><span>1時間当たりの梱包数</span><b id="handHourly">—</b></div>
+        <div class="pack-row"><span>1ヵ月間の手梱包数</span><b id="handCount">—</b></div>
         <div class="pack-row"><span>1ヵ月間で要した時間</span><b id="handHours">—</b></div>
       </div>
     </section>
@@ -96,7 +97,7 @@
   <section class="card" style="margin-top:16px">
     <div class="hint">
       自動梱包機の月間所要時間＝通過個数×ラップタイム÷3600。3名作業時の1時間個数は、機械の1時間当たり処理数÷3で人時換算します。
-      手梱包の月間時間は社員・他部署・物流PT・タイミーの手梱包時間を合算します。
+      手梱包数＝全梱包数－（Auto01通過数＋Auto02通過数）。手梱包の月間時間は社員・他部署・物流PT・タイミーの手梱包時間を合算し、件/hとラップタイムを自動計算します。
     </div>
   </section>
 
@@ -119,7 +120,7 @@
   <section class="card pack-table-card">
     <div class="section-head"><div><h3>手梱包 年度月別</h3><div id="fiscalNote3" class="muted">—</div></div></div>
     <div class="tablewrap"><table>
-      <thead><tr><th>月度</th><th>状態</th><th>ラップタイム/秒</th><th>1時間当たり/個</th><th>月間時間/h</th></tr></thead>
+      <thead><tr><th>月度</th><th>状態</th><th>ラップタイム/秒</th><th>1時間当たり/個</th><th>月間手梱包数</th><th>月間時間/h</th></tr></thead>
       <tbody id="handFiscalBody"></tbody>
     </table></div>
   </section>
