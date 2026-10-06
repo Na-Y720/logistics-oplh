@@ -24,47 +24,58 @@ function hours(v){return v==null||!Number.isFinite(Number(v))?'—':fmt(v,2)+'h'
 function seconds(v){return v==null||!Number.isFinite(Number(v))?'—':fmt(v,2)+'秒'}
 
 function packMetrics(b){
- const m=b?.monthly||{},lap1=Number(m.auto1_lap_seconds)||null,count1=m.auto1_count==null?null:Number(m.auto1_count),lap2=Number(m.auto2_lap_seconds)||null,count2=m.auto2_count==null?null:Number(m.auto2_count),handLap=Number(m.hand_pack_lap_seconds)||null;
- const auto1Hourly=lap1?3600/lap1:null,auto2Hourly=lap2?3600/lap2:null,handHourly=handLap?3600/handLap:null;
- const auto1Hours=lap1&&count1!=null?count1*lap1/3600:null,auto2Hours=lap2&&count2!=null?count2*lap2/3600:null;
+ const m=b?.monthly||{},lap1=Number(m.auto1_lap_seconds)||null,count1=m.auto1_count==null?null:Number(m.auto1_count),lap2=Number(m.auto2_lap_seconds)||null,count2=m.auto2_count==null?null:Number(m.auto2_count);
+ const autoMeta=b?.autoImport?.metadata?.summary||{},a1m=autoMeta.Auto01||{},a2m=autoMeta.Auto02||{};
+ const auto1Hours=a1m.active_hours!=null?Number(a1m.active_hours):(lap1&&count1!=null?count1*lap1/3600:null);
+ const auto2Hours=a2m.active_hours!=null?Number(a2m.active_hours):(lap2&&count2!=null?count2*lap2/3600:null);
+ const auto1Hourly=auto1Hours&&count1!=null?count1/auto1Hours:(lap1?3600/lap1:null),auto2Hourly=auto2Hours&&count2!=null?count2/auto2Hours:(lap2?3600/lap2:null);
  const tdHand=(b?.td||[]).filter(r=>r.activity_key==='hand_pack').reduce((a,r)=>a+(Number(r.work_minutes)||0),0)/60;
  const ptHand=(b?.pt||[]).reduce((a,r)=>a+(Number(r.hand_pack_minutes)||0),0)/60;
  const handHours=tdHand+ptHand+(Number(m.timee_packing_hours)||0);
- return{lap1,count1,auto1Hourly,auto1Hours,auto1Three:auto1Hourly?auto1Hourly/3:null,lap2,count2,auto2Hourly,auto2Hours,auto2Three:auto2Hourly?auto2Hourly/3:null,handLap,handHourly,handHours}
+ const totalPackCount=(b?.shipping||[]).reduce((a,r)=>a+(Number(r.adopted_count)||0),0);
+ const autoCount=(count1||0)+(count2||0),handCount=(count1!=null&&count2!=null&&totalPackCount>=autoCount)?totalPackCount-autoCount:null;
+ const handHourly=handCount!=null&&handHours>0?handCount/handHours:null,handLap=handCount&&handHours>0?handHours*3600/handCount:null;
+ return{lap1,count1,auto1Hourly,auto1Hours,auto1Three:auto1Hourly?auto1Hourly/3:null,lap2,count2,auto2Hourly,auto2Hours,auto2Three:auto2Hourly?auto2Hourly/3:null,totalPackCount,handCount,handLap,handHourly,handHours}
 }
 async function loadMonth(ym){
  const[start,end]=monthRange(ym);
- const [monthlyRows,pt,td]=await Promise.all([
+ const [monthlyRows,pt,td,shipping,imports]=await Promise.all([
   rest('logistics_cost_monthly',`owner_id=eq.${user.id}&month_ym=eq.${ym}&select=*`).catch(()=>[]),
   rest('logistics_work_time',`owner_id=eq.${user.id}&work_date=gte.${start}&work_date=lte.${end}&select=work_date,hand_pack_minutes`).catch(()=>[]),
-  rest('oplh_timedesigner_daily',`owner_id=eq.${user.id}&work_date=gte.${start}&work_date=lte.${end}&activity_key=eq.hand_pack&select=work_date,activity_key,work_minutes`).catch(()=>[])
+  rest('oplh_timedesigner_daily',`owner_id=eq.${user.id}&work_date=gte.${start}&work_date=lte.${end}&activity_key=eq.hand_pack&select=work_date,activity_key,work_minutes`).catch(()=>[]),
+  rest('logistics_shipping_monthly',`owner_id=eq.${user.id}&month_ym=eq.${ym}&select=carrier,adopted_count`).catch(()=>[]),
+  rest('logistics_cost_import_batches',`owner_id=eq.${user.id}&month_ym=eq.${ym}&source=eq.auto_packing&select=source,source_filename,metadata,imported_at&order=imported_at.desc&limit=1`).catch(()=>[])
  ]);
- return{ym,monthly:monthlyRows?.[0]||null,pt:pt||[],td:td||[],start,end}
+ return{ym,monthly:monthlyRows?.[0]||null,pt:pt||[],td:td||[],shipping:shipping||[],autoImport:imports?.[0]||null,start,end}
 }
 async function loadFiscal(fy){
  const startYm=fy+'-03',endYm=(fy+1)+'-02',[startDate]=monthRange(startYm),[,endDate]=monthRange(endYm),months=ymRange(startYm,endYm);
- const [monthlyRows,ptRows,tdRows]=await Promise.all([
+ const [monthlyRows,ptRows,tdRows,shippingRows,importRows]=await Promise.all([
   rest('logistics_cost_monthly',`owner_id=eq.${user.id}&month_ym=gte.${startYm}&month_ym=lte.${endYm}&select=*&order=month_ym.asc`).catch(()=>[]),
   rest('logistics_work_time',`owner_id=eq.${user.id}&work_date=gte.${startDate}&work_date=lte.${endDate}&select=work_date,hand_pack_minutes`).catch(()=>[]),
-  rest('oplh_timedesigner_daily',`owner_id=eq.${user.id}&work_date=gte.${startDate}&work_date=lte.${endDate}&activity_key=eq.hand_pack&select=work_date,activity_key,work_minutes`).catch(()=>[])
+  rest('oplh_timedesigner_daily',`owner_id=eq.${user.id}&work_date=gte.${startDate}&work_date=lte.${endDate}&activity_key=eq.hand_pack&select=work_date,activity_key,work_minutes`).catch(()=>[]),
+  rest('logistics_shipping_monthly',`owner_id=eq.${user.id}&month_ym=gte.${startYm}&month_ym=lte.${endYm}&select=month_ym,carrier,adopted_count`).catch(()=>[]),
+  rest('logistics_cost_import_batches',`owner_id=eq.${user.id}&month_ym=gte.${startYm}&month_ym=lte.${endYm}&source=eq.auto_packing&select=month_ym,source,source_filename,metadata,imported_at`).catch(()=>[])
  ]);
- const mm=new Map((monthlyRows||[]).map(r=>[r.month_ym,r])),pm=new Map(),tm=new Map(),push=(map,k,r)=>{if(!k)return;const a=map.get(k)||[];a.push(r);map.set(k,a)};
+ const mm=new Map((monthlyRows||[]).map(r=>[r.month_ym,r])),pm=new Map(),tm=new Map(),sm=new Map(),im=new Map(),push=(map,k,r)=>{if(!k)return;const a=map.get(k)||[];a.push(r);map.set(k,a)};
  for(const r of ptRows||[])push(pm,companyYmFromDate(r.work_date),r);
  for(const r of tdRows||[])push(tm,companyYmFromDate(r.work_date),r);
- return months.map(ym=>{const[start,end]=monthRange(ym);return{ym,monthly:mm.get(ym)||null,pt:pm.get(ym)||[],td:tm.get(ym)||[],start,end}})
+ for(const r of shippingRows||[])push(sm,r.month_ym,r);
+ for(const r of importRows||[]){const cur=im.get(r.month_ym);if(!cur||String(r.imported_at||'')>String(cur.imported_at||''))im.set(r.month_ym,r)}
+ return months.map(ym=>{const[start,end]=monthRange(ym);return{ym,monthly:mm.get(ym)||null,pt:pm.get(ym)||[],td:tm.get(ym)||[],shipping:sm.get(ym)||[],autoImport:im.get(ym)||null,start,end}})
 }
 function stateCell(b){const m=b.monthly;if(!m)return'<span class="badge missing">未入力</span>';return m.status==='confirmed'?'<span class="badge confirmed">確定済</span>':'<span class="badge open">運用中</span>'}
 function renderSelected(){
  const b=currentBundle,m=b.monthly||{},x=packMetrics(b);$('statusBadge').textContent=!b.monthly?'未入力':(m.status==='confirmed'?'確定済':'運用中');$('statusBadge').className='badge '+(!b.monthly?'missing':(m.status==='confirmed'?'confirmed':'open'));
  $('a1Lap').textContent=seconds(x.lap1);$('a1Hourly').textContent=x.auto1Hourly==null?'—':fmt(x.auto1Hourly,1)+'個/h';$('a1Count').textContent=x.count1==null?'—':intFmt(x.count1)+'個';$('a1Hours').textContent=hours(x.auto1Hours);$('a1Three').textContent=x.auto1Three==null?'—':fmt(x.auto1Three,1)+'個/人時';
  $('a2Lap').textContent=seconds(x.lap2);$('a2Hourly').textContent=x.auto2Hourly==null?'—':fmt(x.auto2Hourly,1)+'個/h';$('a2Count').textContent=x.count2==null?'—':intFmt(x.count2)+'個';$('a2Hours').textContent=hours(x.auto2Hours);$('a2Three').textContent=x.auto2Three==null?'—':fmt(x.auto2Three,1)+'個/人時';
- $('handLap').textContent=seconds(x.handLap);$('handHourly').textContent=x.handHourly==null?'—':fmt(x.handHourly,1)+'個/h';$('handHours').textContent=hours(x.handHours);
+ $('handLap').textContent=seconds(x.handLap);$('handHourly').textContent=x.handHourly==null?'—':fmt(x.handHourly,1)+'個/h';$('handCount').textContent=x.handCount==null?'—':intFmt(x.handCount)+'個';$('handHours').textContent=hours(x.handHours);
 }
 function renderFiscal(){
  const fy=fiscalStartYear($('monthPick').value),note=fy+'年度（'+fy+'年3月度～'+(fy+1)+'年2月度）';$('fiscalNote1').textContent=note;$('fiscalNote2').textContent=note;$('fiscalNote3').textContent=note;
  $('auto1FiscalBody').innerHTML=fiscalBundles.map(b=>{const x=packMetrics(b),mo=Number(b.ym.split('-')[1]);return`<tr><td><b>${mo}月度</b></td><td>${stateCell(b)}</td><td>${fmt(x.lap1,2)}</td><td>${fmt(x.auto1Hourly,1)}</td><td>${x.count1==null?'—':intFmt(x.count1)}</td><td>${fmt(x.auto1Hours,2)}</td><td>${fmt(x.auto1Three,1)}</td></tr>`}).join('');
  $('auto2FiscalBody').innerHTML=fiscalBundles.map(b=>{const x=packMetrics(b),mo=Number(b.ym.split('-')[1]);return`<tr><td><b>${mo}月度</b></td><td>${stateCell(b)}</td><td>${fmt(x.lap2,2)}</td><td>${fmt(x.auto2Hourly,1)}</td><td>${x.count2==null?'—':intFmt(x.count2)}</td><td>${fmt(x.auto2Hours,2)}</td><td>${fmt(x.auto2Three,1)}</td></tr>`}).join('');
- $('handFiscalBody').innerHTML=fiscalBundles.map(b=>{const x=packMetrics(b),mo=Number(b.ym.split('-')[1]);return`<tr><td><b>${mo}月度</b></td><td>${stateCell(b)}</td><td>${fmt(x.handLap,2)}</td><td>${fmt(x.handHourly,1)}</td><td>${fmt(x.handHours,2)}</td></tr>`}).join('')
+ $('handFiscalBody').innerHTML=fiscalBundles.map(b=>{const x=packMetrics(b),mo=Number(b.ym.split('-')[1]);return`<tr><td><b>${mo}月度</b></td><td>${stateCell(b)}</td><td>${fmt(x.handLap,2)}</td><td>${fmt(x.handHourly,1)}</td><td>${x.handCount==null?'—':intFmt(x.handCount)}</td><td>${fmt(x.handHours,2)}</td></tr>`}).join('')
 }
 async function loadAll(){const ym=$('monthPick').value||companyMonthToday();$('monthPick').value=ym;const[start,end]=monthRange(ym);$('monthRange').textContent=start+' ～ '+end+'（21日～翌20日）';try{const fy=fiscalStartYear(ym);[currentBundle,fiscalBundles]=await Promise.all([loadMonth(ym),loadFiscal(fy)]);renderSelected();renderFiscal()}catch(e){console.error(e);alert('読み込みに失敗しました: '+e.message)}}
 function showApp(){const ok=!!user;$('authView').classList.toggle('hidden',ok);$('appView').classList.toggle('hidden',!ok);$('logoutBtn').classList.toggle('hidden',!ok);$('userLabel').textContent=user?.email||''}
