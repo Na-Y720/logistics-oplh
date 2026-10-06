@@ -364,11 +364,14 @@ function renderTDImport(){
   `<div class="source-row"><div><strong>未振分タスク</strong><small>${unmapped.length?unmapped.map(x=>esc(x.task)+' ('+x.count+'件)').join(' / '):'なし'}</small></div><span class="badge ${unmapped.length?'missing':'auto'}">${unmapped.length}件</span></div>`,
   `<div class="source-row"><div><strong>物流部でマスタ未一致</strong><small>${unmatched.length?unmatched.map(esc).join(' / '):'なし'}</small></div><span class="badge ${unmatched.length?'missing':'auto'}">${unmatched.length}名</span></div>`
  ].join('');
- const autoImport=(currentBundle.imports||[]).find(x=>x.source==='auto_packing'),am=autoImport?.metadata||{},sumAuto=am.summary||{};
+ const autoImport=(currentBundle.imports||[]).find(x=>x.source==='auto_packing'),am=autoImport?.metadata||{},sumAuto={...(am.summary||{})};
+ if(!sumAuto.Auto01&&(m.auto1_count!=null||m.auto1_lap_seconds!=null)){const count=Number(m.auto1_count)||0,lap=Number(m.auto1_lap_seconds)||null;sumAuto.Auto01={count,lap_seconds:lap,active_hours:count&&lap?count*lap/3600:null,hourly_rate:lap?3600/lap:null}}
+ if(!sumAuto.Auto02&&(m.auto2_count!=null||m.auto2_lap_seconds!=null)){const count=Number(m.auto2_count)||0,lap=Number(m.auto2_lap_seconds)||null;sumAuto.Auto02={count,lap_seconds:lap,active_hours:count&&lap?count*lap/3600:null,hourly_rate:lap?3600/lap:null}}
  const autoRows=['Auto01','Auto02','Hand01'].map(line=>{const x=sumAuto[line]||{};return `<tr><td>${line}</td><td>${x.count!=null?fmt(x.count):'—'}</td><td>${x.active_hours!=null?hours(x.active_hours):'—'}</td><td>${x.lap_seconds!=null?fmt(x.lap_seconds,2)+'秒':'—'}</td><td>${x.hourly_rate!=null?fmt(x.hourly_rate,1)+'件/h':'—'}</td></tr>`}).join('');
  $('autoPackImportBody').innerHTML=autoRows;
+ const hasLegacyAuto=!autoImport&&(m.auto1_count!=null||m.auto2_count!=null);
  $('autoPackImportSummary').innerHTML=[
-   `<div class="source-row"><div><strong>最新ファイル</strong><small>${autoImport?.source_filename?esc(autoImport.source_filename):'—'}</small></div><span class="badge ${autoImport?'auto':'missing'}">${autoImport?'取込済':'未取込'}</span></div>`,
+   `<div class="source-row"><div><strong>最新ファイル</strong><small>${autoImport?.source_filename?esc(autoImport.source_filename):(hasLegacyAuto?'旧スプレッド移行値':'—')}</small></div><span class="badge ${autoImport||hasLegacyAuto?'auto':'missing'}">${autoImport?'取込済':(hasLegacyAuto?'移行済':'未取込')}</span></div>`,
    `<div class="source-row"><div><strong>集計ルール</strong><small>15分以上の空白を休止として除外</small></div><span class="badge auto">固定</span></div>`,
    `<div class="source-row"><div><strong>対象外・未解析</strong><small>月度外 ${fmt(am.outside_rows||0)}行 / 未解析 ${fmt(am.unparsed_rows||0)}行</small></div><span class="badge ${(am.unparsed_rows||0)?'missing':'auto'}">${fmt(am.unparsed_rows||0)}行</span></div>`
  ].join('')
@@ -403,7 +406,7 @@ function renderDashboard(){const c=metrics(currentBundle),p=metrics(prevBundle),
  const status=[
   ['月次手入力',mth.orders!=null&&mth.complaint_count!=null&&mth.receiving_rate!=null&&mth.material_cost!=null,'受注・品質・資材'],
   ['TimeDesigner',currentBundle.td.length>0,currentBundle.td.length?`社員作業時間＋受注処理（${tdPeriod}）`:'社員作業時間＋受注処理：未取込'],
-  ['自動梱包機',imports.some(x=>x.source==='auto_packing'),imports.some(x=>x.source==='auto_packing')?'Auto01・Auto02月次集計済':'月次CSV未取込'],
+  ['自動梱包機',imports.some(x=>x.source==='auto_packing')||mth.auto1_count!=null||mth.auto2_count!=null,imports.some(x=>x.source==='auto_packing')?'Auto01・Auto02月次CSV集計済':((mth.auto1_count!=null||mth.auto2_count!=null)?'過去移行値あり':'月次CSV未取込')],
   ['物流PT',currentBundle.pt.length>0,currentBundle.pt.length?`物流PT作業時間管理（${mdLabel(ptSpan.min)}〜${mdLabel(ptSpan.max)}・${currentBundle.pt.length}件）`:'物流PT作業時間管理：未入力'],
   ['発送費',ship.filter(x=>['yamato','sagawa','japanpost'].includes(x.carrier)&&x.adopted_count!=null&&x.net_cost!=null).length===3,'ヤマト・佐川・日本郵便']
  ];
