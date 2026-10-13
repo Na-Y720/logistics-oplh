@@ -53,18 +53,28 @@ async function csReadTrendRows(table,ownerId,start,end,select,isCurrent){
   function draw(){
     document.querySelectorAll('.trend-plot').forEach((plot,index)=>{
       const width=Math.floor(plot.clientWidth);if(width<100)return;
-      const metric=metrics[index],height=250,left=62,right=20,top=18,bottom=40;
+      const metric=metrics[index],height=250,left=62,right=metric.key==='orders'?58:20,top=18,bottom=40;
       const combined=metric.key==='orders',chartTitle=combined?'受注件数・CS対応数':metric.title;
       const values=buckets.map(b=>b[metric.key]),bars=combined?buckets.map(b=>b.csCount):[];
-      const max=Math.max(0,...values.concat(bars).filter(v=>v!==null));
+      const max=Math.max(0,...values.filter(v=>v!==null));
       const ceiling=metric.unit==='%'?Math.max(100,Math.ceil(max/25)*25):Math.max(4,Math.ceil(max/4)*4);
+      const csCeiling=mode==='week'?1200:5000;
+      const csY=v=>top+(height-top-bottom)*(1-Math.min(v,csCeiling)/csCeiling);
       const step=(width-left-right)/buckets.length;
       const x=i=>combined?left+(i+.5)*step:left+i*(width-left-right)/(buckets.length-1),y=v=>top+(height-top-bottom)*(1-v/ceiling);
       const tickLabel=v=>metric.unit==='%'?v+'%':v>=10000?(v/10000).toLocaleString('ja-JP',{maximumFractionDigits:1})+'万':v.toLocaleString('ja-JP');
-      let svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="${chartTitle}の年度推移"><title>${chartTitle}の年度推移</title><desc>${combined?'折れ線は受注件数、棒は電話とメールを合算したCS対応数。共通の件数目盛りです。':''}正確な数値はグラフ下の期間選択で確認できます。</desc>`;
+      let svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="${chartTitle}の年度推移"><title>${chartTitle}の年度推移</title><desc>${combined?`折れ線は左軸の受注件数、棒は右軸のCS対応数（電話＋メール）。右軸は0～${csCeiling}件。上限を超える棒には▲を表示します。`:''}正確な数値はグラフ下の期間選択で確認できます。</desc>`;
       for(let i=0;i<=4;i++){
         const value=ceiling*i/4,cy=y(value);
         svg+=`<line x1="${left}" x2="${width-right}" y1="${cy}" y2="${cy}" stroke="#e2e8f0"/><text x="${left-8}" y="${cy+5}" text-anchor="end">${tickLabel(value)}</text>`;
+      }
+      if(combined){
+        svg+=`<line x1="${width-right}" x2="${width-right}" y1="${top}" y2="${y(0)}" stroke="#2563eb"/>`;
+        const intervals=mode==='week'?4:5;
+        for(let i=0;i<=intervals;i++){
+          const value=csCeiling*i/intervals,cy=csY(value);
+          svg+=`<text class="trend-cs-axis" x="${width-right+8}" y="${cy+5}" text-anchor="start">${value.toLocaleString('ja-JP')}</text>`;
+        }
       }
       const ticks=Math.max(2,Math.min(7,Math.floor((width-left-right)/90)+1));
       for(let i=0;i<ticks;i++){
@@ -73,7 +83,12 @@ async function csReadTrendRows(table,ownerId,start,end,select,isCurrent){
         svg+=`<text x="${x(index)}" y="${height-12}" text-anchor="${i===0?'start':i===ticks-1?'end':'middle'}">${label}</text>`;
       }
       const barWidth=Math.min(32,step*.65);
-      bars.forEach((v,i)=>{if(v!==null)svg+=`<rect class="trend-cs-bar" x="${x(i)-barWidth/2}" y="${y(v)}" width="${barWidth}" height="${y(0)-y(v)}" fill="${csMetric.color}"><title>${periodLabel(buckets[i])} ${csMetric.title}：${format(v,csMetric)}</title></rect>`});
+      bars.forEach((v,i)=>{
+        if(v===null)return;
+        const label=`${periodLabel(buckets[i])} ${csMetric.title}：${format(v,csMetric)}`;
+        svg+=`<rect class="trend-cs-bar" x="${x(i)-barWidth/2}" y="${csY(v)}" width="${barWidth}" height="${csY(0)-csY(v)}" fill="${csMetric.color}"><title>${label}</title></rect>`;
+        if(v>csCeiling)svg+=`<path class="trend-cs-overflow" d="M${x(i)},${top-7} l-3,5 h6 Z" fill="#b45309"><title>${label}（右軸上限超過）</title></path>`;
+      });
       let path='',connected=false;
       values.forEach((v,i)=>{if(v===null){connected=false;return}path+=`${connected?'L':'M'}${x(i)},${y(v)} `;connected=true});
       svg+=`<path d="${path}" fill="none" stroke="${metric.color}" stroke-width="2.5" stroke-linejoin="round"/>`;
@@ -101,7 +116,7 @@ async function csReadTrendRows(table,ownerId,start,end,select,isCurrent){
       ]);
       if(!isCurrent())return;
       buckets=csAggregateTrends(today,mode,reports,summaries);
-      $('trendCharts').innerHTML=metrics.map(m=>`<article class="trend-chart"><h4>${m.key==='orders'?'受注件数・CS対応数':m.title}</h4>${m.key==='orders'?'<div class="trend-legend"><span><i class="trend-line-key"></i>受注件数（折れ線）</span><span><i class="trend-bar-key"></i>CS対応数：電話＋メール（棒）</span></div>':''}<div class="trend-plot"></div></article>`).join('');
+      $('trendCharts').innerHTML=metrics.map(m=>`<article class="trend-chart"><h4>${m.key==='orders'?'受注件数・CS対応数':m.title}</h4>${m.key==='orders'?`<div class="trend-legend"><span><i class="trend-line-key"></i>左軸：受注件数（折れ線）</span><span><i class="trend-bar-key"></i>右軸：CS対応数・電話＋メール（棒／上限${mode==='week'?'1,200':'5,000'}件）</span>${buckets.some(b=>b.csCount>(mode==='week'?1200:5000))?'<span>▲ 右軸の上限超過。実数は期間選択で確認できます。</span>':''}</div>`:''}<div class="trend-plot"></div></article>`).join('');
       document.querySelectorAll('.trend-plot').forEach(plot=>observer.observe(plot));
       $('trendPeriod').innerHTML=buckets.map((b,i)=>`<option value="${i}">${periodLabel(b)}</option>`).join('');
       $('trendPeriod').value=String(buckets.findIndex(b=>today>=b.start&&today<=b.end));

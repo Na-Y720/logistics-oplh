@@ -484,6 +484,7 @@ main:has(#summaryTab:not(.hidden)){max-width:none;padding-inline:12px}
 .trend-plot{width:100%;min-width:0;height:250px}
 .trend-plot svg{display:block;width:100%;height:250px}
 .trend-plot text{font:13px "Yu Gothic UI",Meiryo,sans-serif;fill:#475569}
+.trend-plot .trend-cs-axis{fill:#1d4ed8}
 .trend-inspector{margin-top:16px;min-width:0}
 .trend-inspector label{display:block;font-weight:700;margin-bottom:6px}
 .trend-inspector select{max-width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;background:#fff}
