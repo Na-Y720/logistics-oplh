@@ -309,14 +309,18 @@ function shiftPeriod(dir){
 function emptyAgg(){const o={};numericFields.forEach(f=>o[f]=0);o.complaint_within_20min=null;o.work_avg_sum=0;o.work_avg_days=0;return o}
 function addReport(a,r){numericFields.forEach(f=>a[f]+=n(r[f]));const x=Number(r.work_avg_minutes);if(Number.isFinite(x)&&x>0){a.work_avg_sum+=x;a.work_avg_days++}return a}
 function periodWorkAvg(a){if(a.work_case_count>0)return avg(a.work_minutes,a.work_case_count);return a.work_avg_days>0?(a.work_avg_sum/a.work_avg_days).toFixed(1)+'分':'—'}
+let periodRequest=0;
 async function loadPeriod(){
+  const request=++periodRequest,ownerId=user.id;
   const anchor=$('periodAnchor').value||localDateISO(),mode=$('periodMode').value,{start,end}=getPeriodRange(anchor,mode);
+  if(window.csLoadTrends)window.csLoadTrends(mode);
   $('periodRange').textContent=shortDate(start)+' ～ '+shortDate(end);setMessage('periodMessage');
   try{
     const [rows,sums]=await Promise.all([
       rest('cs_daily_reports',`owner_id=eq.${user.id}&report_date=gte.${start}&report_date=lte.${end}&select=*`),
       rest('cs_daily_summary',`owner_id=eq.${user.id}&report_date=gte.${start}&report_date=lte.${end}&select=*`)
     ]);
+    if(request!==periodRequest||user?.id!==ownerId)return;
     const totalAgg=emptyAgg();(rows||[]).forEach(r=>addReport(totalAgg,r));
     const totalM=calcMetrics(totalAgg),orders=(sums||[]).reduce((a,r)=>a+n(r.order_count),0);
     $('sOrders').textContent=orders.toLocaleString('ja-JP');
@@ -343,7 +347,7 @@ async function loadPeriod(){
       Array.from(tr.cells).forEach((cell,i)=>{cell.dataset.label=labels[i]});
       tb.appendChild(tr);
     }
-  }catch(e){setMessage('periodMessage','集計に失敗しました: '+e.message,'bad')}
+  }catch(e){if(request===periodRequest&&user?.id===ownerId)setMessage('periodMessage','集計に失敗しました: '+e.message,'bad')}
 }
 
 function staffConstraintText(s){

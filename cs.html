@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>CS課 日報・対応数管理</title>
-<link rel="stylesheet" href="cs.css?v=20261005-summary">
+<link rel="stylesheet" href="cs.css?v=20261013-trends">
 </head>
 <body>
 <header class="topbar">
@@ -130,6 +130,19 @@
       </div>
       <div id="periodMessage" class="message"></div>
     </section>
+    <section class="card fiscal-trends" aria-labelledby="trendTitle">
+      <h3 id="trendTitle">年度推移</h3>
+      <p id="trendRange" class="trend-range"></p>
+      <p class="muted">集計表の基準日にかかわらず、現在の年度（2/21～翌2/20）全体を表示します。年度の端は年度内の日付のみを集計し、未入力・分母0・未来の期間は線をつなぎません。</p>
+      <div id="trendMessage" class="message" role="status" aria-live="polite"></div>
+      <div id="trendCharts" class="trend-grid"></div>
+      <div id="trendInspector" class="trend-inspector hidden">
+        <label for="trendPeriod">期間ごとの数値</label>
+        <select id="trendPeriod"></select>
+        <p id="trendValues" aria-live="polite"></p>
+      </div>
+      <p class="muted">電話解決率＝保存済みの電話初回解決数 ÷ 電話合計（①＋②＋③）。メール解決率＝④の1回解決数 ÷ ④サイト確認・返品交換。いずれも期間の合計から再計算します。電話初回解決数は現在の日別入力画面に入力欄がないため、保存済みデータを使用します。</p>
+    </section>
   </section>
 
   <section id="masterTab" class="hidden">
@@ -234,7 +247,8 @@
 </form>
 </dialog>
 
-<script src="cs.js?v=20261005-summary"></script>
+<script src="cs.js?v=20261013-trends"></script>
+<script src="cs-trends.js?v=20261013-trends"></script>
 <script src="cs-shift.js"></script>
 </body>
 </html>

@@ -467,3 +467,20 @@ main:has(#summaryTab:not(.hidden)){max-width:none;padding-inline:12px}
   #summaryTab .summary-table tr{grid-template-columns:minmax(0,1fr)}
   #summaryTab .summary-table td{border-right:0}
 }
+
+/* Fiscal-year charts resize their SVG coordinate system to keep labels readable. */
+.fiscal-trends h3{margin:0 0 8px}
+.trend-range{font-weight:700;margin:8px 0}
+.fiscal-trends p{line-height:1.65;overflow-wrap:anywhere}
+.trend-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.trend-chart{min-width:0;border:1px solid var(--line);border-radius:10px;padding:12px 8px}
+.trend-chart:first-child{grid-column:1 / -1}
+.trend-chart h4{font-size:17px;margin:0 8px 10px}
+.trend-plot{width:100%;min-width:0;height:250px}
+.trend-plot svg{display:block;width:100%;height:250px}
+.trend-plot text{font:13px "Yu Gothic UI",Meiryo,sans-serif;fill:#475569}
+.trend-inspector{margin-top:16px;min-width:0}
+.trend-inspector label{display:block;font-weight:700;margin-bottom:6px}
+.trend-inspector select{max-width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;background:#fff}
+.trend-inspector p{font-size:16px;font-variant-numeric:tabular-nums}
+@media(max-width:720px){.trend-grid{grid-template-columns:minmax(0,1fr)}}
