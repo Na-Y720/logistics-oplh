@@ -25,16 +25,16 @@
   function shipHoursDay(sid){const r=state.staffing.find(x=>x.staff_id===sid);return !r||!r.included?0:calcSchedule({...r,work_days:1}).shipDay}
   function employeeStaffingRows(){const ids=new Set(state.staff.filter(isEmployee).map(s=>s.id));return state.staffing.filter(r=>ids.has(r.staff_id))}
   function deriveEmployeeDays(){const rows=employeeStaffingRows();if(!rows.length)return null;const counts=new Map();for(const r of rows){const d=Math.max(0,Math.min(31,Math.round(num(r.work_days))));counts.set(d,(counts.get(d)||0)+1)}return [...counts.entries()].sort((a,b)=>(b[1]-a[1])||(b[0]-a[0]))[0]?.[0]??null}
-  function renderEmployeeDays(){const input=gid('shiftEmployeeDays'),hint=gid('shiftEmployeeDaysHint');if(!input)return;const rows=employeeStaffingRows(),vals=[...new Set(rows.map(r=>Math.max(0,Math.min(31,Math.round(num(r.work_days))))))];if(state.employeeDays==null)state.employeeDays=deriveEmployeeDays();input.value=state.employeeDays??'';if(hint)hint.textContent=!rows.length?'社員なし':vals.length<=1?`社員 ${rows.length}名に適用`:`現在個別設定あり / 入力すると社員 ${rows.length}名を統一`}
+  function renderEmployeeDays(){const input=gid('shiftEmployeeDays'),hint=gid('shiftEmployeeDaysHint');if(!input)return;const rows=employeeStaffingRows(),vals=[...new Set(rows.map(r=>Math.max(0,Math.min(31,Math.round(num(r.work_days))))))];if(state.employeeDays==null)state.employeeDays=deriveEmployeeDays();input.value=state.employeeDays??'';if(hint)hint.textContent=!rows.length?'社員なし':vals.length<=1?`社員 ${rows.length}名に適用`:`社員 ${rows.length}名 / 退職月などは在籍可能日数を上限`}
   async function applyEmployeeDays(){
     const input=gid('shiftEmployeeDays');if(!input||!state.loaded)return;
     const days=Math.max(0,Math.min(31,Math.round(num(input.value)))),employees=state.staff.filter(isEmployee),ids=new Set(employees.map(s=>s.id)),rows=state.staffing.filter(r=>ids.has(r.staff_id));
     if(!rows.length){state.employeeDays=null;renderEmployeeDays();setNotice('この月度に対象となる社員がいません。','warn');return}
     input.disabled=true;
     try{
-      const now=new Date().toISOString(),payload=rows.map(r=>({...r,work_days:days,updated_at:now}));
+      const now=new Date().toISOString(),payload=rows.map(r=>{const available=state.dates.filter(d=>!afterRetirement(r.staff_id,d)).length,effective=Math.min(days,available);return{...r,work_days:effective,updated_at:now}});
       await rest('logistics_monthly_staffing','on_conflict=owner_id%2Cstaff_id%2Cplan_month',{method:'POST',headers:{Prefer:'resolution=merge-duplicates'},body:JSON.stringify(payload)});
-      for(const r of rows)r.work_days=days;
+      for(const r of rows){const available=state.dates.filter(d=>!afterRetirement(r.staff_id,d)).length;r.work_days=Math.min(days,available)}
       state.employeeDays=days;renderEmployeeDays();renderShift();
       if(typeof loadMonth==='function'&&gid('month')?.value===state.month)await loadMonth();
       setNotice(`今月の社員出勤日数を ${days}日に更新しました。社員 ${employees.length}名の目標日数へ反映済みです。「自動作成」で配置を増減できます。`,'good');
