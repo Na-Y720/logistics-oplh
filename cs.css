@@ -476,6 +476,11 @@ main:has(#summaryTab:not(.hidden)){max-width:none;padding-inline:12px}
 .trend-chart{min-width:0;border:1px solid var(--line);border-radius:10px;padding:12px 8px}
 .trend-chart:first-child{grid-column:1 / -1}
 .trend-chart h4{font-size:17px;margin:0 8px 10px}
+.trend-legend{display:flex;flex-wrap:wrap;gap:8px 20px;margin:0 8px 8px;font-size:13px;color:#475569}
+.trend-legend span{display:flex;align-items:center;gap:7px}
+.trend-legend i{display:inline-block;width:20px;flex-shrink:0}
+.trend-line-key{border-top:3px solid #0f766e}
+.trend-bar-key{height:12px;background:#93c5fd}
 .trend-plot{width:100%;min-width:0;height:250px}
 .trend-plot svg{display:block;width:100%;height:250px}
 .trend-plot text{font:13px "Yu Gothic UI",Meiryo,sans-serif;fill:#475569}

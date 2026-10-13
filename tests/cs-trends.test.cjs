@@ -44,6 +44,21 @@ test('sum numerators/denominators across days and staff; retain recorded zeros a
   assert.equal(result[1].phoneRate,0);assert.equal(result[1].mailRate,null);assert.equal(result[1].orders,0);
   assert.equal(result[2].phoneRate,null);assert.equal(result[2].orders,null);assert.equal(result[7].orders,null);
 });
+test('CS bars sum phone and mail only, preserve zero and missing periods independently of orders',()=>{
+  for(const mode of ['week','company','calendar']){
+    const result=run(`csAggregateTrends('2026-10-13','${mode}',[
+      {report_date:'2026-02-21',phone_customer_count:2,phone_partner_count:3,phone_complaint_count:4,mail_site_return_count:5,mail_relation_count:6,mail_store_manager_count:7,mail_complaint_count:8,returns_exchange_count:999},
+      {report_date:'2026-02-22',phone_customer_count:10,mail_relation_count:20},
+      {report_date:'2026-04-21',phone_customer_count:0},
+      {report_date:'2026-02-20',phone_customer_count:999},
+      {report_date:'2026-10-14',phone_customer_count:999}
+    ],[])`);
+    assert.equal(result[0].csCount,65);assert.equal(result[0].orders,null);
+    assert.equal(result.find(b=>b.start<='2026-04-21'&&b.end>='2026-04-21').csCount,0);
+    assert.equal(result.at(-1).csCount,null);
+    assert.equal(result.reduce((sum,b)=>sum+(b.csCount||0),0),65);
+  }
+});
 test('boundary records are excluded or placed in clipped week/calendar buckets',()=>{
   for(const mode of ['week','calendar']){
     const result=run(`csAggregateTrends('2027-02-20','${mode}',[],[
