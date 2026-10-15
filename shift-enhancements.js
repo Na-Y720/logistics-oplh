@@ -27,12 +27,13 @@
   }
 
   async function clearAll(){
+    if(window.isShiftLocked?.()){setNotice('シフトがロック中です。ロック解除後に全クリアしてください。','warn');return}
     const ym=$('shiftMonth')?.value;if(!ym)return;const p=periodForMonth(ym);
     if(!confirm(`${p.start} ～ ${p.end} のシフトを全クリアします。\n休み希望・出勤固定・自動作成結果もすべて「未作成」に戻ります。よろしいですか？`))return;
     const b=$('shiftClearBtn');if(b){b.disabled=true;b.textContent='クリア中…'}
     try{await rest('logistics_daily_shifts',`owner_id=eq.${user.id}&shift_date=gte.${p.start}&shift_date=lte.${p.end}`,{method:'DELETE'});const r=$('shiftRefreshBtn');if(r?.onclick)await r.onclick();setNotice('対象月度のシフトを全クリアしました。すべて未作成状態です。','good')}
     catch(e){setNotice('全クリアに失敗しました: '+(e?.message||e),'bad')}
-    finally{if(b){b.disabled=false;b.textContent='全クリア'}}
+    finally{if(b){b.disabled=!!window.isShiftLocked?.();b.textContent='全クリア'}}
   }
 
   function parseKotHtml(text){
@@ -43,16 +44,17 @@
   }
 
   async function importKotFile(file){
+    if(window.isShiftLocked?.()){setNotice('シフトがロック中です。ロック解除後にKOT取込してください。','warn');const inp=$('shiftKotFile');if(inp)inp.value='';return}
     const ym=$('shiftMonth')?.value;if(!ym){setNotice('先に対象月度を選択してください。','bad');return}const b=$('shiftKotImportBtn');if(b){b.disabled=true;b.textContent='取込中…'}
     try{const text=await file.text(),parsed=parseKotHtml(text),p=periodForMonth(ym);if(parsed.start!==p.start||parsed.end!==p.end)throw new Error(`ファイル期間 ${parsed.start}～${parsed.end} と、選択中の対象期間 ${p.start}～${p.end} が一致しません。`);
       const slist=await rest('logistics_staff',`owner_id=eq.${user.id}&is_active=eq.true&select=id,name,retirement_date`),byName=new Map((slist||[]).filter(s=>!s.retirement_date||String(s.retirement_date).slice(0,10)>=p.start).map(s=>[normalizeName(s.name),s])),planMonth=ym+'-01',now=new Date().toISOString(),out=[],matched=new Set(),unmatched=[];
       for(const r of parsed.rows){const s=byName.get(r.name);if(!s){unmatched.push(r.rawName);continue}matched.add(s.id);for(const d of r.offs)out.push({owner_id:user.id,staff_id:s.id,plan_month:planMonth,shift_date:d,assignment:'off',lock_type:'manual_off',updated_at:now})}
       if(!out.length)throw new Error('登録済み従業員に一致する「--」がありませんでした。');for(let i=0;i<out.length;i+=300)await rest('logistics_daily_shifts','on_conflict=owner_id%2Cstaff_id%2Cshift_date',{method:'POST',headers:{Prefer:'resolution=merge-duplicates'},body:JSON.stringify(out.slice(i,i+300))});const refresh=$('shiftRefreshBtn');if(refresh?.onclick)await refresh.onclick();const extra=unmatched.length?` アプリ未登録または氏名不一致 ${unmatched.length}名は無視しました。`:'';setNotice(`KING OF TIMEから ${matched.size}名・${out.length}件の休みを「休★」として取り込みました。${extra}`,'good')}
     catch(e){setNotice('KING OF TIME休み取込に失敗しました: '+(e?.message||e),'bad')}
-    finally{if(b){b.disabled=false;b.textContent='KOT休み取込'}const inp=$('shiftKotFile');if(inp)inp.value=''}
+    finally{if(b){b.disabled=!!window.isShiftLocked?.();b.textContent='KOT休み取込'}const inp=$('shiftKotFile');if(inp)inp.value=''}
   }
 
-  function installToolbarButtons(){const auto=$('shiftAutoBtn');if(!auto)return;if(!$('shiftKotFile')){const inp=document.createElement('input');inp.id='shiftKotFile';inp.type='file';inp.accept='.xls,.html,text/html,application/vnd.ms-excel';inp.style.display='none';inp.onchange=()=>{const f=inp.files?.[0];if(f)importKotFile(f)};auto.parentElement.insertBefore(inp,auto)}if(!$('shiftKotImportBtn')){const b=document.createElement('button');b.id='shiftKotImportBtn';b.type='button';b.textContent='KOT休み取込';b.title='KING OF TIMEの月別スケジュール.xlsから「--」だけを休み固定として取り込みます';b.onclick=()=>$('shiftKotFile')?.click();auto.parentElement.insertBefore(b,auto)}if(!$('shiftClearBtn')){const b=document.createElement('button');b.id='shiftClearBtn';b.type='button';b.className='danger';b.textContent='全クリア';b.onclick=clearAll;auto.parentElement.insertBefore(b,auto)}}
+  function installToolbarButtons(){const auto=$('shiftAutoBtn');if(!auto)return;if(!$('shiftKotFile')){const inp=document.createElement('input');inp.id='shiftKotFile';inp.type='file';inp.accept='.xls,.html,text/html,application/vnd.ms-excel';inp.style.display='none';inp.onchange=()=>{const f=inp.files?.[0];if(f)importKotFile(f)};auto.parentElement.insertBefore(inp,auto)}if(!$('shiftKotImportBtn')){const b=document.createElement('button');b.id='shiftKotImportBtn';b.type='button';b.textContent='KOT休み取込';b.title='KING OF TIMEの月別スケジュール.xlsから「--」だけを休み固定として取り込みます';b.onclick=()=>{if(window.isShiftLocked?.()){setNotice('シフトがロック中です。','warn');return}$('shiftKotFile')?.click()};auto.parentElement.insertBefore(b,auto)}if(!$('shiftClearBtn')){const b=document.createElement('button');b.id='shiftClearBtn';b.type='button';b.className='danger';b.textContent='全クリア';b.onclick=clearAll;auto.parentElement.insertBefore(b,auto)}window.applyShiftLockState?.()}
 
   async function syncMasterDaysToSelectedMonth(staffId,days){
     const ym=$('shiftMonth')?.value||$('month')?.value;if(!staffId||!ym)return null;
