@@ -9,6 +9,10 @@
       "destination": "/packing.html"
     },
     {
+      "source": "/wms",
+      "destination": "/wms.html"
+    },
+    {
       "source": "/worktime",
       "destination": "/worktime.html"
     }
