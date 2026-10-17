@@ -2,7 +2,7 @@ const SB_URL='https://qfcgxefymdodjrprhfvu.supabase.co';
 const SB_KEY='sb_publishable_KzELBvq1CkhnHL_CXN99GA_5-an2G6m';
 const SESSION_KEY='logistics_monthly_oplh_session_v1';
 const $=id=>document.getElementById(id);
-let session=null,user=null,refreshPromise=null,wmsRows=[],tdRows=[],ptRows=[],staffRows=[],directory=new Map(),staffToCode=new Map(),nameToCode=new Map();
+let session=null,user=null,refreshPromise=null,wmsRows=[],tdRows=[],ptRows=[],staffRows=[],directory=new Map(),staffToCode=new Map(),nameToCode=new Map(),staffById=new Map(),staffByName=new Map();
 const ACTIVITY_ORDER=['picking','stock_move','shipping_check','adjustment_out','receiving','receiving_check'];
 const ACTIVITY_LABELS={picking:'ピッキング',stock_move:'在庫移動',shipping_check:'出荷検品',adjustment_out:'調整出庫',receiving:'入庫・調整入庫',receiving_check:'入荷検品'};
 const ACTIVITY_COLORS={picking:'#2589f5',stock_move:'#2637a8',shipping_check:'#ed7d31',adjustment_out:'#7030a0',receiving:'#db3fa7',receiving_check:'#6b7280'};
@@ -26,10 +26,10 @@ function hours(v){return v==null||!Number.isFinite(Number(v))?'—':fmt(v,1)+'h'
 function todayCompanyYm(){const d=new Date(),y=d.getFullYear(),m=d.getMonth()+1,day=d.getDate();if(day>=21){let yy=y,mm=m+1;if(mm===13){mm=1;yy++}return yy+'-'+String(mm).padStart(2,'0')}return y+'-'+String(m).padStart(2,'0')}
 
 function buildAliases(){
- staffToCode=new Map();nameToCode=new Map();
+ staffToCode=new Map();nameToCode=new Map();staffById=new Map(staffRows.map(s=>[s.id,s]));staffByName=new Map(staffRows.map(s=>[normalizeName(s.name),s]));
  for(const r of [...wmsRows,...tdRows]){
-  const code=normalizeCode(r.worker_code||r.employee_no),name=normalizeName(r.worker_name);
-  if(code){if(r.staff_id)staffToCode.set(r.staff_id,code);if(name)nameToCode.set(name,code)}
+  const code=normalizeCode(r.worker_code||r.employee_no),name=normalizeName(r.worker_name),master=name?staffByName.get(name):null;
+  if(code){if(r.staff_id)staffToCode.set(r.staff_id,code);if(master?.id)staffToCode.set(master.id,code);if(name)nameToCode.set(name,code)}
  }
 }
 function identityFor(row){
@@ -40,20 +40,20 @@ function identityFor(row){
  return'name:'+name
 }
 function buildDirectory(){
- buildAliases();directory=new Map();const staffById=new Map(staffRows.map(s=>[s.id,s]));
+ buildAliases();directory=new Map();
  const touch=(key,row)=>{
   if(!key||key==='name:')return;
   const x=directory.get(key)||{key,name:'不明',code:null,staffId:null,department:null,employment:null,category:'unknown'};
   const code=normalizeCode(row.worker_code||row.employee_no);if(code)x.code=code;
   if(row.worker_name)x.name=String(row.worker_name).normalize('NFKC').trim()||x.name;
-  if(row.staff_id)x.staffId=row.staff_id;
+  const masterByName=staffByName.get(normalizeName(row.worker_name));if(row.staff_id)x.staffId=row.staff_id;else if(masterByName?.id)x.staffId=masterByName.id;
   if(row.source_department)x.department=String(row.source_department).normalize('NFKC').trim();
   directory.set(key,x)
  };
  for(const r of wmsRows)touch(identityFor(r),r);
  for(const r of tdRows)touch(identityFor(r),r);
  for(const x of directory.values()){
-  const staff=x.staffId?staffById.get(x.staffId):null;if(staff){x.name=staff.name||x.name;x.employment=staff.employment_type||null}
+  const staff=x.staffId?staffById.get(x.staffId):staffByName.get(normalizeName(x.name));if(staff){x.staffId=staff.id;x.name=staff.name||x.name;x.employment=staff.employment_type||null}
   if(x.department&&x.department!=='物流部')x.category='support';
   else if(x.employment==='社員')x.category='employee';
   else if(x.employment==='パート')x.category='part';
@@ -63,7 +63,11 @@ function buildDirectory(){
   else x.category='unknown'
  }
 }
-function canonicalForStaff(staffId){if(staffId&&staffToCode.has(staffId))return'code:'+staffToCode.get(staffId);return staffId?'staff:'+staffId:null}
+function canonicalForStaff(staffId){
+ if(!staffId)return null;if(staffToCode.has(staffId))return'code:'+staffToCode.get(staffId);
+ const staff=staffById.get(staffId),name=normalizeName(staff?.name);if(name&&nameToCode.has(name))return'code:'+nameToCode.get(name);
+ return'staff:'+staffId
+}
 
 async function loadData(){
  const fy=Number($('fiscalYear').value),months=fyMonths(fy),[start]=monthRange(months[0]),[,end]=monthRange(months[11]);
