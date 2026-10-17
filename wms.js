@@ -135,7 +135,12 @@ function renderWorkerOptions(){
  const masterOnly=[...byPerson.values()]
    .filter(s=>group==='all'||(s.employment_type==='社員'?'employee':s.employment_type==='パート'?'part':s.employment_type==='派遣'?'temp':s.employment_type==='シルバー'?'silver':'unknown')===group)
    .map(s=>{const p=staffParts(s.name);return{...s,key:'staff:'+s.id,display:p.display||p.raw,code:p.code}})
-   .sort((a,b)=>a.display.localeCompare(b.display,'ja'));
+   .sort((a,b)=>{
+    const ac=String(a.code||''),bc=String(b.code||'');
+    if(ac&&bc)return ac.localeCompare(bc,'ja',{numeric:true,sensitivity:'base'});
+    if(ac)return-1;if(bc)return 1;
+    return a.display.localeCompare(b.display,'ja')
+   });
  const option=x=>'<option value="'+x.key+'">'+escapeHtml(x.display)+(x.code?' ('+escapeHtml(x.code)+')':'')+'</option>';
  if(scope==='other'){
   $('workerFilter').innerHTML='<option value="all">その他 全体</option>';
