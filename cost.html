@@ -55,7 +55,7 @@
     <button class="tab active" data-tab="dashboard">ダッシュボード</button>
     <button class="tab" data-tab="monthly">月次入力</button>
     <button class="tab" data-tab="shipping">発送費</button>
-    <button class="tab" data-tab="timedesigner">各種取り込み</button>
+    <button class="tab" data-tab="timedesigner">データ取込</button>
     <button class="tab" data-tab="work">作業時間</button>
     <button class="tab" data-tab="comparison">前月・前年比較</button>
   </nav>
@@ -146,34 +146,6 @@
 
     </section>
 
-    <div class="grid2">
-      <section class="card">
-        <div class="section-head"><div><h3>佐川急便 CSV取込</h3><div class="muted">運賃請求金額を合計し、メーカー着払いを除外して月度発送費へ保存します。</div></div></div>
-        <div id="sagawaLockedNotice" class="notice hidden"></div>
-        <div class="form-grid">
-          <label>佐川請求CSV<input id="sagawaImportFile" type="file" accept=".csv,text/csv"></label>
-        </div>
-        <div class="actions"><button id="sagawaImportBtn" class="primary">佐川CSVを取込</button></div>
-        <div id="sagawaImportMessage" class="message"></div>
-        <div id="sagawaImportSummary" class="source-list"></div>
-      </section>
-
-      <section class="card">
-        <div class="section-head"><div><h3>ヤマト・日本郵便 PDF取込</h3><div class="muted">請求書PDFを読み取り、既存スプレッドと同じ採用ルールで自動計算します。</div></div></div>
-        <div class="form-grid">
-          <label>ヤマト Web請求書PDF<input id="yamatoImportFile" type="file" accept=".pdf"></label>
-          <label>日本郵便 利用明細PDF<input id="japanPostImportFile" type="file" accept=".pdf" multiple></label>
-        </div>
-        <div class="actions">
-          <button id="yamatoImportBtn" class="primary">ヤマトPDFを取込</button>
-          <button id="japanPostImportBtn" class="primary">日本郵便PDFを取込</button>
-        </div>
-        <div id="pdfImportMessage" class="message"></div>
-        <div id="pdfImportSummary" class="source-list"></div>
-        <div class="hint">ヤマト：ネコポス件数を採用件数、請求書全体の税込・税抜額を発送費。日本郵便：元払＋着払の個数を採用件数、発送費は元払金額のみ。対象期間は21日～翌20日。</div>
-      </section>
-    </div>
-
     <section class="card" style="margin-top:16px">
       <div class="section-head">
         <div>
@@ -210,7 +182,18 @@
     <section class="card">
       <div class="section-head">
         <div>
-          <h3>各種取り込み：TimeDesigner</h3>
+          <h3>データ取込</h3>
+          <div class="muted">物流データの取込はこの画面に集約します。対象月度を確認してからファイルを選択してください。</div>
+          <div class="hint">WMSは「日次作業履歴 ＞ 月次補完」の順で優先します。月次補完は、同じ月度×作業者×作業区分に日次データが無い場合だけ使用します。</div>
+        </div>
+        <a class="linkbtn" href="/wms">WMS作業分析を開く</a>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="section-head">
+        <div>
+          <h3>TimeDesigner</h3>
           <div class="muted">選択月度（21日～翌20日）の社員作業時間を置き換え保存します。再取込しても二重計上しません。</div>
           <div class="hint">所属判定はTimeDesignerの部署名を優先し、部署名が空欄の人だけ既存の従業員マスタで補完します。</div>
         </div>
@@ -230,7 +213,7 @@
     <section class="card">
       <div class="section-head">
         <div>
-          <h3>各種取り込み：WMS作業履歴</h3>
+          <h3>WMS 日次作業履歴</h3>
           <div class="muted">選択月度（21日～翌20日）の作業履歴を、日付×作業者×作業区分まで集約して保存します。</div>
           <div class="hint">大容量CSVは分割読み込みするため、生データをそのままDBへ保存しません。再取込時は同月度を置換し二重計上しません。</div>
         </div>
@@ -258,7 +241,28 @@
     <section class="card">
       <div class="section-head">
         <div>
-          <h3>各種取り込み：自動梱包機</h3>
+          <h3>WMS 月次補完</h3>
+          <div class="muted">Power BI等から出力した作業者別Excel、またはそれらをまとめたZIPを取り込みます。</div>
+          <div class="hint">日次WMSが存在する「月度×作業者×作業区分」は必ず日次を採用し、月次値は使用しません。月次補完では作業回数だけを補完し、WMS実績数は補完しません。</div>
+        </div>
+      </div>
+      <div id="wmsSupplementLockedNotice" class="notice hidden"></div>
+      <div class="form-grid">
+        <label>WMS 月次補完 Excel / ZIP
+          <input id="wmsSupplementImportFile" type="file" accept=".zip,.xlsx,application/zip,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple>
+        </label>
+      </div>
+      <div class="actions">
+        <button id="wmsSupplementImportBtn" class="primary">月次補完を取込</button>
+      </div>
+      <div id="wmsSupplementImportMessage" class="message"></div>
+      <div id="wmsSupplementImportSummary" class="source-list"></div>
+    </section>
+
+    <section class="card">
+      <div class="section-head">
+        <div>
+          <h3>自動梱包機</h3>
           <div class="muted">月1回、Auto01／Auto02／Hand01を含む元CSVを取り込みます。前回スキャンから15分以上空いた区間は休止として除外します。</div>
           <div class="hint">Auto01・Auto02の月間通過数／実稼働時間／ラップタイム／1時間当たり処理数を自動集計します。Hand01は参考表示のみで、手梱包数は「全梱包数－Auto01－Auto02」で算出します。</div>
         </div>
@@ -281,6 +285,37 @@
         </table>
       </div>
     </section>
+
+    <section class="card">
+      <div class="section-head"><div><h3>発送費ファイル</h3><div class="muted">佐川急便・ヤマト運輸・日本郵便の請求データもここから取り込みます。集計結果は「発送費」タブで確認できます。</div></div></div>
+    </section>
+    <div class="grid2">
+      <section class="card">
+        <div class="section-head"><div><h3>佐川急便 CSV取込</h3><div class="muted">運賃請求金額を合計し、メーカー着払いを除外して月度発送費へ保存します。</div></div></div>
+        <div id="sagawaLockedNotice" class="notice hidden"></div>
+        <div class="form-grid">
+          <label>佐川請求CSV<input id="sagawaImportFile" type="file" accept=".csv,text/csv"></label>
+        </div>
+        <div class="actions"><button id="sagawaImportBtn" class="primary">佐川CSVを取込</button></div>
+        <div id="sagawaImportMessage" class="message"></div>
+        <div id="sagawaImportSummary" class="source-list"></div>
+      </section>
+
+      <section class="card">
+        <div class="section-head"><div><h3>ヤマト・日本郵便 PDF取込</h3><div class="muted">請求書PDFを読み取り、既存スプレッドと同じ採用ルールで自動計算します。</div></div></div>
+        <div class="form-grid">
+          <label>ヤマト Web請求書PDF<input id="yamatoImportFile" type="file" accept=".pdf"></label>
+          <label>日本郵便 利用明細PDF<input id="japanPostImportFile" type="file" accept=".pdf" multiple></label>
+        </div>
+        <div class="actions">
+          <button id="yamatoImportBtn" class="primary">ヤマトPDFを取込</button>
+          <button id="japanPostImportBtn" class="primary">日本郵便PDFを取込</button>
+        </div>
+        <div id="pdfImportMessage" class="message"></div>
+        <div id="pdfImportSummary" class="source-list"></div>
+        <div class="hint">ヤマト：ネコポス件数を採用件数、請求書全体の税込・税抜額を発送費。日本郵便：元払＋着払の個数を採用件数、発送費は元払金額のみ。対象期間は21日～翌20日。</div>
+      </section>
+    </div>
 
     <section class="card">
       <div class="section-head"><div><h3>自動振分</h3><div class="muted">CSVのタスク名から以下へ自動振分します。</div></div></div>
@@ -412,6 +447,8 @@
   </section>
 </div>
 </main>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="cost.js"></script>
 </body>
 </html>
