@@ -2,7 +2,7 @@ const SB_URL='https://qfcgxefymdodjrprhfvu.supabase.co';
 const SB_KEY='sb_publishable_KzELBvq1CkhnHL_CXN99GA_5-an2G6m';
 const SESSION_KEY='logistics_monthly_oplh_session_v1';
 const $=id=>document.getElementById(id);
-let session=null,user=null,refreshPromise=null,wmsRows=[],tdRows=[],ptRows=[],staffRows=[],directory=new Map(),staffToCode=new Map(),nameToCode=new Map(),staffById=new Map(),staffByName=new Map();
+let session=null,user=null,refreshPromise=null,wmsRows=[],tdRows=[],ptRows=[],staffRows=[],directory=new Map(),staffToCode=new Map(),nameToCode=new Map(),staffById=new Map(),staffByName=new Map(),staffByCode=new Map();
 const ACTIVITY_ORDER=['picking','stock_move','shipping_check','adjustment_out','receiving','receiving_check'];
 const ACTIVITY_LABELS={picking:'ピッキング',stock_move:'在庫移動',shipping_check:'出荷検品',adjustment_out:'調整出庫',receiving:'調整入庫・入庫',receiving_check:'入荷検品'};
 const ACTIVITY_COLORS={picking:'#2589f5',stock_move:'#2637a8',shipping_check:'#ed7d31',adjustment_out:'#7030a0',receiving:'#db3fa7',receiving_check:'#6b7280'};
@@ -16,6 +16,13 @@ async function restAll(table,params,pageSize=1000){let out=[],from=0;while(true)
 
 function normalizeName(s){return String(s||'').normalize('NFKC').replace(/[\s　]/g,'').trim()}
 function normalizeCode(s){return String(s||'').normalize('NFKC').trim().replace(/\.0$/,'')}
+function staffParts(s){
+ const raw=String(s||'').normalize('NFKC').trim(),m=raw.match(/^([A-Za-z]*\d+)[\s　]+(.+)$/);
+ return{raw,code:m?normalizeCode(m[1]):null,display:(m?m[2]:raw).trim(),norm:normalizeName(m?m[2]:raw)}
+}
+function workerNormName(s){
+ return normalizeName(String(s||'').normalize('NFKC').replace(/^[A-Za-z]*\d+[\s　]+/,''))
+}
 function shiftYm(ym,delta){let[y,m]=ym.split('-').map(Number);m+=delta;while(m<1){m+=12;y--}while(m>12){m-=12;y++}return y+'-'+String(m).padStart(2,'0')}
 function monthRange(ym){let[y,m]=ym.split('-').map(Number),py=y,pm=m-1;if(pm===0){pm=12;py--}return[py+'-'+String(pm).padStart(2,'0')+'-21',y+'-'+String(m).padStart(2,'0')+'-20']}
 function fiscalStartYear(ym){const[y,m]=ym.split('-').map(Number);return m>=3?y:y-1}
@@ -26,52 +33,49 @@ function hours(v){return v==null||!Number.isFinite(Number(v))?'—':fmt(v,1)+'h'
 function todayCompanyYm(){const d=new Date(),y=d.getFullYear(),m=d.getMonth()+1,day=d.getDate();if(day>=21){let yy=y,mm=m+1;if(mm===13){mm=1;yy++}return yy+'-'+String(mm).padStart(2,'0')}return y+'-'+String(m).padStart(2,'0')}
 
 function buildAliases(){
- staffToCode=new Map();nameToCode=new Map();staffById=new Map(staffRows.map(s=>[s.id,s]));staffByName=new Map(staffRows.map(s=>[normalizeName(s.name),s]));
+ staffToCode=new Map();nameToCode=new Map();staffById=new Map();staffByName=new Map();staffByCode=new Map();
+ const prefer=(oldRow,newRow)=>!oldRow||(!oldRow.is_active&&newRow.is_active)?newRow:oldRow;
+ for(const s of staffRows){
+  staffById.set(s.id,s);const p=staffParts(s.name);
+  if(p.code)staffByCode.set(p.code,prefer(staffByCode.get(p.code),s));
+  if(p.norm)staffByName.set(p.norm,prefer(staffByName.get(p.norm),s))
+ }
  for(const r of [...wmsRows,...tdRows]){
-  const code=normalizeCode(r.worker_code||r.employee_no),name=normalizeName(r.worker_name),master=name?staffByName.get(name):null;
-  if(code){if(r.staff_id)staffToCode.set(r.staff_id,code);if(master?.id)staffToCode.set(master.id,code);if(name)nameToCode.set(name,code)}
+  const code=normalizeCode(r.worker_code||r.employee_no),name=workerNormName(r.worker_name);
+  const master=(code&&staffByCode.get(code))||(name&&staffByName.get(name))||(r.staff_id&&staffById.get(r.staff_id))||null;
+  if(code){
+   if(r.staff_id)staffToCode.set(r.staff_id,code);
+   if(master?.id)staffToCode.set(master.id,code);
+   if(name)nameToCode.set(name,code)
+  }
  }
 }
 function identityFor(row){
- const code=normalizeCode(row.worker_code||row.employee_no);if(code)return'code:'+code;
- if(row.staff_id&&staffToCode.has(row.staff_id))return'code:'+staffToCode.get(row.staff_id);
- if(row.staff_id)return'staff:'+row.staff_id;
- const name=normalizeName(row.worker_name);if(name&&nameToCode.has(name))return'code:'+nameToCode.get(name);
+ const code=normalizeCode(row.worker_code||row.employee_no),name=workerNormName(row.worker_name);
+ const master=(code&&staffByCode.get(code))||(row.staff_id&&staffById.get(row.staff_id))||(name&&staffByName.get(name))||null;
+ if(master)return'staff:'+master.id;
+ if(code)return'code:'+code;
  return'name:'+name
 }
 function buildDirectory(){
  buildAliases();directory=new Map();
+ const categoryFor=s=>s.employment_type==='社員'?'employee':s.employment_type==='パート'?'part':s.employment_type==='派遣'?'temp':s.employment_type==='シルバー'?'silver':'unknown';
+ for(const s of staffRows){
+  const p=staffParts(s.name),key='staff:'+s.id;
+  directory.set(key,{key,name:p.display||p.raw||'不明',code:p.code,staffId:s.id,department:'物流部',employment:s.employment_type||null,scope:'logistics',category:categoryFor(s),isActive:!!s.is_active,retirementDate:s.retirement_date||null})
+ }
  const touch=(key,row)=>{
   if(!key||key==='name:')return;
-  const x=directory.get(key)||{key,name:'不明',code:null,staffId:null,department:null,employment:null,category:'unknown'};
-  const code=normalizeCode(row.worker_code||row.employee_no);if(code)x.code=code;
-  if(row.worker_name)x.name=String(row.worker_name).normalize('NFKC').trim()||x.name;
-  const masterByName=staffByName.get(normalizeName(row.worker_name));if(row.staff_id)x.staffId=row.staff_id;else if(masterByName?.id)x.staffId=masterByName.id;
-  if(row.source_department)x.department=String(row.source_department).normalize('NFKC').trim();
-  directory.set(key,x)
+  const existing=directory.get(key);
+  if(existing){if(row.source_department)existing.sourceDepartment=String(row.source_department).normalize('NFKC').trim();return}
+  const code=normalizeCode(row.worker_code||row.employee_no),name=String(row.worker_name||'').normalize('NFKC').trim()||'不明';
+  directory.set(key,{key,name,code:code||null,staffId:null,department:row.source_department||null,employment:null,scope:'other',category:(row.source_department&&row.source_department!=='物流部')?'support':'unknown'})
  };
  for(const r of wmsRows)touch(identityFor(r),r);
- for(const r of tdRows)touch(identityFor(r),r);
- for(const x of directory.values()){
-  const staff=x.staffId?staffById.get(x.staffId):staffByName.get(normalizeName(x.name));
-  if(staff){
-   x.staffId=staff.id;x.name=staff.name||x.name;x.employment=staff.employment_type||null;x.scope='logistics';
-   if(x.employment==='社員')x.category='employee';
-   else if(x.employment==='パート')x.category='part';
-   else if(x.employment==='派遣')x.category='temp';
-   else if(x.employment==='シルバー')x.category='silver';
-   else x.category='unknown'
-  }else{
-   x.scope='other';
-   if(x.department&&x.department!=='物流部')x.category='support';
-   else x.category='unknown'
-  }
- }
+ for(const r of tdRows)touch(identityFor(r),r)
 }
 function canonicalForStaff(staffId){
- if(!staffId)return null;if(staffToCode.has(staffId))return'code:'+staffToCode.get(staffId);
- const staff=staffById.get(staffId),name=normalizeName(staff?.name);if(name&&nameToCode.has(name))return'code:'+nameToCode.get(name);
- return'staff:'+staffId
+ return staffId&&staffById.has(staffId)?'staff:'+staffId:null
 }
 
 async function loadData(){
@@ -123,21 +127,24 @@ function aggregate(){
 }
 function renderWorkerOptions(){
  const scope=$('scopeFilter').value,group=$('groupFilter').value,current=$('workerFilter').value;
- const masterOnly=[...directory.values()]
-   .filter(x=>x.scope==='logistics')
-   .filter(x=>group==='all'||x.category===group)
-   .sort((a,b)=>a.name.localeCompare(b.name,'ja'));
- const option=x=>'<option value="'+x.key+'">'+escapeHtml(x.name)+(x.code?' ('+escapeHtml(x.code)+')':'')+'</option>';
+ const byPerson=new Map();
+ for(const s of staffRows){
+  const p=staffParts(s.name),personKey=p.code||p.norm||s.id,existing=byPerson.get(personKey);
+  if(!existing||(!existing.is_active&&s.is_active))byPerson.set(personKey,s)
+ }
+ const masterOnly=[...byPerson.values()]
+   .filter(s=>group==='all'||(s.employment_type==='社員'?'employee':s.employment_type==='パート'?'part':s.employment_type==='派遣'?'temp':s.employment_type==='シルバー'?'silver':'unknown')===group)
+   .map(s=>{const p=staffParts(s.name);return{...s,key:'staff:'+s.id,display:p.display||p.raw,code:p.code}})
+   .sort((a,b)=>a.display.localeCompare(b.display,'ja'));
+ const option=x=>'<option value="'+x.key+'">'+escapeHtml(x.display)+(x.code?' ('+escapeHtml(x.code)+')':'')+'</option>';
  if(scope==='other'){
   $('workerFilter').innerHTML='<option value="all">その他 全体</option>';
-  $('workerFilter').value='all';
-  return
+  $('workerFilter').value='all';return
  }
  let html='<option value="all">'+(scope==='logistics'?'物流部 全体':'全体')+'</option>';
  if(masterOnly.length)html+='<optgroup label="物流部（従業員マスタ）">'+masterOnly.map(option).join('')+'</optgroup>';
  $('workerFilter').innerHTML=html;
- if([...$('workerFilter').options].some(o=>o.value===current))$('workerFilter').value=current;
- else $('workerFilter').value='all'
+ if([...$('workerFilter').options].some(o=>o.value===current))$('workerFilter').value=current;else $('workerFilter').value='all'
 }
 function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function renderAll(){
