@@ -190,16 +190,16 @@ function renderMonthly(monthly){
 function renderHumanHours(monthly){
  $('humanHoursHead').innerHTML=
   '<tr><th rowspan="2">月度</th>'+
-  ACTIVITY_ORDER.map(k=>'<th colspan="2">'+ACTIVITY_LABELS[k]+'</th>').join('')+
-  '<th colspan="2">合計</th></tr>'+
-  '<tr>'+ACTIVITY_ORDER.map(()=>'<th>人時</th><th>件/h</th>').join('')+'<th>人時</th><th>件/h</th></tr>';
+  ACTIVITY_ORDER.map(k=>'<th colspan="2" class="work-group-head">'+ACTIVITY_LABELS[k]+'</th>').join('')+
+  '<th colspan="2" class="total-group">合計</th></tr>'+
+  '<tr>'+ACTIVITY_ORDER.map(()=>'<th>人時</th><th class="work-group-end">件/h</th>').join('')+'<th class="total-group">人時</th><th>件/h</th></tr>';
  $('humanHoursBody').innerHTML=monthly.map(m=>{
   const cells=ACTIVITY_ORDER.map(k=>{
    const h=Number(m.actHours?.[k]||0),actions=Number(m.acts?.[k]?.actions||0),rate=h>0?actions/h:null;
-   return'<td>'+hours(h)+'</td><td>'+(rate==null?'—':fmt(rate,1))+'</td>'
+   return'<td>'+hours(h)+'</td><td class="work-group-end">'+(rate==null?'—':fmt(rate,1))+'</td>'
   }).join('');
   const totalRate=m.hours>0?m.matchedActions/m.hours:null;
-  return'<tr><td><b>'+Number(m.ym.split('-')[1])+'月度</b></td>'+cells+'<td><b>'+hours(m.hours)+'</b></td><td><b>'+(totalRate==null?'—':fmt(totalRate,1))+'</b></td></tr>'
+  return'<tr><td><b>'+Number(m.ym.split('-')[1])+'月度</b></td>'+cells+'<td class="total-group"><b>'+hours(m.hours)+'</b></td><td><b>'+(totalRate==null?'—':fmt(totalRate,1))+'</b></td></tr>'
  }).join('')
 }
 function renderActivities(actTotal){
