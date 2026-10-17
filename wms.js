@@ -4,7 +4,7 @@ const SESSION_KEY='logistics_monthly_oplh_session_v1';
 const $=id=>document.getElementById(id);
 let session=null,user=null,refreshPromise=null,wmsRows=[],tdRows=[],ptRows=[],staffRows=[],directory=new Map(),staffToCode=new Map(),nameToCode=new Map(),staffById=new Map(),staffByName=new Map();
 const ACTIVITY_ORDER=['picking','stock_move','shipping_check','adjustment_out','receiving','receiving_check'];
-const ACTIVITY_LABELS={picking:'ピッキング',stock_move:'在庫移動',shipping_check:'出荷検品',adjustment_out:'調整出庫',receiving:'入庫・調整入庫',receiving_check:'入荷検品'};
+const ACTIVITY_LABELS={picking:'ピッキング',stock_move:'在庫移動',shipping_check:'出荷検品',adjustment_out:'調整出庫',receiving:'調整入庫・入庫',receiving_check:'入荷検品'};
 const ACTIVITY_COLORS={picking:'#2589f5',stock_move:'#2637a8',shipping_check:'#ed7d31',adjustment_out:'#7030a0',receiving:'#db3fa7',receiving_check:'#6b7280'};
 
 function saveSession(s){session=s;if(s)localStorage.setItem(SESSION_KEY,JSON.stringify(s));else localStorage.removeItem(SESSION_KEY)}
@@ -54,8 +54,18 @@ function buildDirectory(){
  for(const r of tdRows)touch(identityFor(r),r);
  for(const x of directory.values()){
   const staff=x.staffId?staffById.get(x.staffId):staffByName.get(normalizeName(x.name));
-  if(staff){x.staffId=staff.id;x.name=staff.name||x.name;x.employment=staff.employment_type||null;x.category='logistics'}
-  else{x.category='other'}
+  if(staff){
+   x.staffId=staff.id;x.name=staff.name||x.name;x.employment=staff.employment_type||null;x.scope='logistics';
+   if(x.employment==='社員')x.category='employee';
+   else if(x.employment==='パート')x.category='part';
+   else if(x.employment==='派遣')x.category='temp';
+   else if(x.employment==='シルバー')x.category='silver';
+   else x.category='unknown'
+  }else{
+   x.scope='other';
+   if(x.department&&x.department!=='物流部')x.category='support';
+   else x.category='unknown'
+  }
  }
 }
 function canonicalForStaff(staffId){
@@ -77,9 +87,14 @@ async function loadData(){
  $('loadStatus').textContent='WMS '+fmt(wmsRows.length)+'集計行 / TimeDesigner '+fmt(tdRows.length)+'集計行 / 物流PT '+fmt(ptRows.length)+'日次行';
 }
 function currentWorkerSet(){
- const selected=$('workerFilter').value,group=$('groupFilter').value;
+ const selected=$('workerFilter').value,scope=$('scopeFilter').value,group=$('groupFilter').value;
  if(selected!=='all')return new Set([selected]);
- const set=new Set();for(const[x,v]of directory){if(group==='all'||v.category===group)set.add(x)}return set
+ const set=new Set();
+ for(const[x,v]of directory){
+  const scopeOk=scope==='all'||v.scope===scope,groupOk=group==='all'||v.category===group;
+  if(scopeOk&&groupOk)set.add(x)
+ }
+ return set
 }
 function workerIncluded(key,set){return set.has(key)}
 function activityTimeMap(workerSet){
@@ -89,7 +104,7 @@ function activityTimeMap(workerSet){
  return map
 }
 function aggregate(){
- const fy=Number($('fiscalYear').value),months=fyMonths(fy),workerSet=currentWorkerSet(),timeMap=activityTimeMap(workerSet),monthMap=new Map(months.map(m=>[m,{ym:m,acts:{},quantity:0,total:0,hours:0,matchedActions:0}]));
+ const fy=Number($('fiscalYear').value),months=fyMonths(fy),workerSet=currentWorkerSet(),timeMap=activityTimeMap(workerSet),monthMap=new Map(months.map(m=>[m,{ym:m,acts:{},actHours:{},quantity:0,total:0,hours:0,matchedActions:0}]));
  const actTotal={};let workersUsed=new Set();
  for(const r of wmsRows){
   const key=identityFor(r);if(!workerIncluded(key,workerSet))continue;const ym=companyYmFromDate(r.work_date),m=monthMap.get(ym);if(!m)continue;
@@ -97,27 +112,33 @@ function aggregate(){
   const t=actTotal[act]||(actTotal[act]={actions:0,quantity:0,hours:0});t.actions+=actions;t.quantity+=qty
  }
  for(const m of monthMap.values()){
-  for(const act of ACTIVITY_ORDER){const mins=timeMap.get(m.ym+'|'+act)||0,hrs=mins/60;if(hrs>0){m.hours+=hrs;m.matchedActions+=(m.acts[act]?.actions||0)}const t=actTotal[act]||(actTotal[act]={actions:0,quantity:0,hours:0});t.hours+=hrs}
+  for(const act of ACTIVITY_ORDER){
+   const mins=timeMap.get(m.ym+'|'+act)||0,hrs=mins/60;m.actHours[act]=hrs;
+   if(hrs>0){m.hours+=hrs;m.matchedActions+=(m.acts[act]?.actions||0)}
+   const t=actTotal[act]||(actTotal[act]={actions:0,quantity:0,hours:0});t.hours+=hrs
+  }
  }
  const monthly=[...monthMap.values()],totals=monthly.reduce((a,m)=>({actions:a.actions+m.total,quantity:a.quantity+m.quantity,hours:a.hours+m.hours,matchedActions:a.matchedActions+m.matchedActions}),{actions:0,quantity:0,hours:0,matchedActions:0});
  return{monthly,actTotal,totals,workerSet,workersUsed}
 }
 function renderWorkerOptions(){
- const group=$('groupFilter').value,current=$('workerFilter').value,all=[...directory.values()].sort((a,b)=>a.name.localeCompare(b.name,'ja'));
- const logistics=all.filter(x=>x.category==='logistics'),other=all.filter(x=>x.category==='other');
+ const scope=$('scopeFilter').value,group=$('groupFilter').value,current=$('workerFilter').value,all=[...directory.values()].sort((a,b)=>a.name.localeCompare(b.name,'ja'));
+ const filtered=all.filter(x=>(scope==='all'||x.scope===scope)&&(group==='all'||x.category===group));
+ const logistics=filtered.filter(x=>x.scope==='logistics'),other=filtered.filter(x=>x.scope==='other');
  const option=x=>'<option value="'+x.key+'">'+escapeHtml(x.name)+(x.code?' ('+escapeHtml(x.code)+')':'')+'</option>';
- let html='<option value="all">'+(group==='logistics'?'物流部 全体':group==='other'?'その他 全体':'全体')+'</option>';
- if(group!=='other'&&logistics.length)html+='<optgroup label="物流部（従業員マスタ）">'+logistics.map(option).join('')+'</optgroup>';
- if(group!=='logistics'&&other.length)html+='<optgroup label="その他">'+other.map(option).join('')+'</optgroup>';
+ let html='<option value="all">'+(scope==='logistics'?'物流部 全体':scope==='other'?'その他 全体':'全体')+'</option>';
+ if(logistics.length)html+='<optgroup label="物流部">'+logistics.map(option).join('')+'</optgroup>';
+ if(other.length)html+='<optgroup label="その他">'+other.map(option).join('')+'</optgroup>';
  $('workerFilter').innerHTML=html;
  if([...$('workerFilter').options].some(o=>o.value===current))$('workerFilter').value=current
+ else $('workerFilter').value='all'
 }
 function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function renderAll(){
  const a=aggregate(),t=a.totals,selected=$('workerFilter').value,info=selected==='all'?null:directory.get(selected);
  $('kActions').textContent=fmt(t.actions);$('kQuantity').textContent=fmt(t.quantity);$('kHours').textContent=hours(t.hours);$('kRate').textContent=t.hours?fmt(t.matchedActions/t.hours,1)+'件/h':'—';$('kWorkers').textContent=fmt(a.workersUsed.size);
- $('selectedWorkerNote').textContent=info?(info.name+(info.code?' / '+info.code:'')+' / '+(info.category==='logistics'?'物流部':'その他')+(info.employment?' / '+info.employment:'')):'全体';
- renderLegend();renderChart(a.monthly);renderMonthly(a.monthly);renderActivities(a.actTotal)
+ $('selectedWorkerNote').textContent=info?(info.name+(info.code?' / '+info.code:'')+' / '+(info.scope==='logistics'?'物流部':'その他')+(info.employment?' / '+info.employment:'')):'全体';
+ renderLegend();renderChart(a.monthly);renderMonthly(a.monthly);renderHumanHours(a.monthly);renderActivities(a.actTotal)
 }
 function renderLegend(){$('chartLegend').innerHTML=ACTIVITY_ORDER.map(k=>'<span class="legend-item"><i class="legend-dot" style="background:'+ACTIVITY_COLORS[k]+'"></i>'+ACTIVITY_LABELS[k]+'</span>').join('')}
 function renderChart(monthly){
@@ -131,6 +152,10 @@ function renderMonthly(monthly){
  $('monthlyHead').innerHTML='<tr><th>月度</th>'+ACTIVITY_ORDER.map(k=>'<th>'+ACTIVITY_LABELS[k]+'</th>').join('')+'<th>合計</th><th>実績数</th><th>対応時間</th><th>件/h</th></tr>';
  $('monthlyBody').innerHTML=monthly.map(m=>'<tr><td><b>'+Number(m.ym.split('-')[1])+'月度</b></td>'+ACTIVITY_ORDER.map(k=>'<td>'+fmt(m.acts[k]?.actions||0)+'</td>').join('')+'<td><b>'+fmt(m.total)+'</b></td><td>'+fmt(m.quantity)+'</td><td>'+hours(m.hours)+'</td><td>'+(m.hours?fmt(m.matchedActions/m.hours,1):'—')+'</td></tr>').join('')
 }
+function renderHumanHours(monthly){
+ $('humanHoursHead').innerHTML='<tr><th>月度</th>'+ACTIVITY_ORDER.map(k=>'<th>'+ACTIVITY_LABELS[k]+'</th>').join('')+'<th>合計人時</th></tr>';
+ $('humanHoursBody').innerHTML=monthly.map(m=>'<tr><td><b>'+Number(m.ym.split('-')[1])+'月度</b></td>'+ACTIVITY_ORDER.map(k=>'<td>'+hours(m.actHours?.[k]||0)+'</td>').join('')+'<td><b>'+hours(m.hours)+'</b></td></tr>').join('')
+}
 function renderActivities(actTotal){
  $('activityBody').innerHTML=ACTIVITY_ORDER.map(k=>{const x=actTotal[k]||{actions:0,quantity:0,hours:0},rate=x.hours?x.actions/x.hours:null,qrate=x.hours?x.quantity/x.hours:null;return'<tr><td>'+ACTIVITY_LABELS[k]+'</td><td>'+fmt(x.actions)+'</td><td>'+fmt(x.quantity)+'</td><td>'+hours(x.hours)+'</td><td>'+fmt(rate,1)+'</td><td>'+fmt(qrate,1)+'</td></tr>'}).join('')
 }
@@ -139,4 +164,4 @@ function showApp(){const ok=!!user;$('authView').classList.toggle('hidden',ok);$
 async function login(){const email=$('email').value.trim(),password=$('password').value;$('authError').textContent='';try{const d=await req('/auth/v1/token?grant_type=password',{method:'POST',skipRefresh:true,body:JSON.stringify({email,password})});saveSession(d);user=d.user;showApp();await loadData()}catch(e){$('authError').textContent=e.message}}
 function logout(){saveSession(null);session=null;user=null;showApp()}
 async function restoreLogin(){session=loadSession();if(session?.refresh_token){try{if(!session?.access_token||accessTokenNearExpiry())await refreshSession();user=await req('/auth/v1/user');showApp();await loadData();return}catch(e){console.warn(e)}}saveSession(null);session=null;user=null;showApp()}
-initYears();$('loginBtn').onclick=login;$('logoutBtn').onclick=logout;$('reloadBtn').onclick=loadData;$('fiscalYear').onchange=loadData;$('groupFilter').onchange=()=>{renderWorkerOptions();$('workerFilter').value='all';renderAll()};$('workerFilter').onchange=renderAll;window.addEventListener('resize',()=>{if(user)renderAll()});setInterval(()=>{if(session?.refresh_token&&accessTokenNearExpiry())refreshSession()},5*60*1000);restoreLogin();
+initYears();$('loginBtn').onclick=login;$('logoutBtn').onclick=logout;$('reloadBtn').onclick=loadData;$('fiscalYear').onchange=loadData;$('scopeFilter').onchange=()=>{renderWorkerOptions();$('workerFilter').value='all';renderAll()};$('groupFilter').onchange=()=>{renderWorkerOptions();$('workerFilter').value='all';renderAll()};$('workerFilter').onchange=renderAll;window.addEventListener('resize',()=>{if(user)renderAll()});setInterval(()=>{if(session?.refresh_token&&accessTokenNearExpiry())refreshSession()},5*60*1000);restoreLogin();
