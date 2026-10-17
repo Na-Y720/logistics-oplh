@@ -102,9 +102,26 @@ function currentWorkerSet(){
 }
 function workerIncluded(key,set){return set.has(key)}
 function activityTimeMap(workerSet){
- const map=new Map(),add=(ym,key,act,min)=>{if(!workerIncluded(key,workerSet))return;const k=ym+'|'+act;map.set(k,(map.get(k)||0)+(Number(min)||0))};
- for(const r of tdRows){const ym=companyYmFromDate(r.work_date);if(!ym)continue;add(ym,identityFor(r),r.activity_key,r.work_minutes)}
- for(const r of ptRows){const ym=companyYmFromDate(r.work_date),key=canonicalForStaff(r.staff_id);if(!ym||!key)continue;add(ym,key,'picking',r.picking_minutes);add(ym,key,'receiving',r.stock_move_minutes)}
+ const map=new Map(),selected=$('workerFilter').value,scope=$('scopeFilter').value,group=$('groupFilter').value;
+ const detailedMode=selected!=='all'||group!=='all';
+ const put=(ym,act,min)=>{const k=ym+'|'+act;map.set(k,(map.get(k)||0)+(Number(min)||0))};
+ for(const r of tdRows){
+  const ym=companyYmFromDate(r.work_date);if(!ym)continue;
+  const isSupplement=r.source_department==='物流部個人補完',key=identityFor(r);
+  if(detailedMode){
+   if(workerIncluded(key,workerSet))put(ym,r.activity_key,r.work_minutes)
+  }else if(scope==='logistics'){
+   if(!isSupplement&&r.source_department==='物流部')put(ym,r.activity_key,r.work_minutes)
+  }else if(scope==='other'){
+   if(!isSupplement&&r.source_department!=='物流部')put(ym,r.activity_key,r.work_minutes)
+  }else{
+   if(!isSupplement)put(ym,r.activity_key,r.work_minutes)
+  }
+ }
+ for(const r of ptRows){
+  const ym=companyYmFromDate(r.work_date),key=canonicalForStaff(r.staff_id);if(!ym||!key||!workerIncluded(key,workerSet))continue;
+  put(ym,'picking',r.picking_minutes);put(ym,'receiving',r.stock_move_minutes)
+ }
  return map
 }
 function aggregate(){
