@@ -257,7 +257,7 @@ async function parseWmsFile(file,onProgress){
   const workerCode=String(r[ix.code]||'').normalize('NFKC').trim().replace(/\.0$/,'');
   const rawName=String(r[ix.name]||'').normalize('NFKC').trim(),workerName=rawName||'不明',normName=normalizeWorkerName(workerName),workerKey=workerCode||normName||workerName;
   if(!workerKey){unparsedRows++;return}
-  const qty=Number(String(r[ix.qty]||'0').replace(/,/g,'')),staffId=staff.byName.get(normName)||null;
+  const qty=Number(String(r[ix.qty]||'0').replace(/,/g,'')),staffId=(workerCode&&staff.byCode.get(workerCode))||staff.byName.get(normName)||null;
   const key=[date,workerKey,map.key].join('|'),x=agg.get(key)||{owner_id:user.id,work_date:date,staff_id:staffId,worker_key:workerKey,worker_code:workerCode||null,worker_name:workerName,activity_key:map.key,activity_label:map.label,action_count:0,quantity:0};
   x.action_count++;if(Number.isFinite(qty))x.quantity+=qty;if(!x.staff_id&&staffId)x.staff_id=staffId;agg.set(key,x);recognizedRows++;
   const s=summary[map.key]||(summary[map.key]={label:map.label,actions:0,quantity:0,aggregate_rows:0});s.actions++;if(Number.isFinite(qty))s.quantity+=qty;
@@ -353,9 +353,22 @@ async function parseTimeDesignerFile(file){
  if(!rows.length)throw new Error(`${periodStart}～${periodEnd} に自動振分できるデータがありません。`);
  return{fileName:file.name,periodStart,periodEnd,periodRows,mappedSourceRows,outsideRows,rows,unmapped:[...unmapped.entries()].map(([task,v])=>({task,...v})),unmatchedStaff:[...unmatchedStaff].sort()};
 }
-async function replaceCostImportBatch(source,payload){
- await rest('logistics_cost_import_batches',`owner_id=eq.${user.id}&month_ym=eq.${currentBundle.ym}&source=eq.${source}`,{method:'DELETE',headers:{Prefer:'return=minimal'}});
- await rest('logistics_cost_import_batches','',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify(payload)});
+async function replaceCostImportBatchForMonth(monthYm,source,payload){
+ await rest('logistics_cost_import_batches',`owner_id=eq.${user.id}&month_ym=eq.${monthYm}&source=eq.${source}`,{method:'DELETE',headers:{Prefer:'return=minimal'}});
+ await rest('logistics_cost_import_batches','',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({...payload,month_ym:monthYm,source})});
+}
+async function replaceCostImportBatch(source,payload){return replaceCostImportBatchForMonth(currentBundle.ym,source,payload)}
+async function restAll(table,params,pageSize=1000){
+ const out=[];for(let from=0;;from+=pageSize){
+  const rows=await rest(table,params,{headers:{Range:from+'-'+(from+pageSize-1)}});
+  out.push(...(rows||[]));if(!rows||rows.length<pageSize)break
+ }return out
+}
+async function deleteRowsByIds(table,ids){
+ for(let i=0;i<ids.length;i+=150){
+  const chunk=ids.slice(i,i+150);if(!chunk.length)continue;
+  await rest(table,'id=in.('+chunk.join(',')+')',{method:'DELETE',headers:{Prefer:'return=minimal'}})
+ }
 }
 async function importTimeDesigner(){
  const m=currentBundle?.monthly||{};if(m.status==='confirmed'){alert('確定済み月には取り込めません。ロック解除後に再度お試しください。');return}
@@ -383,6 +396,121 @@ async function importTimeDesigner(){
  }catch(e){console.error(e);$('tdImportMessage').className='message bad';$('tdImportMessage').textContent=e.message}
  finally{btn.disabled=false}
 }
+
+function wmsSupplementWorkerFromName(fileName,rows){
+ const clean=String(fileName||'').normalize('NFKC').replace(/\.(xlsx|xlsm)$/i,'').trim();
+ const m=clean.match(/^([A-Za-z]*\d+)[\s　]+(.+)$/);
+ let code=m?m[1]:null,name=m?m[2].trim():null;
+ if(!code||!name){
+  const text=(rows||[]).flat().filter(v=>v!=null).map(v=>String(v)).join('\n').normalize('NFKC');
+  const fm=text.match(/\[作業者名\][^\n]*?が\s*([^\n]+?)\s*である/);if(!name&&fm)name=fm[1].trim()
+ }
+ return{code:code?String(code).trim():null,name:name||'不明'}
+}
+function wmsSupplementYear(rows){
+ const text=(rows||[]).flat().filter(v=>v!=null).map(v=>String(v)).join('\n').normalize('NFKC');
+ const m=text.match(/\[年\][^\n]*?(20\d{2})/);if(m)return Number(m[1]);
+ const y=Number(String(currentBundle?.ym||'').slice(0,4));return y||new Date().getFullYear()
+}
+function parseWmsSupplementWorkbook(fileName,buffer){
+ if(typeof XLSX==='undefined')throw new Error('Excel読込ライブラリを読み込めませんでした。再読み込みしてください。');
+ const wb=XLSX.read(buffer,{type:'array'}),sheet=wb.Sheets[wb.SheetNames[0]];
+ if(!sheet)throw new Error(fileName+'：シートがありません。');
+ const rows=XLSX.utils.sheet_to_json(sheet,{header:1,raw:true,defval:null});
+ if(rows.length<3)throw new Error(fileName+'：月次表を読み取れません。');
+ const worker=wmsSupplementWorkerFromName(fileName,rows),year=wmsSupplementYear(rows),head=rows[0]||[],months=[];
+ for(let c=1;c<head.length;c++){
+  const mm=String(head[c]||'').normalize('NFKC').match(/^(\d{1,2})月度$/);
+  if(mm){const m=Number(mm[1]);months.push({col:c,ym:year+'-'+String(m).padStart(2,'0')})}
+ }
+ if(!worker.code)throw new Error(fileName+'：ファイル名から作業者コードを取得できません。');
+ if(!months.length)throw new Error(fileName+'：3月度などの月度列が見つかりません。');
+ const candidates=[];
+ for(let r=1;r<rows.length;r++){
+  const raw=String(rows[r]?.[0]||'').normalize('NFKC').trim();if(!raw||raw==='Total'||raw==='作業区分')continue;
+  const map=WMS_ACTIVITY_MAP[raw];if(!map)continue;
+  for(const m of months){
+   const v=rows[r]?.[m.col],count=v==null||v===''?0:Number(String(v).replace(/,/g,''));
+   if(!Number.isFinite(count)||count<0)continue;
+   candidates.push({worker_code:worker.code,worker_name:worker.name,month_ym:m.ym,activity_key:map.key,activity_label:map.label,action_count:Math.round(count)})
+  }
+ }
+ return{fileName,worker,candidates}
+}
+async function expandWmsSupplementFiles(files){
+ const out=[];
+ for(const file of files){
+  const lower=String(file.name||'').toLowerCase(),buf=await file.arrayBuffer();
+  if(lower.endsWith('.zip')){
+   if(typeof JSZip==='undefined')throw new Error('ZIP読込ライブラリを読み込めませんでした。再読み込みしてください。');
+   const zip=await JSZip.loadAsync(buf),entries=Object.values(zip.files).filter(x=>!x.dir&&/\.xlsx$/i.test(x.name));
+   for(const e of entries)out.push({name:e.name.split('/').pop(),buffer:await e.async('arraybuffer')})
+  }else if(lower.endsWith('.xlsx'))out.push({name:file.name,buffer:buf})
+ }
+ if(!out.length)throw new Error('ZIP内または選択ファイルにExcel（.xlsx）がありません。');
+ return out
+}
+async function pruneWmsSupplementsForPeriod(periodStart,periodEnd){
+ const rows=await restAll('oplh_wms_daily',`owner_id=eq.${user.id}&work_date=gte.${periodStart}&work_date=lte.${periodEnd}&select=id,work_date,worker_key,worker_code,activity_key`);
+ const daily=new Set(),supp=[];
+ for(const r of rows||[]){
+  const ym=companyYmFromDate(r.work_date),key=[ym,r.worker_code||'',r.activity_key].join('|');
+  if(String(r.worker_key||'').startsWith('BI_SUPPLEMENT:'))supp.push({...r,_key:key});else daily.add(key)
+ }
+ const ids=supp.filter(r=>daily.has(r._key)).map(r=>r.id);if(ids.length)await deleteRowsByIds('oplh_wms_daily',ids);
+ return ids.length
+}
+async function importWmsSupplement(){
+ const m=currentBundle?.monthly||{};if(m.status==='confirmed'){alert('確定済み月を選択中です。補完取込は運用中月を選択して実行してください。');return}
+ const files=[...($('wmsSupplementImportFile').files||[])];if(!files.length){$('wmsSupplementImportMessage').className='message bad';$('wmsSupplementImportMessage').textContent='WMS月次補完のExcelまたはZIPを選択してください。';return}
+ const btn=$('wmsSupplementImportBtn');btn.disabled=true;$('wmsSupplementImportMessage').className='message';$('wmsSupplementImportMessage').textContent='月次補完ファイルを確認しています…';
+ try{
+  const entries=await expandWmsSupplementFiles(files),parsed=[];
+  for(const e of entries)parsed.push(parseWmsSupplementWorkbook(e.name,e.buffer));
+  const staff=await tdStaffMaps(),all=parsed.flatMap(x=>x.candidates),months=[...new Set(all.map(x=>x.month_ym))].sort(),codes=[...new Set(all.map(x=>x.worker_code))];
+  if(!all.length)throw new Error('補完できるWMS月次数値がありません。');
+  const minYm=months[0],maxYm=months[months.length-1],[minStart]=monthRange(minYm),[,maxEnd]=monthRange(maxYm);
+  const monthRows=await rest('logistics_cost_monthly',`owner_id=eq.${user.id}&month_ym=gte.${minYm}&month_ym=lte.${maxYm}&select=month_ym,status`).catch(()=>[]);
+  const locked=new Set((monthRows||[]).filter(x=>x.status==='confirmed').map(x=>x.month_ym));
+  const existing=await restAll('oplh_wms_daily',`owner_id=eq.${user.id}&work_date=gte.${minStart}&work_date=lte.${maxEnd}&worker_code=in.(${codes.join(',')})&select=id,work_date,worker_key,worker_code,activity_key`);
+  const daily=new Set(),suppByKey=new Map();
+  for(const r of existing||[]){
+   const ym=companyYmFromDate(r.work_date),key=[ym,r.worker_code||'',r.activity_key].join('|');
+   if(String(r.worker_key||'').startsWith('BI_SUPPLEMENT:'))suppByKey.set(key,r);else daily.add(key)
+  }
+  const rows=[],deleteIds=[],unmatched=new Set(),perMonth=new Map();let skippedDaily=0,skippedLocked=0,zeroed=0;
+  for(const x of all){
+   const key=[x.month_ym,x.worker_code,x.activity_key].join('|'),stat=perMonth.get(x.month_ym)||{source:0,adopted:0,daily:0,locked:0,zero:0};stat.source++;perMonth.set(x.month_ym,stat);
+   const staffId=staff.byCode.get(x.worker_code);
+   if(!staffId){unmatched.add(x.worker_code+' '+x.worker_name);continue}
+   if(locked.has(x.month_ym)){skippedLocked++;stat.locked++;continue}
+   if(daily.has(key)){skippedDaily++;stat.daily++;if(suppByKey.get(key)?.id)deleteIds.push(suppByKey.get(key).id);continue}
+   if(!x.action_count){zeroed++;stat.zero++;if(suppByKey.get(key)?.id)deleteIds.push(suppByKey.get(key).id);continue}
+   rows.push({owner_id:user.id,work_date:monthRange(x.month_ym)[1],staff_id:staffId,worker_key:'BI_SUPPLEMENT:'+x.worker_code,worker_code:x.worker_code,worker_name:x.worker_name,activity_key:x.activity_key,activity_label:x.activity_label,action_count:x.action_count,quantity:0,batch_id:null,updated_at:new Date().toISOString()});stat.adopted++
+  }
+  if(deleteIds.length)await deleteRowsByIds('oplh_wms_daily',[...new Set(deleteIds)]);
+  for(let i=0;i<rows.length;i+=300){
+   $('wmsSupplementImportMessage').textContent='DBへ保存しています… '+Math.min(i+300,rows.length).toLocaleString()+' / '+rows.length.toLocaleString()+'件';
+   await rest('oplh_wms_daily','on_conflict=owner_id%2Cwork_date%2Cworker_key%2Cactivity_key',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(rows.slice(i,i+300))})
+  }
+  const pruned=await pruneWmsSupplementsForPeriod(minStart,maxEnd);
+  const sourceName=files.map(f=>f.name).join(' + ');
+  for(const [ym,s] of perMonth){
+   if(locked.has(ym))continue;
+   const [ps,pe]=monthRange(ym);
+   await replaceCostImportBatchForMonth(ym,'wms_monthly_supplement',{owner_id:user.id,source_filename:sourceName,source_rows:s.source,period_start:ps,period_end:pe,metadata:{excel_files:entries.length,adopted_rows:s.adopted,skipped_daily_rows:s.daily,zero_rows:s.zero,unmatched_staff:[...unmatched],priority_rule:'WMS日次 > WMS月次補完',storage_rule:'日次が無い月度×作業者×作業区分のみ作業回数を補完。実績数は0'}})
+  }
+  $('wmsSupplementImportMessage').className='message ok';$('wmsSupplementImportMessage').textContent='取込完了：Excel '+entries.length+'件 / 補完 '+rows.length+'件 / 日次優先で除外 '+skippedDaily+'件'+(skippedLocked?' / 確定済み月を除外 '+skippedLocked+'件':'');
+  $('wmsSupplementImportSummary').innerHTML=[
+   '<div class="source-row"><div><strong>優先ルール</strong><small>WMS日次がある区分は月次補完を使用しません。</small></div><span class="badge auto">日次優先</span></div>',
+   '<div class="source-row"><div><strong>対象作業者</strong><small>'+codes.length+'名 / Excel '+entries.length+'件</small></div><span class="badge auto">'+rows.length+'補完</span></div>',
+   '<div class="source-row"><div><strong>マスタ未一致</strong><small>'+([...unmatched].length?[...unmatched].map(esc).join(' / '):'なし')+'</small></div><span class="badge '+(unmatched.size?'missing':'auto')+'">'+unmatched.size+'名</span></div>',
+   '<div class="source-row"><div><strong>重複除去</strong><small>日次との競合補完 '+pruned+'件を削除</small></div><span class="badge auto">自動</span></div>'
+  ].join('');
+  await loadAll()
+ }catch(e){console.error(e);$('wmsSupplementImportMessage').className='message bad';$('wmsSupplementImportMessage').textContent=e.message}
+ finally{btn.disabled=false}
+}
 async function importWms(){
  const m=currentBundle?.monthly||{};if(m.status==='confirmed'){alert('確定済み月には取り込めません。ロック解除後に再度お試しください。');return}
  const file=$('wmsImportFile').files?.[0];if(!file){$('wmsImportMessage').className='message bad';$('wmsImportMessage').textContent='WMS作業履歴CSVを選択してください。';return}
@@ -401,8 +529,10 @@ async function importWms(){
    await rest('oplh_wms_daily','on_conflict=owner_id%2Cwork_date%2Cworker_key%2Cactivity_key',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(chunk)});
   }
   const range='owner_id=eq.'+user.id+'&work_date=gte.'+parsed.periodStart+'&work_date=lte.'+parsed.periodEnd;
-  await rest('oplh_wms_daily',range+'&batch_id=is.null',{method:'DELETE',headers:{Prefer:'return=minimal'}});
+  const nullRows=await restAll('oplh_wms_daily',range+'&batch_id=is.null&select=id,worker_key');
+  await deleteRowsByIds('oplh_wms_daily',(nullRows||[]).filter(x=>!String(x.worker_key||'').startsWith('BI_SUPPLEMENT:')).map(x=>x.id));
   await rest('oplh_wms_daily',range+'&batch_id=neq.'+batchId,{method:'DELETE',headers:{Prefer:'return=minimal'}});
+  await pruneWmsSupplementsForPeriod(parsed.periodStart,parsed.periodEnd);
   await rest('oplh_import_batches','owner_id=eq.'+user.id+'&source=eq.wms&period_start=eq.'+parsed.periodStart+'&period_end=eq.'+parsed.periodEnd+'&id=neq.'+batchId,{method:'DELETE',headers:{Prefer:'return=minimal'}});
   await replaceCostImportBatch('wms',{owner_id:user.id,month_ym:currentBundle.ym,source:'wms',source_filename:parsed.fileName,source_rows:parsed.recognizedRows,period_start:parsed.periodStart,period_end:parsed.periodEnd,metadata:{file_size_bytes:parsed.fileSize,aggregate_rows:rows.length,period_rows:parsed.periodRows,outside_rows:parsed.outsideRows,unparsed_rows:parsed.unparsedRows,activities:parsed.summary,unmapped_activities:parsed.unmapped,replace_rule:'対象月度を置換。同一ファイル・同一期間の再取込は二重計上しない',storage_rule:'生データは保存せず日付×作業者×作業区分に集約'}});
   $('wmsImportMessage').className='message ok';$('wmsImportMessage').textContent='取込完了：'+parsed.recognizedRows.toLocaleString()+'行 → '+rows.length.toLocaleString()+'集計行';
@@ -431,6 +561,8 @@ function renderTDImport(){
  $('tdLockedNotice').textContent=locked?'確定済み月のTimeDesignerデータは変更できません。ロック解除後に修正できます。':'';
  $('wmsImportBtn').disabled=locked;$('wmsImportFile').disabled=locked;$('wmsLockedNotice').classList.toggle('hidden',!locked);
  $('wmsLockedNotice').textContent=locked?'確定済み月のWMS作業履歴は変更できません。ロック解除後に修正できます。':'';
+ $('wmsSupplementImportBtn').disabled=locked;$('wmsSupplementImportFile').disabled=locked;$('wmsSupplementLockedNotice').classList.toggle('hidden',!locked);
+ $('wmsSupplementLockedNotice').textContent=locked?'確定済み月を選択中です。運用中月へ移動して補完ファイルを取り込んでください。':'';
  $('autoPackImportBtn').disabled=locked;$('autoPackImportFile').disabled=locked;$('autoPackLockedNotice').classList.toggle('hidden',!locked);
  $('autoPackLockedNotice').textContent=locked?'確定済み月の自動梱包機データは変更できません。ロック解除後に修正できます。':'';
  const latest=(currentBundle.imports||[]).find(x=>x.source==='timedesigner'),totals={};
@@ -453,6 +585,11 @@ function renderTDImport(){
   `<div class="source-row"><div><strong>圧縮保存</strong><small>元 ${fmt(wmsImport?.source_rows)}行 → ${fmt(wm.aggregate_rows)}集計行 / ファイル ${wSize}</small></div><span class="badge auto">日付×作業者×区分</span></div>`,
   `<div class="source-row"><div><strong>対象外・未解析</strong><small>月度外 ${fmt(wm.outside_rows||0)}行 / 未解析 ${fmt(wm.unparsed_rows||0)}行</small></div><span class="badge ${(wm.unparsed_rows||0)?'missing':'auto'}">${fmt(wm.unparsed_rows||0)}行</span></div>`,
   `<div class="source-row"><div><strong>未対応作業区分</strong><small>${wUnmapped.length?wUnmapped.map(x=>esc(x.activity)+' ('+fmt(x.count)+'件)').join(' / '):'なし'}</small></div><span class="badge ${wUnmapped.length?'missing':'auto'}">${fmt(wUnmapped.length)}種類</span></div>`
+ ].join('');
+ const supplementImport=(currentBundle.imports||[]).find(x=>x.source==='wms_monthly_supplement'),sm=supplementImport?.metadata||{};
+ if(!$('wmsSupplementImportMessage').textContent)$('wmsSupplementImportSummary').innerHTML=[
+  `<div class="source-row"><div><strong>当月の月次補完</strong><small>${supplementImport?.source_filename?esc(supplementImport.source_filename):'—'}</small></div><span class="badge ${supplementImport?'auto':'missing'}">${supplementImport?'補完済':'未取込'}</span></div>`,
+  `<div class="source-row"><div><strong>採用 / 日次優先除外</strong><small>${fmt(sm.adopted_rows||0)}件 / ${fmt(sm.skipped_daily_rows||0)}件</small></div><span class="badge auto">日次優先</span></div>`
  ].join('');
  const autoImport=(currentBundle.imports||[]).find(x=>x.source==='auto_packing'),am=autoImport?.metadata||{},sumAuto={...(am.summary||{})};
  if(!sumAuto.Auto01&&(m.auto1_count!=null||m.auto1_lap_seconds!=null)){const count=Number(m.auto1_count)||0,lap=Number(m.auto1_lap_seconds)||null;sumAuto.Auto01={count,lap_seconds:lap,active_hours:count&&lap?count*lap/3600:null,hourly_rate:lap?3600/lap:null}}
@@ -768,10 +905,16 @@ async function unlockMonth(){
  await loadAll()
 }
 async function confirmMonth(){const m=currentBundle.monthly||{};if(m.status==='confirmed')return;if(m.origin==='legacy_spreadsheet'){if(!confirm(currentBundle.ym+'月度を再確定してロックしますか？'))return;const body={status:'confirmed',confirmed_at:new Date().toISOString(),updated_at:new Date().toISOString()};await rest('logistics_cost_monthly',`owner_id=eq.${user.id}&month_ym=eq.${currentBundle.ym}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify(body)});await loadAll();return}const c=metrics(currentBundle);const missing=[];if(m.orders==null)missing.push('受注件数');if(m.complaint_count==null)missing.push('クレーム件数');if(m.receiving_rate==null)missing.push('48H以内入庫率');if(m.material_cost==null)missing.push('資材費');if(!currentBundle.td.length)missing.push('TimeDesigner');if(!currentBundle.pt.length)missing.push('物流PT');if(currentBundle.shipping.filter(x=>['yamato','sagawa','japanpost'].includes(x.carrier)&&x.adopted_count!=null&&x.net_cost!=null).length<3)missing.push('発送費3社');if(orderDeadlineStats(currentBundle).total===0)missing.push('送り状○/×判定');if(missing.length){alert('未完了: '+missing.join('、'));return}if(!confirm(currentBundle.ym+'月度を確定しますか？'))return;const body={status:'confirmed',confirmed_at:new Date().toISOString(),updated_at:new Date().toISOString()};await rest('logistics_cost_monthly',`owner_id=eq.${user.id}&month_ym=eq.${currentBundle.ym}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify(body)});await loadAll()}
-async function initApp(){$('monthPick').value=companyMonthToday();await loadAll()}
+const TAB_NAMES=['dashboard','monthly','shipping','timedesigner','work','comparison'];
+function activateTab(name){
+ const tab=TAB_NAMES.includes(name)?name:'dashboard';
+ document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.tab===tab));
+ TAB_NAMES.forEach(t=>$(t+'Tab').classList.toggle('hidden',t!==tab))
+}
+async function initApp(){$('monthPick').value=companyMonthToday();await loadAll();activateTab(new URLSearchParams(location.search).get('tab')||'dashboard')}
 
-document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===b));['dashboard','monthly','shipping','timedesigner','work','comparison'].forEach(t=>$(t+'Tab').classList.toggle('hidden',b.dataset.tab!==t))});
-$('loginBtn').onclick=login;$('logoutBtn').onclick=logout;$('reloadBtn').onclick=async()=>{await flushOrderAutoSave();await loadAll()};$('monthPick').onchange=async()=>{await flushOrderAutoSave();await loadAll()};$('prevMonthBtn').onclick=async()=>{await flushOrderAutoSave();$('monthPick').value=shiftYm($('monthPick').value,-1);await loadAll()};$('nextMonthBtn').onclick=async()=>{await flushOrderAutoSave();$('monthPick').value=shiftYm($('monthPick').value,1);await loadAll()};$('saveMonthlyBtn').onclick=saveMonthly;$('unlockBtn').onclick=unlockMonth;$('confirmBtn').onclick=confirmMonth;$('tdImportBtn').onclick=importTimeDesigner;$('wmsImportBtn').onclick=importWms;$('autoPackImportBtn').onclick=importAutoPacking;$('sagawaImportBtn').onclick=importSagawa;$('yamatoImportBtn').onclick=importYamato;$('japanPostImportBtn').onclick=importJapanPost;
+document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>activateTab(b.dataset.tab));
+$('loginBtn').onclick=login;$('logoutBtn').onclick=logout;$('reloadBtn').onclick=async()=>{await flushOrderAutoSave();await loadAll()};$('monthPick').onchange=async()=>{await flushOrderAutoSave();await loadAll()};$('prevMonthBtn').onclick=async()=>{await flushOrderAutoSave();$('monthPick').value=shiftYm($('monthPick').value,-1);await loadAll()};$('nextMonthBtn').onclick=async()=>{await flushOrderAutoSave();$('monthPick').value=shiftYm($('monthPick').value,1);await loadAll()};$('saveMonthlyBtn').onclick=saveMonthly;$('unlockBtn').onclick=unlockMonth;$('confirmBtn').onclick=confirmMonth;$('tdImportBtn').onclick=importTimeDesigner;$('wmsImportBtn').onclick=importWms;$('wmsSupplementImportBtn').onclick=importWmsSupplement;$('autoPackImportBtn').onclick=importAutoPacking;$('sagawaImportBtn').onclick=importSagawa;$('yamatoImportBtn').onclick=importYamato;$('japanPostImportBtn').onclick=importJapanPost;
 async function restoreLogin(){session=loadSession();if(session?.refresh_token){try{if(!session?.access_token||accessTokenNearExpiry())await refreshSession();user=await req('/auth/v1/user');showApp();await initApp();return}catch(e){console.warn('session restore failed',e)}}saveSession(null);session=null;user=null;showApp()}
 setInterval(()=>{if(session?.refresh_token&&accessTokenNearExpiry())refreshSession()},5*60*1000);
 window.addEventListener('online',()=>{if(session?.refresh_token)refreshSession()});
