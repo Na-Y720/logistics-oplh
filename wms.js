@@ -127,9 +127,19 @@ function activityTimeMap(workerSet){
 function aggregate(){
  const fy=Number($('fiscalYear').value),months=fyMonths(fy),workerSet=currentWorkerSet(),timeMap=activityTimeMap(workerSet),monthMap=new Map(months.map(m=>[m,{ym:m,acts:{},actHours:{},quantity:0,total:0,hours:0,matchedActions:0}]));
  const actTotal={};let workersUsed=new Set();
+ // 日単位WMSを最優先。月単位補完(BI_SUPPLEMENT)は同じ月×作業者×作業区分に
+ // 日単位データが1件も無い場合だけ使用する。
+ const detailedKeys=new Set();
+ for(const r of wmsRows){
+  if(String(r.worker_key||'').startsWith('BI_SUPPLEMENT:'))continue;
+  const ym=companyYmFromDate(r.work_date),key=identityFor(r),act=r.activity_key||'other';
+  if(ym&&key)detailedKeys.add(ym+'|'+key+'|'+act)
+ }
  for(const r of wmsRows){
   const key=identityFor(r);if(!workerIncluded(key,workerSet))continue;const ym=companyYmFromDate(r.work_date),m=monthMap.get(ym);if(!m)continue;
-  const act=r.activity_key||'other',actions=Number(r.action_count)||0,qty=Number(r.quantity)||0,a=m.acts[act]||(m.acts[act]={actions:0,quantity:0});a.actions+=actions;a.quantity+=qty;m.total+=actions;m.quantity+=qty;workersUsed.add(key);
+  const act=r.activity_key||'other',isSupplement=String(r.worker_key||'').startsWith('BI_SUPPLEMENT:');
+  if(isSupplement&&detailedKeys.has(ym+'|'+key+'|'+act))continue;
+  const actions=Number(r.action_count)||0,qty=Number(r.quantity)||0,a=m.acts[act]||(m.acts[act]={actions:0,quantity:0});a.actions+=actions;a.quantity+=qty;m.total+=actions;m.quantity+=qty;workersUsed.add(key);
   const t=actTotal[act]||(actTotal[act]={actions:0,quantity:0,hours:0});t.actions+=actions;t.quantity+=qty
  }
  for(const m of monthMap.values()){
