@@ -171,8 +171,19 @@ function renderMonthly(monthly){
  $('monthlyBody').innerHTML=monthly.map(m=>'<tr><td><b>'+Number(m.ym.split('-')[1])+'月度</b></td>'+ACTIVITY_ORDER.map(k=>'<td>'+fmt(m.acts[k]?.actions||0)+'</td>').join('')+'<td><b>'+fmt(m.total)+'</b></td><td>'+fmt(m.quantity)+'</td><td>'+hours(m.hours)+'</td><td>'+(m.hours?fmt(m.matchedActions/m.hours,1):'—')+'</td></tr>').join('')
 }
 function renderHumanHours(monthly){
- $('humanHoursHead').innerHTML='<tr><th>月度</th>'+ACTIVITY_ORDER.map(k=>'<th>'+ACTIVITY_LABELS[k]+'</th>').join('')+'<th>合計人時</th></tr>';
- $('humanHoursBody').innerHTML=monthly.map(m=>'<tr><td><b>'+Number(m.ym.split('-')[1])+'月度</b></td>'+ACTIVITY_ORDER.map(k=>'<td>'+hours(m.actHours?.[k]||0)+'</td>').join('')+'<td><b>'+hours(m.hours)+'</b></td></tr>').join('')
+ $('humanHoursHead').innerHTML=
+  '<tr><th rowspan="2">月度</th>'+
+  ACTIVITY_ORDER.map(k=>'<th colspan="2">'+ACTIVITY_LABELS[k]+'</th>').join('')+
+  '<th colspan="2">合計</th></tr>'+
+  '<tr>'+ACTIVITY_ORDER.map(()=>'<th>人時</th><th>件/h</th>').join('')+'<th>人時</th><th>件/h</th></tr>';
+ $('humanHoursBody').innerHTML=monthly.map(m=>{
+  const cells=ACTIVITY_ORDER.map(k=>{
+   const h=Number(m.actHours?.[k]||0),actions=Number(m.acts?.[k]?.actions||0),rate=h>0?actions/h:null;
+   return'<td>'+hours(h)+'</td><td>'+(rate==null?'—':fmt(rate,1))+'</td>'
+  }).join('');
+  const totalRate=m.hours>0?m.matchedActions/m.hours:null;
+  return'<tr><td><b>'+Number(m.ym.split('-')[1])+'月度</b></td>'+cells+'<td><b>'+hours(m.hours)+'</b></td><td><b>'+(totalRate==null?'—':fmt(totalRate,1))+'</b></td></tr>'
+ }).join('')
 }
 function renderActivities(actTotal){
  $('activityBody').innerHTML=ACTIVITY_ORDER.map(k=>{const x=actTotal[k]||{actions:0,quantity:0,hours:0},rate=x.hours?x.actions/x.hours:null,qrate=x.hours?x.quantity/x.hours:null;return'<tr><td>'+ACTIVITY_LABELS[k]+'</td><td>'+fmt(x.actions)+'</td><td>'+fmt(x.quantity)+'</td><td>'+hours(x.hours)+'</td><td>'+fmt(rate,1)+'</td><td>'+fmt(qrate,1)+'</td></tr>'}).join('')
