@@ -53,14 +53,9 @@ function buildDirectory(){
  for(const r of wmsRows)touch(identityFor(r),r);
  for(const r of tdRows)touch(identityFor(r),r);
  for(const x of directory.values()){
-  const staff=x.staffId?staffById.get(x.staffId):staffByName.get(normalizeName(x.name));if(staff){x.staffId=staff.id;x.name=staff.name||x.name;x.employment=staff.employment_type||null}
-  if(x.department&&x.department!=='物流部')x.category='support';
-  else if(x.employment==='社員')x.category='employee';
-  else if(x.employment==='パート')x.category='part';
-  else if(x.employment==='派遣')x.category='temp';
-  else if(x.employment==='シルバー')x.category='silver';
-  else if(/派遣/.test(x.name)||(/^9/.test(x.code||'')))x.category='temp';
-  else x.category='unknown'
+  const staff=x.staffId?staffById.get(x.staffId):staffByName.get(normalizeName(x.name));
+  if(staff){x.staffId=staff.id;x.name=staff.name||x.name;x.employment=staff.employment_type||null;x.category='logistics'}
+  else{x.category='other'}
  }
 }
 function canonicalForStaff(staffId){
@@ -108,15 +103,20 @@ function aggregate(){
  return{monthly,actTotal,totals,workerSet,workersUsed}
 }
 function renderWorkerOptions(){
- const group=$('groupFilter').value,current=$('workerFilter').value,opts=[...directory.values()].filter(x=>group==='all'||x.category===group).sort((a,b)=>a.name.localeCompare(b.name,'ja'));
- $('workerFilter').innerHTML='<option value="all">全体</option>'+opts.map(x=>'<option value="'+x.key+'">'+escapeHtml(x.name)+(x.code?' ('+escapeHtml(x.code)+')':'')+'</option>').join('');
+ const group=$('groupFilter').value,current=$('workerFilter').value,all=[...directory.values()].sort((a,b)=>a.name.localeCompare(b.name,'ja'));
+ const logistics=all.filter(x=>x.category==='logistics'),other=all.filter(x=>x.category==='other');
+ const option=x=>'<option value="'+x.key+'">'+escapeHtml(x.name)+(x.code?' ('+escapeHtml(x.code)+')':'')+'</option>';
+ let html='<option value="all">'+(group==='logistics'?'物流部 全体':group==='other'?'その他 全体':'全体')+'</option>';
+ if(group!=='other'&&logistics.length)html+='<optgroup label="物流部（従業員マスタ）">'+logistics.map(option).join('')+'</optgroup>';
+ if(group!=='logistics'&&other.length)html+='<optgroup label="その他">'+other.map(option).join('')+'</optgroup>';
+ $('workerFilter').innerHTML=html;
  if([...$('workerFilter').options].some(o=>o.value===current))$('workerFilter').value=current
 }
 function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function renderAll(){
  const a=aggregate(),t=a.totals,selected=$('workerFilter').value,info=selected==='all'?null:directory.get(selected);
  $('kActions').textContent=fmt(t.actions);$('kQuantity').textContent=fmt(t.quantity);$('kHours').textContent=hours(t.hours);$('kRate').textContent=t.hours?fmt(t.matchedActions/t.hours,1)+'件/h':'—';$('kWorkers').textContent=fmt(a.workersUsed.size);
- $('selectedWorkerNote').textContent=info?(info.name+(info.code?' / '+info.code:'')+(info.department?' / '+info.department:'')+(info.employment?' / '+info.employment:'')):'全体';
+ $('selectedWorkerNote').textContent=info?(info.name+(info.code?' / '+info.code:'')+' / '+(info.category==='logistics'?'物流部':'その他')+(info.employment?' / '+info.employment:'')):'全体';
  renderLegend();renderChart(a.monthly);renderMonthly(a.monthly);renderActivities(a.actTotal)
 }
 function renderLegend(){$('chartLegend').innerHTML=ACTIVITY_ORDER.map(k=>'<span class="legend-item"><i class="legend-dot" style="background:'+ACTIVITY_COLORS[k]+'"></i>'+ACTIVITY_LABELS[k]+'</span>').join('')}
