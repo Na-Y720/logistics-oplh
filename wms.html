@@ -6,7 +6,7 @@
 <title>WMS作業分析</title>
 <link rel="stylesheet" href="cost.css">
 <style>
-.analysis-filters{display:grid;grid-template-columns:180px 180px minmax(260px,1fr);gap:12px;align-items:end}
+.analysis-filters{display:grid;grid-template-columns:150px 180px 180px minmax(240px,1fr);gap:12px;align-items:end}
 .analysis-filters label{margin:0}
 .analysis-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin:16px 0}
 .analysis-kpi{padding:16px;border:1px solid #e5e7eb;border-radius:12px;background:#fff}
@@ -64,11 +64,22 @@
       <label>年度
         <select id="fiscalYear"></select>
       </label>
-      <label>グループ
+      <label>所属
+        <select id="scopeFilter">
+          <option value="all">全体</option>
+          <option value="logistics">物流部</option>
+          <option value="other">その他</option>
+        </select>
+      </label>
+      <label>区分
         <select id="groupFilter">
           <option value="all">全体</option>
-          <option value="logistics">物流部（従業員マスタ）</option>
-          <option value="other">その他</option>
+          <option value="employee">社員</option>
+          <option value="part">PT</option>
+          <option value="temp">派遣</option>
+          <option value="silver">シルバー</option>
+          <option value="support">他部署応援</option>
+          <option value="unknown">その他・未判定</option>
         </select>
       </label>
       <label>作業者
@@ -106,7 +117,17 @@
   </section>
 
   <section class="card" style="margin-top:16px">
-    <div class="section-head"><div><h3>作業区分別 人時・処理能力</h3><div class="muted">TimeDesignerとWMSで同じ作業区分を突合。物流PTはPT作業時間管理を使用します。</div></div></div>
+    <div class="section-head"><div><h3>月次 作業別人時</h3><div class="muted">TimeDesignerの作業時間を作業区分ごとに月別表示します。物流PTの「入庫＆在庫移動」は元データ上で分離されていないため、入庫側へまとめて表示します。</div></div></div>
+    <div class="tablewrap">
+      <table>
+        <thead id="humanHoursHead"></thead>
+        <tbody id="humanHoursBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card" style="margin-top:16px">
+    <div class="section-head"><div><h3>作業区分別 人時・処理能力</h3><div class="muted">TimeDesignerとWMSで同じ作業区分を突合。作業時間は人時（h）で表示します。</div></div></div>
     <div class="tablewrap">
       <table>
         <thead><tr><th>作業区分</th><th>WMS作業回数</th><th>WMS実績数</th><th>作業時間</th><th>作業回数/h</th><th>実績数/h</th></tr></thead>
