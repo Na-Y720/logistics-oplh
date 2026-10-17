@@ -122,15 +122,21 @@ function aggregate(){
  return{monthly,actTotal,totals,workerSet,workersUsed}
 }
 function renderWorkerOptions(){
- const scope=$('scopeFilter').value,group=$('groupFilter').value,current=$('workerFilter').value,all=[...directory.values()].sort((a,b)=>a.name.localeCompare(b.name,'ja'));
- const filtered=all.filter(x=>(scope==='all'||x.scope===scope)&&(group==='all'||x.category===group));
- const logistics=filtered.filter(x=>x.scope==='logistics'),other=filtered.filter(x=>x.scope==='other');
+ const scope=$('scopeFilter').value,group=$('groupFilter').value,current=$('workerFilter').value;
+ const masterOnly=[...directory.values()]
+   .filter(x=>x.scope==='logistics')
+   .filter(x=>group==='all'||x.category===group)
+   .sort((a,b)=>a.name.localeCompare(b.name,'ja'));
  const option=x=>'<option value="'+x.key+'">'+escapeHtml(x.name)+(x.code?' ('+escapeHtml(x.code)+')':'')+'</option>';
- let html='<option value="all">'+(scope==='logistics'?'物流部 全体':scope==='other'?'その他 全体':'全体')+'</option>';
- if(logistics.length)html+='<optgroup label="物流部">'+logistics.map(option).join('')+'</optgroup>';
- if(other.length)html+='<optgroup label="その他">'+other.map(option).join('')+'</optgroup>';
+ if(scope==='other'){
+  $('workerFilter').innerHTML='<option value="all">その他 全体</option>';
+  $('workerFilter').value='all';
+  return
+ }
+ let html='<option value="all">'+(scope==='logistics'?'物流部 全体':'全体')+'</option>';
+ if(masterOnly.length)html+='<optgroup label="物流部（従業員マスタ）">'+masterOnly.map(option).join('')+'</optgroup>';
  $('workerFilter').innerHTML=html;
- if([...$('workerFilter').options].some(o=>o.value===current))$('workerFilter').value=current
+ if([...$('workerFilter').options].some(o=>o.value===current))$('workerFilter').value=current;
  else $('workerFilter').value='all'
 }
 function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
