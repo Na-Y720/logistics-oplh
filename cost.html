@@ -14,6 +14,7 @@
   </div>
   <div class="top-actions">
     <span id="userLabel" class="muted"></span>
+    <a class="linkbtn" href="/wms">WMS作業分析へ</a>
     <a class="linkbtn" href="/packing">梱包詳細へ</a>
     <a class="linkbtn" href="worktime.html">物流PT 作業時間へ</a>
     <a class="linkbtn" href="./">人時・シフト管理へ</a>
@@ -224,6 +225,34 @@
         <button id="tdImportBtn" class="primary">CSVを取込</button>
       </div>
       <div id="tdImportMessage" class="message"></div>
+    </section>
+
+    <section class="card">
+      <div class="section-head">
+        <div>
+          <h3>各種取り込み：WMS作業履歴</h3>
+          <div class="muted">選択月度（21日～翌20日）の作業履歴を、日付×作業者×作業区分まで集約して保存します。</div>
+          <div class="hint">大容量CSVは分割読み込みするため、生データをそのままDBへ保存しません。再取込時は同月度を置換し二重計上しません。</div>
+        </div>
+      </div>
+      <div id="wmsLockedNotice" class="notice hidden"></div>
+      <div class="form-grid">
+        <label>WMS 作業履歴CSV
+          <input id="wmsImportFile" type="file" accept=".csv,text/csv">
+        </label>
+      </div>
+      <div class="actions">
+        <button id="wmsImportBtn" class="primary">WMS CSVを取込</button>
+        <a class="linkbtn" href="/wms">WMS作業分析を開く</a>
+      </div>
+      <div id="wmsImportMessage" class="message"></div>
+      <div id="wmsImportSummary" class="source-list"></div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>作業区分</th><th>WMS作業回数</th><th>実績数</th><th>集計行数</th></tr></thead>
+          <tbody id="wmsImportBody"></tbody>
+        </table>
+      </div>
     </section>
 
     <section class="card">
