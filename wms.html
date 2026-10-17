@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WMS作業分析</title>
+<link rel="stylesheet" href="cost.css">
+<style>
+.analysis-filters{display:grid;grid-template-columns:180px 180px minmax(260px,1fr);gap:12px;align-items:end}
+.analysis-filters label{margin:0}
+.analysis-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin:16px 0}
+.analysis-kpi{padding:16px;border:1px solid #e5e7eb;border-radius:12px;background:#fff}
+.analysis-kpi span{display:block;color:#667085;font-size:12px;margin-bottom:6px}
+.analysis-kpi b{font-size:24px}
+.chart-wrap{position:relative;height:360px;width:100%}
+#wmsChart{width:100%;height:100%;display:block}
+.legend{display:flex;flex-wrap:wrap;gap:10px;margin:8px 0 0}
+.legend-item{display:flex;align-items:center;gap:5px;font-size:12px;color:#475467}
+.legend-dot{width:10px;height:10px;border-radius:3px;display:inline-block}
+.analysis-title{display:flex;justify-content:space-between;gap:12px;align-items:flex-end;flex-wrap:wrap}
+.analysis-title h3{margin:0}
+.worker-note{font-size:13px;color:#667085}
+@media(max-width:900px){
+ .analysis-filters{grid-template-columns:1fr}
+ .analysis-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .chart-wrap{height:300px}
+}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div>
+    <h1>WMS作業分析</h1>
+    <div class="sub">WMS作業件数 × TimeDesigner / 物流PT 作業時間</div>
+  </div>
+  <div class="top-actions">
+    <span id="userLabel" class="muted"></span>
+    <a class="linkbtn" href="/cost">物流コスト管理へ</a>
+    <a class="linkbtn" href="/packing">梱包詳細へ</a>
+    <button id="logoutBtn" class="ghost hidden">ログアウト</button>
+  </div>
+</header>
+
+<main>
+<section id="authView" class="card auth hidden">
+  <h2>ログイン</h2>
+  <p class="muted">既存の物流アプリと同じアカウントを使用します。</p>
+  <label>メールアドレス<input id="email" type="email" autocomplete="username"></label>
+  <label>パスワード<input id="password" type="password" autocomplete="current-password"></label>
+  <button id="loginBtn" class="primary">ログイン</button>
+  <div id="authError" class="error"></div>
+</section>
+
+<div id="appView" class="hidden">
+  <section class="card">
+    <div class="analysis-title">
+      <div>
+        <h3>表示条件</h3>
+        <div class="muted">「全体」から作業者を選ぶと、その人だけの数値へ切り替わります。</div>
+      </div>
+      <button id="reloadBtn" class="ghost">再読み込み</button>
+    </div>
+    <div class="analysis-filters" style="margin-top:14px">
+      <label>年度
+        <select id="fiscalYear"></select>
+      </label>
+      <label>グループ
+        <select id="groupFilter">
+          <option value="all">全体</option>
+          <option value="employee">物流部社員</option>
+          <option value="part">物流PT</option>
+          <option value="temp">派遣</option>
+          <option value="silver">シルバー</option>
+          <option value="support">他部署応援</option>
+          <option value="unknown">未判定</option>
+        </select>
+      </label>
+      <label>作業者
+        <select id="workerFilter"><option value="all">全体</option></select>
+      </label>
+    </div>
+    <div id="loadStatus" class="hint" style="margin-top:10px"></div>
+  </section>
+
+  <section class="analysis-kpis">
+    <div class="analysis-kpi"><span>WMS作業回数</span><b id="kActions">—</b></div>
+    <div class="analysis-kpi"><span>WMS実績数</span><b id="kQuantity">—</b></div>
+    <div class="analysis-kpi"><span>対応作業時間</span><b id="kHours">—</b></div>
+    <div class="analysis-kpi"><span>対応作業回数 / h</span><b id="kRate">—</b></div>
+    <div class="analysis-kpi"><span>対象作業者</span><b id="kWorkers">—</b></div>
+  </section>
+
+  <section class="card">
+    <div class="analysis-title">
+      <div><h3 id="chartTitle">月次 作業推移</h3><div class="muted">WMS作業回数。作業区分ごとの積み上げ表示です。</div></div>
+      <div id="selectedWorkerNote" class="worker-note"></div>
+    </div>
+    <div id="chartLegend" class="legend"></div>
+    <div class="chart-wrap"><canvas id="wmsChart"></canvas></div>
+  </section>
+
+  <section class="card" style="margin-top:16px">
+    <div class="section-head"><div><h3>年度 月別一覧</h3><div class="muted">3月度～翌年2月度。件/hはWMS作業回数÷対応作業時間です。</div></div></div>
+    <div class="tablewrap">
+      <table>
+        <thead id="monthlyHead"></thead>
+        <tbody id="monthlyBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card" style="margin-top:16px">
+    <div class="section-head"><div><h3>作業区分別 人時・処理能力</h3><div class="muted">TimeDesignerとWMSで同じ作業区分を突合。物流PTはPT作業時間管理を使用します。</div></div></div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>作業区分</th><th>WMS作業回数</th><th>WMS実績数</th><th>作業時間</th><th>作業回数/h</th><th>実績数/h</th></tr></thead>
+        <tbody id="activityBody"></tbody>
+      </table>
+    </div>
+    <div class="hint">調整出庫・入荷検品など、TimeDesigner側に直接対応する作業時間がない区分は処理能力を「—」で表示します。</div>
+  </section>
+</div>
+</main>
+<script src="wms.js"></script>
+</body>
+</html>
