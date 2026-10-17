@@ -20,6 +20,13 @@
 .analysis-title{display:flex;justify-content:space-between;gap:12px;align-items:flex-end;flex-wrap:wrap}
 .analysis-title h3{margin:0}
 .worker-note{font-size:13px;color:#667085}
+.human-hours-table{border-collapse:separate;border-spacing:0}
+.human-hours-table th,.human-hours-table td{white-space:nowrap}
+.human-hours-table .work-group-head{border-right:3px solid #cbd5e1}
+.human-hours-table .work-group-end{border-right:3px solid #cbd5e1}
+.human-hours-table .total-group{border-left:3px solid #94a3b8}
+.human-hours-table thead tr:first-child th{background:#f8fafc}
+.human-hours-table thead tr:first-child th.work-group-head{box-shadow:inset -1px 0 0 #cbd5e1}
 @media(max-width:900px){
  .analysis-filters{grid-template-columns:1fr}
  .analysis-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -119,7 +126,7 @@
   <section class="card" style="margin-top:16px">
     <div class="section-head"><div><h3>月次 作業別人時</h3><div class="muted">TimeDesignerの作業時間を作業区分ごとに月別表示します。物流PTの「入庫＆在庫移動」は元データ上で分離されていないため、入庫側へまとめて表示します。</div></div></div>
     <div class="tablewrap">
-      <table>
+      <table class="human-hours-table">
         <thead id="humanHoursHead"></thead>
         <tbody id="humanHoursBody"></tbody>
       </table>
