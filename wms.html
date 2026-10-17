@@ -56,7 +56,7 @@
     <div class="analysis-title">
       <div>
         <h3>表示条件</h3>
-        <div class="muted">「全体」から作業者を選ぶと、その人だけの数値へ切り替わります。</div>
+        <div class="muted">作業者は「物流部（従業員マスタ登録者）」と「その他」に分けて選択できます。</div>
       </div>
       <button id="reloadBtn" class="ghost">再読み込み</button>
     </div>
@@ -67,12 +67,8 @@
       <label>グループ
         <select id="groupFilter">
           <option value="all">全体</option>
-          <option value="employee">物流部社員</option>
-          <option value="part">物流PT</option>
-          <option value="temp">派遣</option>
-          <option value="silver">シルバー</option>
-          <option value="support">他部署応援</option>
-          <option value="unknown">未判定</option>
+          <option value="logistics">物流部（従業員マスタ）</option>
+          <option value="other">その他</option>
         </select>
       </label>
       <label>作業者
