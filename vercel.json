@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/portal",
+      "destination": "/portal.html"
+    },
+    {
       "source": "/cost",
       "destination": "/cost.html"
     },
@@ -15,6 +19,10 @@
     {
       "source": "/worktime",
       "destination": "/worktime.html"
+    },
+    {
+      "source": "/cs",
+      "destination": "/cs.html"
     }
   ]
 }
