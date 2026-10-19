@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/inventory",
+      "destination": "/inventory.html"
+    },
+    {
       "source": "/portal",
       "destination": "/portal.html"
     },
@@ -26,3 +30,4 @@
     }
   ]
 }
+

@@ -241,6 +241,7 @@ async function streamShiftJisLines(file,onLine,onProgress){
 async function parseWmsFile(file,onProgress){
  const[periodStart,periodEnd]=monthRange(currentBundle.ym),staff=await tdStaffMaps(),agg=new Map(),summary={},unmapped=new Map();
  let head=null,ix=null,sourceRows=0,periodRows=0,recognizedRows=0,outsideRows=0,unparsedRows=0;
+ const inventoryRecords=[];
  await streamShiftJisLines(file,line=>{
   if(!head){
    head=csvLine(line).map(normalizeHeader);const find=n=>head.indexOf(n);
@@ -253,6 +254,7 @@ async function parseWmsFile(file,onProgress){
   if(date<periodStart||date>periodEnd){outsideRows++;return}
   periodRows++;
   const rawActivity=String(r[ix.activity]||'').normalize('NFKC').trim(),map=WMS_ACTIVITY_MAP[rawActivity];
+  if(rawActivity==='調整入庫'||rawActivity==='調整出庫')inventoryRecords.push({row:sourceRows+1,work_date:date,activity:rawActivity,values:r});
   if(!map){if(rawActivity)unmapped.set(rawActivity,(unmapped.get(rawActivity)||0)+1);return}
   const workerCode=String(r[ix.code]||'').normalize('NFKC').trim().replace(/\.0$/,'');
   const rawName=String(r[ix.name]||'').normalize('NFKC').trim(),workerName=rawName||'不明',normName=normalizeWorkerName(workerName),workerKey=workerCode||normName||workerName;
@@ -265,7 +267,7 @@ async function parseWmsFile(file,onProgress){
  const rows=[...agg.values()].map(x=>({...x,quantity:Number((Number(x.quantity)||0).toFixed(3))}));
  for(const r of rows){const s=summary[r.activity_key]||(summary[r.activity_key]={label:r.activity_label,actions:0,quantity:0,aggregate_rows:0});s.aggregate_rows++}
  if(!rows.length)throw new Error(periodStart+'～'+periodEnd+' に取り込めるWMS作業履歴がありません。');
- return{fileName:file.name,fileSize:file.size,periodStart,periodEnd,sourceRows,periodRows,recognizedRows,outsideRows,unparsedRows,rows,summary,unmapped:[...unmapped.entries()].map(([activity,count])=>({activity,count})).sort((a,b)=>b.count-a.count)}
+ return{fileName:file.name,fileSize:file.size,periodStart,periodEnd,sourceRows,periodRows,recognizedRows,outsideRows,unparsedRows,rows,summary,inventoryHeaders:head,inventoryRecords,unmapped:[...unmapped.entries()].map(([activity,count])=>({activity,count})).sort((a,b)=>b.count-a.count)}
 }
 function normalizeAutoLine(v){const s=String(v||'').normalize('NFKC').trim();if(/Auto0?1/i.test(s))return'Auto01';if(/Auto0?2/i.test(s))return'Auto02';if(/Hand0?1/i.test(s))return'Hand01';return null}
 function parseAutoDateTime(v){
@@ -534,8 +536,14 @@ async function importWms(){
   await rest('oplh_wms_daily',range+'&batch_id=neq.'+batchId,{method:'DELETE',headers:{Prefer:'return=minimal'}});
   await pruneWmsSupplementsForPeriod(parsed.periodStart,parsed.periodEnd);
   await rest('oplh_import_batches','owner_id=eq.'+user.id+'&source=eq.wms&period_start=eq.'+parsed.periodStart+'&period_end=eq.'+parsed.periodEnd+'&id=neq.'+batchId,{method:'DELETE',headers:{Prefer:'return=minimal'}});
-  await replaceCostImportBatch('wms',{owner_id:user.id,month_ym:currentBundle.ym,source:'wms',source_filename:parsed.fileName,source_rows:parsed.recognizedRows,period_start:parsed.periodStart,period_end:parsed.periodEnd,metadata:{file_size_bytes:parsed.fileSize,aggregate_rows:rows.length,period_rows:parsed.periodRows,outside_rows:parsed.outsideRows,unparsed_rows:parsed.unparsedRows,activities:parsed.summary,unmapped_activities:parsed.unmapped,replace_rule:'対象月度を置換。同一ファイル・同一期間の再取込は二重計上しない',storage_rule:'生データは保存せず日付×作業者×作業区分に集約'}});
-  $('wmsImportMessage').className='message ok';$('wmsImportMessage').textContent='取込完了：'+parsed.recognizedRows.toLocaleString()+'行 → '+rows.length.toLocaleString()+'集計行';
+  await replaceCostImportBatch('wms',{owner_id:user.id,month_ym:currentBundle.ym,source:'wms',source_filename:parsed.fileName,source_rows:parsed.recognizedRows,period_start:parsed.periodStart,period_end:parsed.periodEnd,metadata:{file_size_bytes:parsed.fileSize,aggregate_rows:rows.length,period_rows:parsed.periodRows,outside_rows:parsed.outsideRows,unparsed_rows:parsed.unparsedRows,activities:parsed.summary,unmapped_activities:parsed.unmapped,replace_rule:'対象月度を置換。同一ファイル・同一期間の再取込は二重計上しない',storage_rule:'作業分析は日付×作業者×作業区分に集約。棚卸し用の調整入出庫明細は別途保存'}});
+  // Keep a single atomic monthly snapshot of adjustment rows. Reimport replaces it,
+  // preserving distinct identical-looking WMS operations by their source row number.
+  const previousSource=await rest('inventory_wms_sources','owner_id=eq.'+user.id+'&month_ym=eq.'+currentBundle.ym+'&select=headers,mapping');
+  const previous=previousSource?.[0];
+  const mapping=previous&&JSON.stringify(previous.headers)===JSON.stringify(parsed.inventoryHeaders)?previous.mapping:null;
+  await rest('inventory_wms_sources','on_conflict=owner_id%2Cmonth_ym',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify({owner_id:user.id,month_ym:currentBundle.ym,period_start:parsed.periodStart,period_end:parsed.periodEnd,source_filename:parsed.fileName,headers:parsed.inventoryHeaders,records:parsed.inventoryRecords,mapping,source_rows:parsed.sourceRows,period_rows:parsed.periodRows,unparsed_rows:parsed.unparsedRows,imported_at:new Date().toISOString()})});
+  $('wmsImportMessage').className='message ok';$('wmsImportMessage').textContent='取込完了：'+parsed.recognizedRows.toLocaleString()+'行 → '+rows.length.toLocaleString()+'集計行 / 棚卸し用調整明細 '+parsed.inventoryRecords.length.toLocaleString()+'件';
   await loadAll()
  }catch(e){console.error(e);$('wmsImportMessage').className='message bad';$('wmsImportMessage').textContent=e.message}
  finally{btn.disabled=false}
