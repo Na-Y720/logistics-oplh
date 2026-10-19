@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>物流アプリ ポータル</title>
+<link rel="stylesheet" href="portal.css">
+</head>
+<body>
+<header class="portal-top">
+  <div>
+    <div class="eyebrow">すててこ株式会社 物流部</div>
+    <h1>物流アプリ ポータル</h1>
+    <p>入力先を共通化し、各アプリはそれぞれの役割に専念する構成です。</p>
+  </div>
+</header>
+
+<main class="portal-main">
+  <section class="shared-zone">
+    <div class="zone-label">共通データ基盤</div>
+    <div class="shared-card">
+      <div>
+        <span class="pill input">共通入力</span>
+        <h2>データ取込 ＆ 従業員マスタ</h2>
+        <p>毎月の外部データ取込と、物流部で共通利用する従業員情報をここに集約します。</p>
+      </div>
+      <div class="shared-actions">
+        <a class="primary-action" href="/cost?tab=timedesigner">
+          <strong>データ取込</strong>
+          <span>WMS / TimeDesigner / 配送会社 / 自動梱包機</span>
+        </a>
+        <a class="secondary-action" href="/?tab=master">
+          <strong>従業員マスタ</strong>
+          <span>社員・PT・派遣・シルバー等の共通マスタ</span>
+        </a>
+      </div>
+    </div>
+    <div class="connector" aria-hidden="true"></div>
+  </section>
+
+  <section class="logistics-zone">
+    <div class="zone-title">
+      <div>
+        <span class="zone-label">物流部アプリ</span>
+        <h2>共通データを用途別に利用</h2>
+      </div>
+      <p>同じデータを別アプリで再入力せず、各画面では固有の入力・分析だけを行います。</p>
+    </div>
+
+    <div class="app-grid">
+      <a class="app-card" href="/cost">
+        <span class="pill manage">KPI・管理</span>
+        <h3>物流コスト管理</h3>
+        <p>月次KPI、発送費、受注課、作業時間、OPLHを集約して確認します。</p>
+        <div class="source-line"><b>主な共通データ</b><span>TimeDesigner / 配送明細 / PT作業時間 / 自動梱包機</span></div>
+      </a>
+
+      <a class="app-card" href="/wms">
+        <span class="pill analyze">分析</span>
+        <h3>WMS 作業分析</h3>
+        <p>作業者・作業区分ごとの件数、人時、件/hを分析します。</p>
+        <div class="source-line"><b>主な共通データ</b><span>WMS / TimeDesigner / 従業員マスタ</span></div>
+      </a>
+
+      <a class="app-card" href="/packing">
+        <span class="pill analyze">分析</span>
+        <h3>梱包詳細</h3>
+        <p>Auto1・Auto2・手梱包の処理能力と年度推移を確認します。</p>
+        <div class="source-line"><b>主な共通データ</b><span>自動梱包機 / TimeDesigner / PT作業時間</span></div>
+      </a>
+
+      <a class="app-card" href="/worktime">
+        <span class="pill daily">日次入力</span>
+        <h3>物流パート 作業時間管理</h3>
+        <p>PTの作業時間を日別入力し、他アプリの人時計算へ連携します。</p>
+        <div class="source-line"><b>ここだけで入力</b><span>PT作業時間</span></div>
+      </a>
+
+      <a class="app-card" href="/">
+        <span class="pill plan">計画・シフト</span>
+        <h3>物流部 月間人時・OPLH・シフト管理</h3>
+        <p>月間人時、出荷予測、必要人数、シフトを管理します。</p>
+        <div class="source-line"><b>固有入力</b><span>出荷予定 / 目標OPLH / シフト条件</span></div>
+      </a>
+    </div>
+  </section>
+
+  <section class="policy-card">
+    <h2>入力・取込の基本ルール</h2>
+    <div class="policy-grid">
+      <div><b>外部ファイル</b><span>「データ取込」へ一本化</span></div>
+      <div><b>物流従業員</b><span>共通の従業員マスタを参照</span></div>
+      <div><b>各アプリ</b><span>そのアプリ固有の入力だけ残す</span></div>
+      <div><b>WMS補完</b><span>日次データ ＞ 月次補完</span></div>
+    </div>
+  </section>
+
+  <section class="cs-zone">
+    <div class="cs-separator"><span>CSは物流部アプリとは別系統</span></div>
+    <a class="cs-card" href="/cs">
+      <div>
+        <span class="pill cs">CS専用</span>
+        <h2>CS課 日報・対応数管理</h2>
+        <p>日報、対応数、集計、CS専用従業員マスタ、シフトを独立管理します。</p>
+      </div>
+      <span class="open-mark">開く →</span>
+    </a>
+  </section>
+</main>
+</body>
+</html>
