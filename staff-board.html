@@ -32,9 +32,12 @@
     <p id="message" role="alert"></p>
     <div class="board-title"><div><h2>今日の配置</h2><p>名前をつかんで移動。タップして配置先を選ぶこともできます。</p></div><span id="summary"></span></div>
     <div class="board-scroll panel"><table id="board" aria-label="時間帯とエリアの人員配置"></table></div>
-    <p class="hint">全日＝午前・午後とも同じ配置。AMとPMを別々に配置することもできます。未配置は出勤確認ではありません。</p>
+    <p class="hint">全日＝午前・午後とも同じ配置。AMとPMを別々に配置することもできます。</p>
+    <div class="board-title"><div><h2>未配置・休憩・サポート</h2><p>出勤予定で未配置の人、休み・有給の人はシフトから自動表示します。</p></div></div>
+    <section id="supportBoard" class="support-board" aria-label="未配置・休憩・サポートの配置"></section>
+    <p class="hint">出勤状況は保存済みシフトを参照します。実際の打刻・当日の欠勤とは異なります。配置を動かしてもシフトは変更しません。</p>
     <section class="panel roster">
-      <div class="roster-head"><div><h2>従業員マスタから配置</h2><p>社員・パート・派遣など、選択日に在籍する従業員</p></div><label>氏名・雇用区分で検索<input id="search" type="search" placeholder="名前を検索"></label></div>
+      <div class="roster-head"><div><h2>従業員マスタから配置</h2><p>選択日の出勤予定者を表示。休み・未登録も切り替えて確認できます。</p></div><label>出勤状況<select id="attendanceFilter"><option value="work">出勤予定</option><option value="all">在籍者すべて</option><option value="off">休み・有給</option><option value="unknown">シフト未登録</option></select></label><label>氏名・雇用区分で検索<input id="search" type="search" placeholder="名前を検索"></label></div>
       <div id="roster" class="cards"></div>
     </section>
   </section>
@@ -50,4 +53,3 @@
 </dialog>
 </body>
 </html>
-

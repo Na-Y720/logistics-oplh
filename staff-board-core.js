@@ -24,8 +24,21 @@
   function cleanName(name) {
     return String(name ?? '').replace(/^(?:\d{6}|LEGACY-S\d+)[\s\u00a0]+/,'');
   }
-  const api={areas,extras,places,eligible,cards,move,cleanName};
+  function attendance(shift) {
+    if (shift?.lock_type === 'paid_leave') return {key:'leave',label:'有給',working:false};
+    if (shift?.assignment === 'work') return {key:'work',label:'出勤予定',working:true};
+    if (shift?.assignment === 'off') return {key:'off',label:'休み',working:false};
+    return {key:'unknown',label:'シフト未登録',working:false};
+  }
+  function pendingCards(row, shift) {
+    const state=attendance(shift);
+    if(state.key==='unknown')return [];
+    if(row?.full_day)return [];
+    const place=state.working?'未配置':'欠勤';
+    if(!row?.am&&!row?.pm)return [{slot:'ALL',place}];
+    return ['AM','PM'].filter(slot=>!row?.[slot.toLowerCase()]).map(slot=>({slot,place}));
+  }
+  const api={areas,extras,places,eligible,cards,move,cleanName,attendance,pendingCards};
   if (typeof module !== 'undefined') module.exports=api;
   else root.StaffBoard=api;
 })(globalThis);
-

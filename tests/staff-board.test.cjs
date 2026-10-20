@@ -25,4 +25,20 @@ test('invalid targets are rejected and name formatting does not change ID',()=>{
   assert.throws(()=>B.move(null,null,'AM','unknown'));
   assert.equal(B.cleanName('123456 テスト 氏名'),'テスト 氏名');
 });
-
+test('attendance keeps unregistered distinct from off and paid leave',()=>{
+  assert.equal(B.attendance(undefined).key,'unknown');
+  assert.equal(B.attendance({assignment:'work'}).working,true);
+  assert.equal(B.attendance({assignment:'off',lock_type:'manual_off'}).key,'off');
+  assert.equal(B.attendance({assignment:'off',lock_type:'paid_leave'}).key,'leave');
+  assert.equal(B.attendance({assignment:'work',lock_type:'paid_leave'}).working,false);
+});
+test('shift-derived cards are virtual and respect existing half-day placements',()=>{
+  const work={assignment:'work'},off={assignment:'off'};
+  assert.deepEqual(B.pendingCards(null,work),[{slot:'ALL',place:'未配置'}]);
+  assert.deepEqual(B.pendingCards(null,off),[{slot:'ALL',place:'欠勤'}]);
+  assert.deepEqual(B.pendingCards(null,null),[]);
+  const row={am:'A',pm:null,full_day:false};
+  assert.deepEqual(B.pendingCards(row,work),[{slot:'PM',place:'未配置'}]);
+  assert.deepEqual(row,{am:'A',pm:null,full_day:false});
+  assert.deepEqual(B.pendingCards({am:'A',pm:'A',full_day:true},work),[]);
+});

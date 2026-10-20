@@ -5,7 +5,7 @@
   const SB_URL='https://qfcgxefymdodjrprhfvu.supabase.co';
   const SB_KEY='sb_publishable_KzELBvq1CkhnHL_CXN99GA_5-an2G6m';
   const SESSION_KEY='logistics_monthly_oplh_session_v1';
-  let session=null,user=null,employees=[],rows=[],busy=false,ready=false,refreshPromise=null;
+  let session=null,user=null,employees=[],rows=[],shifts=new Map(),busy=false,ready=false,refreshPromise=null;
   let selected=null,drag=null,suppressClick=false,loadedDate='';
   const today=()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   function savedSession(){try{return JSON.parse(localStorage.getItem(SESSION_KEY)||'null')}catch{return null}}
@@ -47,19 +47,20 @@
     const on=!!user;
     $('auth').hidden=on;$('app').hidden=!on;$('logout').hidden=!on;
   }
-  function clearState(){ready=false;employees=[];rows=[];selected=null;render()}
+  function clearState(){ready=false;employees=[];rows=[];shifts=new Map();selected=null;render()}
   async function load(silent=false){
     if(busy||!user||drag||$('moveDialog').open)return;
     lock(true);ready=false;
     const date=$('date').value,owner=user.id;
     if(!silent)$('saveStatus').textContent='読み込み中…';
     try{
-      const [staff,placements]=await Promise.all([
+      const [staff,placements,dailyShifts]=await Promise.all([
         list('logistics_staff',`owner_id=eq.${owner}&select=id,name,employment_type,is_active,retirement_date&order=id.asc`),
-        list('logistics_board_assignments',`owner_id=eq.${owner}&work_date=eq.${date}&select=*&order=staff_id.asc`)
+        list('logistics_board_assignments',`owner_id=eq.${owner}&work_date=eq.${date}&select=*&order=staff_id.asc`),
+        list('logistics_daily_shifts',`owner_id=eq.${owner}&shift_date=eq.${date}&select=staff_id,assignment,lock_type&order=staff_id.asc`)
       ]);
       if(user?.id!==owner)return;
-      employees=staff;rows=placements;loadedDate=date;ready=true;
+      employees=staff;rows=placements;shifts=new Map(dailyShifts.map(s=>[s.staff_id,s]));loadedDate=date;ready=true;
       selected=null;render();message();
       $('saveStatus').textContent='✓ 最新の配置を表示';
     }catch(error){
@@ -68,41 +69,79 @@
       message('読み込めませんでした。「最新の配置を読み込む」で再試行してください。 '+error.message);
     }finally{lock(false)}
   }
-  function card(staff,slot=null,invalid=false){
+  function card(staff,slot=null,invalid=false,automatic=false){
     const el=document.createElement('button');el.type='button';el.className='magnet';
-    el.dataset.staff=staff.id;el.dataset.slot=slot||'';el.dataset.type=staff.employment_type||'';
+    el.dataset.staff=staff.id;el.dataset.slot=automatic?'':slot||'';el.dataset.preferredSlot=slot||'AM';el.dataset.type=staff.employment_type||'';
     el.dataset.inactive=String(invalid);el.disabled=busy||invalid;
     if(invalid)el.classList.add('inactive');
     const name=document.createElement('strong');name.textContent=B.cleanName(staff.name);
-    const type=document.createElement('small');type.textContent=(staff.employment_type||'区分未設定')+(invalid?' / 在籍要確認':'');
+    const state=B.attendance(shifts.get(staff.id));
+    el.dataset.attendance=state.key;
+    const type=document.createElement('small');type.textContent=(staff.employment_type||'区分未設定')+' / '+state.label+(invalid?' / 在籍要確認':'')+(automatic?' / 自動表示':'');
     el.append(name,type);el.setAttribute('aria-label',`${name.textContent} ${slot==='ALL'?'全日':slot||'新しく配置'} 配置先を選択`);
     return el;
   }
   function render(){
     const board=$('board');board.replaceChildren();
     const head=board.createTHead().insertRow();
-    ['時間帯',...B.places].forEach(p=>{const th=document.createElement('th');th.scope='col';th.textContent=p;head.append(th)});
+    ['時間帯',...B.areas].forEach(p=>{const th=document.createElement('th');th.scope='col';th.textContent=p;head.append(th)});
     const body=board.createTBody();
     ['AM','ALL','PM'].forEach(slot=>{
       const tr=body.insertRow(),th=document.createElement('th');th.scope='row';th.textContent=slot==='ALL'?'全日':slot;tr.append(th);
-      B.places.forEach(place=>{
-        const td=tr.insertCell();td.dataset.slot=slot;td.dataset.place=place;
-        rows.forEach(row=>{
-          if(!B.cards(row).some(c=>c.slot===slot&&c.place===place))return;
-          const staff=employees.find(s=>s.id===row.staff_id);
-          td.append(card(staff||{id:row.staff_id,name:'マスタ参照不可'},slot,!B.eligible(staff,loadedDate)));
-        });
-        if(!td.children.length){const hint=document.createElement('span');hint.className='cell-hint';hint.textContent='＋ 配置';td.append(hint)}
+      B.areas.forEach(place=>{
+        const td=tr.insertCell();fillCell(td,slot,place);
       });
+    });
+    const support=$('supportBoard');support.replaceChildren();
+    B.extras.forEach(place=>{
+      const section=document.createElement('section');section.className='support-panel panel';
+      const title=document.createElement('h3');title.textContent=place==='欠勤'?'休み・有給・欠勤':place;section.append(title);
+      const lanes=document.createElement('div');lanes.className='support-lanes';
+      ['AM','ALL','PM'].forEach(slot=>{
+        const lane=document.createElement('div'),label=document.createElement('h4');
+        label.textContent=slot==='ALL'?'全日':slot;lane.append(label);
+        const target=document.createElement('div');target.className='support-drop';fillCell(target,slot,place);
+        lane.append(target);lanes.append(lane);
+      });
+      section.append(lanes);support.append(section);
     });
     renderRoster();
     const count=new Set(rows.filter(r=>r.am||r.pm).map(r=>r.staff_id)).size;
-    $('summary').textContent=`配置 ${count}人 / 在籍 ${employees.filter(s=>B.eligible(s,loadedDate)).length}人`;
+    const eligible=employees.filter(s=>B.eligible(s,loadedDate));
+    const tally=key=>eligible.filter(s=>B.attendance(shifts.get(s.id)).key===key).length;
+    $('summary').textContent=`配置記録 ${count}人 ｜ 出勤予定 ${tally('work')}人・休み ${tally('off')}人・有給 ${tally('leave')}人・未登録 ${tally('unknown')}人`;
+  }
+  function fillCell(target,slot,place){
+    target.dataset.drop='true';target.dataset.slot=slot;target.dataset.place=place;
+    rows.forEach(row=>{
+      if(!B.cards(row).some(c=>c.slot===slot&&c.place===place))return;
+      const staff=employees.find(s=>s.id===row.staff_id);
+      const el=card(staff||{id:row.staff_id,name:'マスタ参照不可'},slot,!B.eligible(staff,loadedDate));
+      if(['off','leave'].includes(B.attendance(shifts.get(row.staff_id)).key)&&place!=='欠勤'){
+        el.classList.add('attendance-conflict');
+        const warning=document.createElement('small');warning.textContent='⚠ シフトは休み・有給';el.append(warning);
+      }
+      target.append(el);
+    });
+    if(place==='未配置'||place==='欠勤'){
+      employees.filter(s=>B.eligible(s,loadedDate)).forEach(staff=>{
+        const row=rows.find(r=>r.staff_id===staff.id);
+        if(B.pendingCards(row,shifts.get(staff.id)).some(c=>c.slot===slot&&c.place===place)){
+          // Derived from the shift, never inserted as a placement until the user moves it.
+          target.append(card(staff,slot,false,true));
+        }
+      });
+    }
+    if(!target.children.length){const hint=document.createElement('span');hint.className='cell-hint';hint.textContent='＋ 配置';target.append(hint)}
   }
   function renderRoster(){
     const roster=$('roster');roster.replaceChildren();
     const query=$('search').value.trim().toLocaleLowerCase();
-    employees.filter(s=>B.eligible(s,loadedDate)&&`${s.name} ${s.employment_type}`.toLocaleLowerCase().includes(query))
+    const filter=$('attendanceFilter').value;
+    employees.filter(s=>{
+      const state=B.attendance(shifts.get(s.id));
+      return B.eligible(s,loadedDate)&&(filter==='all'||filter===state.key||(filter==='off'&&state.key==='leave'))&&`${s.name} ${s.employment_type}`.toLocaleLowerCase().includes(query);
+    })
       .sort((a,b)=>a.name.localeCompare(b.name,'ja')).forEach(s=>roster.append(card(s)));
     if(!roster.children.length)roster.textContent=ready?'対象の従業員がいません。':'データを読み込むと従業員を表示します。';
   }
@@ -110,6 +149,9 @@
     if(!selected||busy||!ready)return;
     const selection=selected,staff=employees.find(s=>s.id===selection.id);
     if(!B.eligible(staff,loadedDate)){message('この日の在籍状況を確認してください。');return}
+    const attendance=B.attendance(shifts.get(staff.id));
+    if(['off','leave'].includes(attendance.key)&&place!=='欠勤'&&
+       !confirm(`${B.cleanName(staff.name)}さんのシフトは「${attendance.label}」です。配置しますか？ シフト自体は変更されません。`))return;
     const old=rows.find(r=>r.staff_id===staff.id);
     if(old?.full_day&&selection.from===null&&slot!=='ALL'){
       message('全日カードを移動するか、全日配置を変更してください。');return;
@@ -140,7 +182,7 @@
     if(busy||!ready||el.disabled)return;
     selected={id:el.dataset.staff,from:el.dataset.slot||null};
     $('moveTitle').textContent=B.cleanName(employees.find(s=>s.id===selected.id)?.name)+' の配置';
-    $('slot').value=selected.from||'AM';$('moveDialog').showModal();
+    $('slot').value=selected.from||el.dataset.preferredSlot||'AM';$('moveDialog').showModal();
   }
   document.addEventListener('click',event=>{
     if(suppressClick){event.preventDefault();return}
@@ -159,7 +201,7 @@
     if(!drag.moved){drag.moved=true;drag.ghost=drag.el.cloneNode(true);drag.ghost.classList.add('ghost');drag.ghost.setAttribute('aria-hidden','true');document.body.append(drag.ghost)}
     drag.ghost.style.left=(event.clientX-45)+'px';drag.ghost.style.top=(event.clientY-25)+'px';
     document.querySelectorAll('.drop-target').forEach(el=>el.classList.remove('drop-target'));
-    document.elementFromPoint(event.clientX,event.clientY)?.closest('td[data-place]')?.classList.add('drop-target');
+    document.elementFromPoint(event.clientX,event.clientY)?.closest('[data-drop]')?.classList.add('drop-target');
     const scroll=document.querySelector('.board-scroll'),rect=scroll.getBoundingClientRect();
     if(event.clientY>=rect.top&&event.clientY<=rect.bottom){
       if(event.clientX>rect.right-55)scroll.scrollLeft+=20;
@@ -167,6 +209,8 @@
       if(event.clientY>rect.bottom-35)scroll.scrollTop+=12;
       if(event.clientY<rect.top+35)scroll.scrollTop-=12;
     }
+    if(event.clientY>window.innerHeight-55)window.scrollBy(0,18);
+    if(event.clientY<55)window.scrollBy(0,-18);
   },{passive:false});
   function endDrag(event,cancel=false){
     if(!drag||drag.id!==event.pointerId)return;
@@ -175,7 +219,7 @@
     if(!current.moved)return;
     suppressClick=true;setTimeout(()=>{suppressClick=false},100);
     if(cancel)return;
-    const target=document.elementFromPoint(event.clientX,event.clientY)?.closest('td[data-place]');
+    const target=document.elementFromPoint(event.clientX,event.clientY)?.closest('[data-drop]');
     if(target){selected={id:current.el.dataset.staff,from:current.el.dataset.slot||null};void placeSelection(target.dataset.slot,target.dataset.place)}
   }
   document.addEventListener('pointerup',e=>endDrag(e));
@@ -185,6 +229,7 @@
   $('moveForm').onsubmit=e=>{e.preventDefault();$('moveDialog').close();void placeSelection($('slot').value,$('place').value)};
   $('cancelMove').onclick=()=>$('moveDialog').close();
   $('search').oninput=renderRoster;
+  $('attendanceFilter').onchange=renderRoster;
   $('date').value=today();
   $('date').onchange=()=>{if(!$('date').value)$('date').value=loadedDate||today();void load()};
   function changeDate(days){const date=new Date($('date').value+'T00:00:00Z');date.setUTCDate(date.getUTCDate()+days);$('date').value=date.toISOString().slice(0,10);void load()}
@@ -221,4 +266,3 @@
     else showAuth();
   })();
 })();
-
