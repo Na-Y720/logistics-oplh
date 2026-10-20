@@ -95,7 +95,13 @@
       });
     });
     const support=$('supportBoard');support.replaceChildren();
-    B.extras.forEach(place=>{
+    const unassigned=$('unassignedBoard');unassigned.replaceChildren();
+    ['ALL','AM','PM'].forEach(slot=>{
+      const label=document.createElement('h3');label.textContent=slot==='ALL'?'全日':slot;
+      const target=document.createElement('div');target.className='unassigned-drop';
+      fillCell(target,slot,'未配置');unassigned.append(label,target);
+    });
+    B.extras.filter(place=>place!=='未配置').forEach(place=>{
       const section=document.createElement('section');section.className='support-panel panel';
       const title=document.createElement('h3');title.textContent=place==='欠勤'?'休み・有給・欠勤':place;section.append(title);
       const lanes=document.createElement('div');lanes.className='support-lanes';
