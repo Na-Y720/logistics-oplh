@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>人員配置ボード | 物流部</title>
+  <link rel="stylesheet" href="/staff-board.css">
+  <script src="/staff-board-core.js" defer></script>
+  <script src="/staff-board.js" defer></script>
+</head>
+<body>
+<header>
+  <div><div class="eyebrow">物流部 / DAILY OPERATIONS</div><h1>人員配置ボード</h1></div>
+  <nav><a href="/portal">アプリ一覧</a><a href="/?tab=master">従業員マスタ</a><button id="logout" hidden>ログアウト</button></nav>
+</header>
+<main>
+  <section id="auth" class="auth panel">
+    <h2>いつものアカウントでログイン</h2>
+    <p>共通の従業員マスタを使って、今日の配置をつくります。</p>
+    <form id="loginForm">
+      <label>メールアドレス<input id="email" type="email" autocomplete="username" required></label>
+      <label>パスワード<input id="password" type="password" autocomplete="current-password" required></label>
+      <button class="primary" id="login">ログイン</button>
+    </form>
+    <p id="authError" role="alert"></p>
+  </section>
+  <section id="app" hidden>
+    <div class="toolbar panel">
+      <div class="date-tools"><button id="previous" aria-label="前日">‹</button><label>配置日<input id="date" type="date" required></label><button id="next" aria-label="翌日">›</button><button id="today">今日</button></div>
+      <div class="save-tools"><span id="saveStatus" role="status" aria-live="polite">読み込み中…</span><button id="reload">最新の配置を読み込む</button></div>
+    </div>
+    <p id="message" role="alert"></p>
+    <div class="board-title"><div><h2>今日の配置</h2><p>名前をつかんで移動。タップして配置先を選ぶこともできます。</p></div><span id="summary"></span></div>
+    <div class="board-scroll panel"><table id="board" aria-label="時間帯とエリアの人員配置"></table></div>
+    <p class="hint">全日＝午前・午後とも同じ配置。AMとPMを別々に配置することもできます。未配置は出勤確認ではありません。</p>
+    <section class="panel roster">
+      <div class="roster-head"><div><h2>従業員マスタから配置</h2><p>社員・パート・派遣など、選択日に在籍する従業員</p></div><label>氏名・雇用区分で検索<input id="search" type="search" placeholder="名前を検索"></label></div>
+      <div id="roster" class="cards"></div>
+    </section>
+  </section>
+</main>
+<dialog id="moveDialog">
+  <form id="moveForm">
+    <h2 id="moveTitle">配置を変更</h2>
+    <label>時間帯<select id="slot"><option value="AM">AM</option><option value="ALL">全日</option><option value="PM">PM</option></select></label>
+    <label>配置先<select id="place"></select></label>
+    <p>同じ時間帯に既存の配置がある場合は置き換えます。</p>
+    <div class="dialog-actions"><button type="button" id="cancelMove">キャンセル</button><button class="primary">配置する</button></div>
+  </form>
+</dialog>
+</body>
+</html>
+
