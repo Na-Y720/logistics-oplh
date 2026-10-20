@@ -93,7 +93,12 @@
   function render(){
     const board=$('board');board.replaceChildren();
     const head=board.createTHead().insertRow();
-    ['時間帯',...B.areas].forEach(p=>{const th=document.createElement('th');th.scope='col';th.textContent=p;head.append(th)});
+    ['時間帯',...B.areas].forEach(p=>{
+      const th=document.createElement('th');th.scope='col';
+      if(p.startsWith('配送'))th.append('配送',document.createElement('br'),p.slice(2));
+      else th.textContent=p;
+      head.append(th);
+    });
     const body=board.createTBody();
     ['AM','ALL','PM'].forEach(slot=>{
       const tr=body.insertRow(),th=document.createElement('th');th.scope='row';th.textContent=slot==='ALL'?'全日':slot;tr.append(th);
@@ -103,28 +108,33 @@
     });
     const support=$('supportBoard');support.replaceChildren();
     const unassigned=$('unassignedBoard');unassigned.replaceChildren();
-    ['ALL','AM','PM'].forEach(slot=>{
-      const label=document.createElement('h3');label.textContent=slot==='ALL'?'全日':slot;
-      const target=document.createElement('div');target.className='unassigned-drop';
-      fillCell(target,slot,'未配置');unassigned.append(label,target);
-    });
+    const pending=document.createElement('div');pending.className='unassigned-drop';
+    fillCombined(pending,'未配置');unassigned.append(pending);
     B.extras.filter(place=>place!=='未配置').forEach(place=>{
       const section=document.createElement('section');section.className='support-panel panel';
-      const title=document.createElement('h3');title.textContent=place==='欠勤'?'休み・有給・欠勤':place;section.append(title);
-      const lanes=document.createElement('div');lanes.className='support-lanes';
-      ['AM','ALL','PM'].forEach(slot=>{
-        const lane=document.createElement('div'),label=document.createElement('h4');
-        label.textContent=slot==='ALL'?'全日':slot;lane.append(label);
-        const target=document.createElement('div');target.className='support-drop';fillCell(target,slot,place);
-        lane.append(target);lanes.append(lane);
-      });
-      section.append(lanes);support.append(section);
+      const title=document.createElement('h3');title.textContent=place==='欠勤'?'休み':place;section.append(title);
+      const target=document.createElement('div');target.className='support-drop';
+      fillCombined(target,place);section.append(target);support.append(section);
     });
     renderRoster();
     const count=new Set(rows.filter(r=>r.am||r.pm).map(r=>r.staff_id)).size;
     const eligible=employees.filter(s=>B.eligible(s,loadedDate));
     const tally=key=>eligible.filter(s=>B.attendance(shifts.get(s.id)).key===key).length;
     $('summary').textContent=`配置記録 ${count}人 ｜ 出勤予定 ${tally('work')}人・休み ${tally('off')}人・有給 ${tally('leave')}人・未登録 ${tally('unknown')}人`;
+  }
+  function fillCombined(target,place){
+    target.dataset.drop='true';target.dataset.slot='AUTO';target.dataset.place=place;
+    employees.forEach(staff=>{
+      const row=rows.find(r=>r.staff_id===staff.id);
+      const saved=row?B.cards(row).filter(c=>B.visiblePlace(c.place)===place):[];
+      const pending=B.eligible(staff,loadedDate)?B.pendingCards(row,shifts.get(staff.id)).filter(c=>c.place===place):[];
+      if(!saved.length&&!pending.length)return;
+      const source=saved.length>1?'ALL':saved[0]?.slot;
+      const preferred=pending.length>1?'ALL':pending[0]?.slot||'ALL';
+      const el=card(staff,source||preferred,!B.eligible(staff,loadedDate),!source);
+      target.append(el);
+    });
+    if(!target.children.length){const hint=document.createElement('span');hint.className='cell-hint';hint.textContent='ここへ移動';target.append(hint)}
   }
   function fillCell(target,slot,place){
     target.dataset.drop='true';target.dataset.slot=slot;target.dataset.place=place;
@@ -163,6 +173,7 @@
   async function placeSelection(slot,place){
     if(!selected||busy||!ready)return;
     const selection=selected,staff=employees.find(s=>s.id===selection.id);
+    if(slot==='AUTO')slot=selection.from||selection.preferred||'ALL';
     if(!B.eligible(staff,loadedDate)){message('この日の在籍状況を確認してください。');return}
     const attendance=B.attendance(shifts.get(staff.id));
     if(['off','leave'].includes(attendance.key)&&place!=='欠勤'&&
@@ -195,9 +206,9 @@
   }
   function openMove(el){
     if(busy||!ready||el.disabled)return;
-    selected={id:el.dataset.staff,from:el.dataset.slot||null};
+    selected={id:el.dataset.staff,from:el.dataset.slot||null,preferred:el.dataset.preferredSlot};
     $('moveTitle').textContent=B.cleanName(employees.find(s=>s.id===selected.id)?.name)+' の配置';
-    $('slot').value=selected.from||el.dataset.preferredSlot||'AM';$('moveDialog').showModal();
+    $('slot').value=selected.from||el.dataset.preferredSlot||'AM';updateMoveFields();$('moveDialog').showModal();
   }
   document.addEventListener('click',event=>{
     if(suppressClick){event.preventDefault();return}
@@ -235,13 +246,15 @@
     suppressClick=true;setTimeout(()=>{suppressClick=false},100);
     if(cancel)return;
     const target=document.elementFromPoint(event.clientX,event.clientY)?.closest('[data-drop]');
-    if(target){selected={id:current.el.dataset.staff,from:current.el.dataset.slot||null};void placeSelection(target.dataset.slot,target.dataset.place)}
+    if(target){selected={id:current.el.dataset.staff,from:current.el.dataset.slot||null,preferred:current.el.dataset.preferredSlot};void placeSelection(target.dataset.slot,target.dataset.place)}
   }
   document.addEventListener('pointerup',e=>endDrag(e));
   document.addEventListener('pointercancel',e=>endDrag(e,true));
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&drag)endDrag({pointerId:drag.id},true)});
   B.places.forEach(p=>{const option=document.createElement('option');option.value=p;option.textContent=p;$('place').append(option)});
-  $('moveForm').onsubmit=e=>{e.preventDefault();$('moveDialog').close();void placeSelection($('slot').value,$('place').value)};
+  function updateMoveFields(){$('slot').parentElement.hidden=!B.areas.includes($('place').value)}
+  $('place').onchange=updateMoveFields;
+  $('moveForm').onsubmit=e=>{e.preventDefault();$('moveDialog').close();void placeSelection(B.areas.includes($('place').value)?$('slot').value:'AUTO',$('place').value)};
   $('cancelMove').onclick=()=>$('moveDialog').close();
   $('search').oninput=renderRoster;
   $('attendanceFilter').onchange=renderRoster;
@@ -281,3 +294,4 @@
     else showAuth();
   })();
 })();
+
