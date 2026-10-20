@@ -833,10 +833,15 @@ function renderWork(){const c=metrics(currentBundle),d=c.detail,m=currentBundle.
  const lap1=Number(m.auto1_lap_seconds)||0,lap2=Number(m.auto2_lap_seconds)||0,count1=Number(m.auto1_count)||0,count2=Number(m.auto2_count)||0;
  const rate1=lap1?3600/lap1:null,rate2=lap2?3600/lap2:null;
  const auto1Hours=rate1?yCount/rate1:null,auto2Hours=rate2?jpCount/rate2:null;
- const handCount=Math.max(0,sCount+Math.max(0,yCount-count1)+Math.max(0,jpCount-count2));
+ let handCount=Math.max(0,sCount+Math.max(0,yCount-count1)+Math.max(0,jpCount-count2));
  let handHours=Math.max(0,(c.empPackHours+c.ptPackHours)-(auto1Hours||0)-(auto2Hours||0));
  let handRate=handHours?handCount/handHours:null,handLap=handRate?3600/handRate:null;
- if(m.origin==='legacy_spreadsheet'&&m.hand_pack_lap_seconds!=null){handLap=Number(m.hand_pack_lap_seconds);handRate=handLap?3600/handLap:null;if(handRate)handHours=handCount/handRate}
+ if(m.origin==='legacy_spreadsheet'&&m.hand_pack_lap_seconds!=null){
+  handLap=Number(m.hand_pack_lap_seconds);handRate=handLap?3600/handLap:null;
+  if(m.hand_pack_hours_legacy!=null)handHours=Number(m.hand_pack_hours_legacy);
+  else if(handRate)handHours=handCount/handRate;
+  if(handHours>0&&handRate)handCount=handHours*handRate
+ }
  const packRows=[
   ['Auto1 ポスト便',lap1||null,rate1,count1||null,auto1Hours,rate1?fmt(rate1/3,1)+'件/h（3名換算）':'—'],
   ['Auto2 ゆうパック',lap2||null,rate2,count2||null,auto2Hours,rate2?fmt(rate2/3,1)+'件/h（3名換算）':'—'],
