@@ -74,11 +74,13 @@
     el.dataset.staff=staff.id;el.dataset.slot=automatic?'':slot||'';el.dataset.preferredSlot=slot||'AM';el.dataset.type=staff.employment_type||'';
     el.dataset.inactive=String(invalid);el.disabled=busy||invalid;
     if(invalid)el.classList.add('inactive');
-    const name=document.createElement('strong');name.textContent=B.cleanName(staff.name);
+    const name=document.createElement('strong');name.textContent=B.plateName(staff.name);
     const state=B.attendance(shifts.get(staff.id));
     el.dataset.attendance=state.key;
-    const type=document.createElement('small');type.textContent=(staff.employment_type||'区分未設定')+' / '+state.label+(invalid?' / 在籍要確認':'')+(automatic?' / 自動表示':'');
-    el.append(name,type);el.setAttribute('aria-label',`${name.textContent} ${slot==='ALL'?'全日':slot||'新しく配置'} 配置先を選択`);
+    el.title=B.cleanName(staff.name)+' / '+(staff.employment_type||'区分未設定')+' / '+state.label+(invalid?' / 在籍要確認':'');
+    el.append(name);
+    if(invalid){const warning=document.createElement('small');warning.textContent='在籍要確認';el.append(warning)}
+    el.setAttribute('aria-label',`${B.cleanName(staff.name)} ${slot==='ALL'?'全日':slot||'新しく配置'} 配置先を選択`);
     return el;
   }
   function render(){

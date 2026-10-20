@@ -24,6 +24,11 @@
   function cleanName(name) {
     return String(name ?? '').replace(/^(?:\d{6}|LEGACY-S\d+)[\s\u00a0]+/,'');
   }
+  function plateName(name) {
+    const full=cleanName(name).trim(), parts=full.split(/\s+/u);
+    // Do not guess the family-name boundary when the master has no separator.
+    return parts.length>1 ? parts[0]+Array.from(parts[1])[0] : full;
+  }
   function attendance(shift) {
     if (shift?.lock_type === 'paid_leave') return {key:'leave',label:'有給',working:false};
     if (shift?.assignment === 'work') return {key:'work',label:'出勤予定',working:true};
@@ -38,7 +43,7 @@
     if(!row?.am&&!row?.pm)return [{slot:'ALL',place}];
     return ['AM','PM'].filter(slot=>!row?.[slot.toLowerCase()]).map(slot=>({slot,place}));
   }
-  const api={areas,extras,places,eligible,cards,move,cleanName,attendance,pendingCards};
+  const api={areas,extras,places,eligible,cards,move,cleanName,plateName,attendance,pendingCards};
   if (typeof module !== 'undefined') module.exports=api;
   else root.StaffBoard=api;
 })(globalThis);
