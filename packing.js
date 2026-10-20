@@ -31,10 +31,15 @@ function packMetrics(b){
  const auto1Hourly=auto1Hours&&count1!=null?count1/auto1Hours:(lap1?3600/lap1:null),auto2Hourly=auto2Hours&&count2!=null?count2/auto2Hours:(lap2?3600/lap2:null);
  const tdHand=(b?.td||[]).filter(r=>r.activity_key==='hand_pack').reduce((a,r)=>a+(Number(r.work_minutes)||0),0)/60;
  const ptHand=(b?.pt||[]).reduce((a,r)=>a+(Number(r.hand_pack_minutes)||0),0)/60;
- const handHours=tdHand+ptHand+(Number(m.timee_packing_hours)||0);
+ let handHours=tdHand+ptHand+(Number(m.timee_packing_hours)||0);
  const totalPackCount=(b?.shipping||[]).reduce((a,r)=>a+(Number(r.adopted_count)||0),0);
- const autoCount=(count1||0)+(count2||0),handCount=(count1!=null&&count2!=null&&totalPackCount>=autoCount)?totalPackCount-autoCount:null;
- const handHourly=handCount!=null&&handHours>0?handCount/handHours:null,handLap=handCount&&handHours>0?handHours*3600/handCount:null;
+ const autoCount=(count1||0)+(count2||0);let handCount=(count1!=null&&count2!=null&&totalPackCount>=autoCount)?totalPackCount-autoCount:null;
+ let handHourly=handCount!=null&&handHours>0?handCount/handHours:null,handLap=handCount&&handHours>0?handHours*3600/handCount:null;
+ if(m.origin==='legacy_spreadsheet'&&m.hand_pack_lap_seconds!=null){
+  handLap=Number(m.hand_pack_lap_seconds)||null;handHourly=handLap?3600/handLap:null;
+  if(m.hand_pack_hours_legacy!=null)handHours=Number(m.hand_pack_hours_legacy);
+  if(handHours>0&&handHourly)handCount=handHours*handHourly
+ }
  return{lap1,count1,auto1Hourly,auto1Hours,auto1Three:auto1Hourly?auto1Hourly/3:null,lap2,count2,auto2Hourly,auto2Hours,auto2Three:auto2Hourly?auto2Hourly/3:null,totalPackCount,handCount,handLap,handHourly,handHours}
 }
 async function loadMonth(ym){
