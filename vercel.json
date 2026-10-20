@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/staff-board",
+      "destination": "/staff-board.html"
+    },
+    {
       "source": "/inventory",
       "destination": "/inventory.html"
     },
@@ -30,4 +34,6 @@
     }
   ]
 }
+
+
 
