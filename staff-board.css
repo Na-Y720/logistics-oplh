@@ -13,3 +13,5 @@
 @media(max-width:1000px){.placement-workspace{grid-template-columns:142px minmax(0,1fr);gap:10px}.unassigned-sidebar{padding:10px 5px}.unassigned-drop{gap:5px}.support-board{grid-template-columns:1fr}}
 @media(max-width:600px){.placement-workspace{grid-template-columns:76px minmax(0,1fr);gap:8px}.unassigned-sidebar{padding:8px 5px}.unassigned-sidebar h2{font-size:14px}.unassigned-sidebar p{font-size:10px}.unassigned-drop .magnet{width:60px}}
 #board tbody th{font-size:16px;white-space:nowrap;padding:24px 2px}
+/* Keep names and working hours readable across the expanded area list. */
+#board{min-width:1450px}#board thead th{font-size:16px;padding:14px 3px;background:#edf3ee}#board thead th:nth-child(n+12){font-size:12px}#board td:nth-child(n),#board th:nth-child(n){border-left:0}#board td:nth-child(n){background:#fff}.magnet .work-hours,.support-drop .magnet .work-hours{font-size:10px;white-space:nowrap;letter-spacing:-.35px;font-weight:700;color:#25483e;margin-top:5px;line-height:1.2}.unassigned-drop .magnet .work-hours{font-size:8px;letter-spacing:-.6px;margin-top:3px}.magnet.attendance-conflict .work-hours{color:#25483e}

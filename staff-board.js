@@ -7,6 +7,7 @@
   const SESSION_KEY='logistics_monthly_oplh_session_v1';
   let session=null,user=null,employees=[],rows=[],shifts=new Map(),busy=false,ready=false,refreshPromise=null;
   let selected=null,drag=null,suppressClick=false,loadedDate='';
+  let monthlyHours=new Map(),defaultHours=new Map();
   const today=()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   function savedSession(){try{return JSON.parse(localStorage.getItem(SESSION_KEY)||'null')}catch{return null}}
   function setSession(value){session=value;if(value)localStorage.setItem(SESSION_KEY,JSON.stringify(value));else localStorage.removeItem(SESSION_KEY)}
@@ -54,13 +55,16 @@
     const date=$('date').value,owner=user.id;
     if(!silent)$('saveStatus').textContent='読み込み中…';
     try{
-      const [staff,placements,dailyShifts]=await Promise.all([
+      const [staff,placements,dailyShifts,monthly,defaults]=await Promise.all([
         list('logistics_staff',`owner_id=eq.${owner}&select=id,name,employment_type,is_active,retirement_date&order=id.asc`),
         list('logistics_board_assignments',`owner_id=eq.${owner}&work_date=eq.${date}&select=*&order=staff_id.asc`),
-        list('logistics_daily_shifts',`owner_id=eq.${owner}&shift_date=eq.${date}&select=staff_id,assignment,lock_type&order=staff_id.asc`)
+        list('logistics_daily_shifts',`owner_id=eq.${owner}&shift_date=eq.${date}&select=staff_id,assignment,lock_type&order=staff_id.asc`),
+        list('logistics_monthly_staffing',`owner_id=eq.${owner}&plan_month=eq.${B.planMonth(date)}&select=staff_id,start_time,end_time&order=staff_id.asc`),
+        list('logistics_staff_defaults',`owner_id=eq.${owner}&select=staff_id,start_time,end_time&order=staff_id.asc`)
       ]);
       if(user?.id!==owner)return;
       employees=staff;rows=placements;shifts=new Map(dailyShifts.map(s=>[s.staff_id,s]));loadedDate=date;ready=true;
+      monthlyHours=new Map(monthly.map(s=>[s.staff_id,s]));defaultHours=new Map(defaults.map(s=>[s.staff_id,s]));
       selected=null;render();message();
       $('saveStatus').textContent='✓ 最新の配置を表示';
     }catch(error){
@@ -79,6 +83,9 @@
     el.dataset.attendance=state.key;
     el.title=B.cleanName(staff.name)+' / '+(staff.employment_type||'区分未設定')+' / '+state.label+(invalid?' / 在籍要確認':'');
     el.append(name);
+    const hours=document.createElement('small');hours.className='work-hours';
+    hours.textContent=B.workHours(monthlyHours.get(staff.id),defaultHours.get(staff.id));
+    el.append(hours);el.title+=' / '+hours.textContent;
     if(invalid){const warning=document.createElement('small');warning.textContent='在籍要確認';el.append(warning)}
     el.setAttribute('aria-label',`${B.cleanName(staff.name)} ${slot==='ALL'?'全日':slot||'新しく配置'} 配置先を選択`);
     return el;

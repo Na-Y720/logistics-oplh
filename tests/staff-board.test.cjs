@@ -1,6 +1,6 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const B=require('../staff-board-core.js');
-test('area order matches the board',()=>assert.deepEqual(B.areas,['A','B','C','G','H','I','D','E','F']));
+test('area order matches the board',()=>assert.deepEqual(B.areas,['A','B','C','D','E','F','G','H','I','J','梱包','パスソート','配送佐川','配送南郵便局']));
 test('retirement date is inclusive; former staff remain usable on historical dates',()=>{
   assert.equal(B.eligible({name:'test',is_active:false,retirement_date:'2026-10-20'},'2026-10-20'),true);
   assert.equal(B.eligible({name:'test',is_active:true,retirement_date:'2026-10-20'},'2026-10-21'),false);
@@ -41,4 +41,15 @@ test('shift-derived cards are virtual and respect existing half-day placements',
   assert.deepEqual(B.pendingCards(row,work),[{slot:'PM',place:'未配置'}]);
   assert.deepEqual(row,{am:'A',pm:null,full_day:false});
   assert.deepEqual(B.pendingCards({am:'A',pm:'A',full_day:true},work),[]);
+});
+
+test('working hours follow the company month and keep unset monthly values',()=>{
+  assert.equal(B.planMonth('2026-10-20'),'2026-10-01');
+  assert.equal(B.planMonth('2026-10-21'),'2026-11-01');
+  assert.equal(B.planMonth('2026-12-21'),'2027-01-01');
+  const defaults={start_time:'08:15:00',end_time:'17:15:00'};
+  assert.equal(B.workHours(null,defaults),'08:15～17:15');
+  assert.equal(B.workHours({start_time:'09:00:00',end_time:'15:00:00'},defaults),'09:00～15:00');
+  assert.equal(B.workHours({start_time:null,end_time:null},defaults),'時間未設定');
+  for(const place of ['J','梱包','パスソート','配送佐川','配送南郵便局'])assert.equal(B.move(null,null,'ALL',place).am,place);
 });
