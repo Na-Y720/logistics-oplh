@@ -703,29 +703,69 @@ async function extractPdfText(file,retry=true){
 }
 function parseYamatoText(text){
  const toNum=x=>Number(String(x||'').replace(/,/g,''));
- let invoiceCount=null,grossCost=null,netCost=null;
- const normal=[...text.matchAll(/合計[（(]税込[）)]\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)/g)];
- if(normal.length){const t=normal[normal.length-1];invoiceCount=toNum(t[1]);grossCost=toNum(t[2]);netCost=toNum(t[3])}
- if(invoiceCount==null){
-  const compact=[...text.matchAll(/(\d{1,3},\d{3})(\d{1,3},\d{3},\d{3})(\d{1,3},\d{3},\d{3})\s+0\s+0\s+(\d{1,3},\d{3})\s*合計[（(]税込[）)]/g)];
-  if(compact.length){const t=compact[compact.length-1];invoiceCount=toNum(t[1]);grossCost=toNum(t[2]);netCost=toNum(t[3])}
+ const normalized=String(text||'').replace(/[０-９]/g,ch=>String.fromCharCode(ch.charCodeAt(0)-0xFEE0)).replace(/\r/g,'');
+ const lines=normalized.split('\n');
+ let invoiceCount=null,grossCost=null,netCost=null,taxCost=null;
+ const useTotals=nums=>{
+  if(!Array.isArray(nums)||nums.length<6)return false;
+  const v=nums.slice(-6).map(toNum);
+  if(!v.every(Number.isFinite)||v[0]<=0||v[1]<=0||v[2]<=0)return false;
+  invoiceCount=v[0];grossCost=v[1];netCost=v[2];taxCost=v[5];return true
+ };
+ for(let i=lines.length-1;i>=0;i--){
+  const compact=lines[i].replace(/\s/g,'').replace(/（/g,'(').replace(/）/g,')');
+  if(!compact.includes('合計(税込)'))continue;
+  const nums=[...lines.slice(i,i+3).join(' ').matchAll(/\d[\d,]*/g)].map(m=>m[0]);
+  if(useTotals(nums))break
  }
- let adoptedCount=0;
- for(const line of text.replace(/\r/g,'').split('\n')){
-  if(!line.includes('ネコポス'))continue;
-  const after=line.split('ネコポス').slice(1).join('ネコポス');
-  const nums=[...after.matchAll(/\d[\d,]*/g)].map(m=>toNum(m[0])).filter(Number.isFinite);
-  if(nums.length<5)continue;
-  const tail=nums.slice(-5);
-  let count=0;
-  if(tail[0]>=0&&tail[0]<=50&&tail[1]>=50)count=tail[0];
-  else if(tail[1]>=0&&tail[1]<=50&&tail[0]>=50)count=tail[1];
-  else if(tail[0]>=0&&tail[0]<=50)count=tail[0];
-  else if(tail[1]>=0&&tail[1]<=50)count=tail[1];
-  adoptedCount+=count||0;
+ if(invoiceCount==null){
+  const normal=[...normalized.matchAll(/合\s*計\s*[（(]\s*税\s*込\s*[）)]\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)/g)];
+  if(normal.length){const t=normal[normal.length-1];useTotals(t.slice(1,7))}
+ }
+ if(invoiceCount==null){
+  const tail=normalized.slice(-5000),candidates=[...tail.matchAll(/([\d,]{4,})\s+([\d,]{5,})\s+([\d,]{5,})\s+0\s+0\s+([\d,]{3,})/g)];
+  if(candidates.length){
+   const t=candidates[candidates.length-1],cnt=toNum(t[1]),gross=toNum(t[2]),net=toNum(t[3]),tax=toNum(t[4]);
+   if(cnt>0&&gross>=net&&net>0){invoiceCount=cnt;grossCost=gross;netCost=net;taxCost=tax}
+  }
+ }
+ let adoptedCount=0,codExcludedCount=0,codExcludedNet=0;
+ for(const line of lines){
+  if(line.includes('ネコポス')){
+   const after=line.split('ネコポス').slice(1).join('ネコポス');
+   const nums=[...after.matchAll(/\d[\d,]*/g)].map(m=>toNum(m[0])).filter(Number.isFinite);
+   if(nums.length>=5){
+    const tail=nums.slice(-5);let count=0;
+    if(tail[0]>=0&&tail[0]<=50&&tail[1]>=50)count=tail[0];
+    else if(tail[1]>=0&&tail[1]<=50&&tail[0]>=50)count=tail[1];
+    else if(tail[0]>=0&&tail[0]<=50)count=tail[0];
+    else if(tail[1]>=0&&tail[1]<=50)count=tail[1];
+    adoptedCount+=count||0
+   }
+  }
+  const codMatch=line.match(/宅急便着払(?:い)?/);
+  if(codMatch){
+   const after=line.slice((codMatch.index||0)+codMatch[0].length),nums=[...after.matchAll(/\d[\d,]*/g)].map(m=>toNum(m[0])).filter(Number.isFinite);
+   if(nums.length>=5){
+    const tail=nums.slice(-5),count=(tail[0]>=0&&tail[0]<=50)?tail[0]:1,amount=tail[4];
+    codExcludedCount+=count||0;
+    if(Number.isFinite(amount))codExcludedNet+=amount
+   }
+  }
  }
  if(!adoptedCount||!invoiceCount||!grossCost||!netCost)throw new Error('ヤマト請求書の件数または金額を読み取れませんでした。');
- return{adoptedCount,invoiceCount,grossCost,netCost,otherCount:invoiceCount-adoptedCount}
+ const originalNetCost=netCost,originalGrossCost=grossCost;
+ if(codExcludedNet>0){
+  netCost=Math.max(0,netCost-codExcludedNet);
+  const rawRate=taxCost!=null&&originalNetCost>0?taxCost/originalNetCost:.1,taxRate=Math.abs(rawRate-.1)<.005?.1:rawRate;
+  const filteredTax=Math.floor(netCost*taxRate+1e-8);
+  grossCost=netCost+filteredTax
+ }
+ return{
+  adoptedCount,invoiceCount,grossCost,netCost,otherCount:invoiceCount-adoptedCount,
+  codExcludedCount,codExcludedNet,codExcludedGross:originalGrossCost-grossCost,
+  originalGrossCost,originalNetCost,taxCost
+ }
 }
 function isoDate(y,m,d){return Number(y)+'-'+String(Number(m)).padStart(2,'0')+'-'+String(Number(d)).padStart(2,'0')}
 function summarizeJapanPostRows(rows){
@@ -751,8 +791,16 @@ async function importYamato(){
  const m=currentBundle?.monthly||{};if(m.status==='confirmed')return;
  const file=$('yamatoImportFile').files?.[0];if(!file){$('pdfImportMessage').className='message bad';$('pdfImportMessage').textContent='ヤマトPDFを選択してください。';return}
  const btn=$('yamatoImportBtn');btn.disabled=true;$('pdfImportMessage').className='message';$('pdfImportMessage').textContent='ヤマトPDFを解析しています…';
- try{const text=await extractPdfText(file),x=parseYamatoText(text),metadata={rule:'ネコポス明細個数を採用件数。請求書合計(税込)の税込・税抜総額を発送費',non_neko_count:x.otherCount};
-  await saveShippingImport('yamato',file.name,x,metadata);$('pdfImportMessage').className='message ok';$('pdfImportMessage').textContent=`ヤマト取込完了：ネコポス ${fmt(x.adoptedCount)}件 / 税抜 ${yen(x.netCost)}`;await loadAll()
+ try{const text=await extractPdfText(file),x=parseYamatoText(text),metadata={
+  rule:'ネコポス明細個数を採用件数。発送費は請求書合計から「宅急便着払／宅急便着払い」明細の運賃等合計を除外',
+  non_neko_count:x.otherCount,
+  excluded_cod_count:x.codExcludedCount,
+  excluded_cod_net:x.codExcludedNet,
+  excluded_cod_gross:x.codExcludedGross,
+  invoice_net_before_exclusion:x.originalNetCost,
+  invoice_gross_before_exclusion:x.originalGrossCost
+ };
+  await saveShippingImport('yamato',file.name,x,metadata);$('pdfImportMessage').className='message ok';$('pdfImportMessage').textContent=`ヤマト取込完了：ネコポス ${fmt(x.adoptedCount)}件 / 宅急便着払 ${fmt(x.codExcludedCount)}件・税抜 ${yen(x.codExcludedNet)}除外 / 税抜 ${yen(x.netCost)}`;await loadAll()
  }catch(e){console.error(e);$('pdfImportMessage').className='message bad';$('pdfImportMessage').textContent=e.message}finally{btn.disabled=false}
 }
 async function importJapanPost(){
@@ -780,7 +828,7 @@ function renderShipping(){const c=metrics(currentBundle),rows=['yamato','sagawa'
  ['yamatoImportBtn','japanPostImportBtn','yamatoImportFile','japanPostImportFile'].forEach(id=>$(id).disabled=locked);
  const ya=currentBundle.shipping.find(r=>r.carrier==='yamato'),jpRow=currentBundle.shipping.find(r=>r.carrier==='japanpost'),yam=ya?.metadata||{},jpm=jpRow?.metadata||{};
  $('pdfImportSummary').innerHTML=[
-  ya?`<div class="source-row"><div><strong>ヤマト</strong><small>${esc(ya.source_filename||'—')} / 請求${fmt(ya.invoice_count)}件・ネコポス${fmt(ya.adopted_count)}件</small></div><span class="badge auto">税抜 ${yen(ya.net_cost)}</span></div>`:'<div class="source-row"><div><strong>ヤマト</strong><small>未取込</small></div><span class="badge missing">未取込</span></div>',
+  ya?`<div class="source-row"><div><strong>ヤマト</strong><small>${esc(ya.source_filename||'—')} / 請求${fmt(ya.invoice_count)}件・ネコポス${fmt(ya.adopted_count)}件 / 宅急便着払${fmt(yam.excluded_cod_count||0)}件・税抜${yen(yam.excluded_cod_net||0)}除外</small></div><span class="badge auto">税抜 ${yen(ya.net_cost)}</span></div>`:'<div class="source-row"><div><strong>ヤマト</strong><small>未取込</small></div><span class="badge missing">未取込</span></div>',
   jpRow?`<div class="source-row"><div><strong>日本郵便</strong><small>${esc(jpRow.source_filename||'—')} / 着払${fmt(jpm.cod_count||0)}件（着払金額は除外）</small></div><span class="badge auto">税抜 ${yen(jpRow.net_cost)}</span></div>`:'<div class="source-row"><div><strong>日本郵便</strong><small>未取込</small></div><span class="badge missing">未取込</span></div>'
  ].join('');
  renderShippingFiscalMonthly()
