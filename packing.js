@@ -55,13 +55,18 @@ async function loadMonth(ym){
 }
 async function loadFiscal(fy){
  const startYm=fy+'-03',endYm=(fy+1)+'-02',[startDate]=monthRange(startYm),[,endDate]=monthRange(endYm),months=ymRange(startYm,endYm);
- const [monthlyRows,ptRows,tdRows,shippingRows,importRows]=await Promise.all([
+ const ptMonthlyPromise=Promise.all(months.map(async ym=>{
+  const[start,end]=monthRange(ym);
+  return rest('logistics_work_time',`owner_id=eq.${user.id}&work_date=gte.${start}&work_date=lte.${end}&hand_pack_minutes=gt.0&select=work_date,hand_pack_minutes`).catch(()=>[])
+ }));
+ const [monthlyRows,ptMonthlyRows,tdRows,shippingRows,importRows]=await Promise.all([
   rest('logistics_cost_monthly',`owner_id=eq.${user.id}&month_ym=gte.${startYm}&month_ym=lte.${endYm}&select=*&order=month_ym.asc`).catch(()=>[]),
-  rest('logistics_work_time',`owner_id=eq.${user.id}&work_date=gte.${startDate}&work_date=lte.${endDate}&select=work_date,hand_pack_minutes`).catch(()=>[]),
+  ptMonthlyPromise,
   rest('oplh_timedesigner_daily',`owner_id=eq.${user.id}&work_date=gte.${startDate}&work_date=lte.${endDate}&activity_key=eq.hand_pack&select=work_date,activity_key,work_minutes`).catch(()=>[]),
   rest('logistics_shipping_monthly',`owner_id=eq.${user.id}&month_ym=gte.${startYm}&month_ym=lte.${endYm}&select=month_ym,carrier,adopted_count`).catch(()=>[]),
   rest('logistics_cost_import_batches',`owner_id=eq.${user.id}&month_ym=gte.${startYm}&month_ym=lte.${endYm}&source=eq.auto_packing&select=month_ym,source,source_filename,metadata,imported_at`).catch(()=>[])
  ]);
+ const ptRows=(ptMonthlyRows||[]).flat();
  const mm=new Map((monthlyRows||[]).map(r=>[r.month_ym,r])),pm=new Map(),tm=new Map(),sm=new Map(),im=new Map(),push=(map,k,r)=>{if(!k)return;const a=map.get(k)||[];a.push(r);map.set(k,a)};
  for(const r of ptRows||[])push(pm,companyYmFromDate(r.work_date),r);
  for(const r of tdRows||[])push(tm,companyYmFromDate(r.work_date),r);
