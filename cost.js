@@ -702,65 +702,76 @@ async function extractPdfText(file,retry=true){
  const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||('PDF解析エラー '+r.status));return j.text||''
 }
 function parseYamatoText(text){
- const toNum=x=>Number(String(x||'').replace(/,/g,''));
- const normalized=String(text||'').replace(/[０-９]/g,ch=>String.fromCharCode(ch.charCodeAt(0)-0xFEE0)).replace(/\r/g,'');
- const lines=normalized.split('\n');
- let invoiceCount=null,grossCost=null,netCost=null,taxCost=null;
- const useTotals=nums=>{
-  if(!Array.isArray(nums)||nums.length<6)return false;
-  const v=nums.slice(-6).map(toNum);
-  if(!v.every(Number.isFinite)||v[0]<=0||v[1]<=0||v[2]<=0)return false;
-  invoiceCount=v[0];grossCost=v[1];netCost=v[2];taxCost=v[5];return true
- };
- for(let i=lines.length-1;i>=0;i--){
-  const compact=lines[i].replace(/\s/g,'').replace(/（/g,'(').replace(/）/g,')');
-  if(!compact.includes('合計(税込)'))continue;
-  const nums=[...lines.slice(i,i+3).join(' ').matchAll(/\d[\d,]*/g)].map(m=>m[0]);
-  if(useTotals(nums))break
- }
- if(invoiceCount==null){
-  const normal=[...normalized.matchAll(/合\s*計\s*[（(]\s*税\s*込\s*[）)]\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)/g)];
-  if(normal.length){const t=normal[normal.length-1];useTotals(t.slice(1,7))}
- }
- if(invoiceCount==null){
-  const tail=normalized.slice(-5000),candidates=[...tail.matchAll(/([\d,]{4,})\s+([\d,]{5,})\s+([\d,]{5,})\s+0\s+0\s+([\d,]{3,})/g)];
-  if(candidates.length){
-   const t=candidates[candidates.length-1],cnt=toNum(t[1]),gross=toNum(t[2]),net=toNum(t[3]),tax=toNum(t[4]);
-   if(cnt>0&&gross>=net&&net>0){invoiceCount=cnt;grossCost=gross;netCost=net;taxCost=tax}
+ const normalized=String(text||'').normalize('NFKC').replace(/\r/g,'');
+ const number='(?:0|[1-9]\\d{0,2}(?:,\\d{3})+|[1-9]\\d*)';
+ const toNum=x=>Number(x.replace(/,/g,''));
+ // pdf-parse emits the six total cells before the label, sometimes without spaces.
+ // Consider only cells adjacent to that label and require accounting reconciliation.
+ const validTotals=v=>v.length===6&&v.every(Number.isSafeInteger)&&v[0]>0&&v[1]>0&&v[2]>0&&
+  v[3]>=0&&v[4]>=0&&v[5]>=0&&v[1]===v[2]+v[3]+v[4]+v[5]&&
+  (Math.abs(v[5]-Math.floor(v[2]*.1))<=1||Math.abs(v[5]-Math.floor(v[2]*.08))<=1);
+ function totalCandidates(raw){
+  const s=raw.trim(),parts=s.split(/\s+/);
+  if(parts.length===6&&parts.every(x=>new RegExp('^'+number+'$').test(x))){
+   const v=parts.map(toNum);return validTotals(v)?[v]:[]
   }
+  // Do not remove spaces: existing cell boundaries must remain boundaries.
+  const out=[],cell=new RegExp('^'+number+'$');
+  function visit(pos,values){
+   while(/\s/.test(s[pos]||'')&&pos<s.length)pos++;
+   if(values.length===6){if(pos===s.length&&validTotals(values))out.push(values);return}
+   for(let end=pos+1;end<=s.length&&end-pos<=15;end++){
+    const token=s.slice(pos,end);
+    if(/\s/.test(token))break;
+    if(cell.test(token))visit(end,[...values,toNum(token)])
+   }
+  }
+  if(s.length<=100)visit(0,[]);
+  return out
  }
+ const label=/合\s*計\s*\(\s*税\s*込\s*\)/g;
+ let totals=null;
+ for(const match of normalized.matchAll(label)){
+  const before=normalized.slice(0,match.index).match(/[\d,\s]+$/)?.[0]||'';
+  const after=normalized.slice(match.index+match[0].length).match(/^[\d,\s]+/)?.[0]||'';
+  const candidates=[];
+  for(const block of [before,after]){
+   // Whole line, six separated cells, or cells split over several lines.
+   const lines=block.trim().split('\n').map(x=>x.trim()).filter(Boolean);
+   for(let size=1;size<=Math.min(6,lines.length);size++){
+    const raw=block===before?lines.slice(-size).join('\n'):lines.slice(0,size).join('\n');
+    candidates.push(...totalCandidates(raw));
+   }
+  }
+  const unique=new Map(candidates.map(v=>[v.join(','),v]));
+  if(unique.size!==1)throw new Error('ヤマト請求書の合計を一意に確認できませんでした。');
+  const found=[...unique.values()][0];
+  if(totals&&totals.join(',')!==found.join(','))throw new Error('ヤマト請求書に異なる請求合計があります。');
+  totals=found
+ }
+ if(!totals)throw new Error('ヤマト請求書の件数または金額を読み取れませんでした。');
  let adoptedCount=0,codExcludedCount=0,codExcludedNet=0;
- for(const line of lines){
-  if(line.includes('ネコポス')){
-   const after=line.split('ネコポス').slice(1).join('ネコポス');
-   const nums=[...after.matchAll(/\d[\d,]*/g)].map(m=>toNum(m[0])).filter(Number.isFinite);
-   if(nums.length>=5){
-    const tail=nums.slice(-5);let count=0;
-    if(tail[0]>=0&&tail[0]<=50&&tail[1]>=50)count=tail[0];
-    else if(tail[1]>=0&&tail[1]<=50&&tail[0]>=50)count=tail[1];
-    else if(tail[0]>=0&&tail[0]<=50)count=tail[0];
-    else if(tail[1]>=0&&tail[1]<=50)count=tail[1];
-    adoptedCount+=count||0
-   }
-  }
-  const codMatch=line.match(/宅急便着払(?:い)?/);
-  if(codMatch){
-   const after=line.slice((codMatch.index||0)+codMatch[0].length),nums=[...after.matchAll(/\d[\d,]*/g)].map(m=>toNum(m[0])).filter(Number.isFinite);
-   if(nums.length>=5){
-    const tail=nums.slice(-5),count=(tail[0]>=0&&tail[0]<=50)?tail[0]:1,amount=tail[4];
-    codExcludedCount+=count||0;
-    if(Number.isFinite(amount))codExcludedNet+=amount
-   }
-  }
+ const detail=new RegExp('^\\s*('+number+')\\s+('+number+')\\s+('+number+')\\s+('+number+')\\s+('+number+')(?![\\d,])');
+ for(const match of normalized.matchAll(/ネコポス|宅急便着払(?:い)?/g)){
+  const cells=normalized.slice(match.index+match[0].length).match(detail);
+  if(!cells)throw new Error('ヤマト請求書の'+match[0]+'明細を読み取れませんでした。');
+  const v=cells.slice(1).map(toNum);
+  // Web明細: 運賃等合計, 個数, 運賃等, 立替金, 保険料.
+  // Older text layout: 個数, 運賃等, 立替金, 保険料, 運賃等合計.
+  let count,amount;
+  if(v[0]===v[2]+v[3]+v[4]&&v[1]>0){count=v[1];amount=v[0]}
+  else if(v[4]===v[1]+v[2]+v[3]&&v[0]>0){count=v[0];amount=v[4]}
+  else throw new Error('ヤマト請求書の明細金額が一致しませんでした。');
+  if(match[0]==='ネコポス')adoptedCount+=count;
+  else{codExcludedCount+=count;codExcludedNet+=amount}
  }
- if(!adoptedCount||!invoiceCount||!grossCost||!netCost)throw new Error('ヤマト請求書の件数または金額を読み取れませんでした。');
- const originalNetCost=netCost,originalGrossCost=grossCost;
- if(codExcludedNet>0){
-  netCost=Math.max(0,netCost-codExcludedNet);
-  const rawRate=taxCost!=null&&originalNetCost>0?taxCost/originalNetCost:.1,taxRate=Math.abs(rawRate-.1)<.005?.1:rawRate;
-  const filteredTax=Math.floor(netCost*taxRate+1e-8);
-  grossCost=netCost+filteredTax
+ const [invoiceCount,originalGrossCost,originalNetCost,,,taxCost]=totals;
+ if(!adoptedCount||adoptedCount+codExcludedCount>invoiceCount||codExcludedNet>originalNetCost){
+  throw new Error('ヤマト請求書の件数または金額が請求合計と一致しませんでした。')
  }
+ const netCost=originalNetCost-codExcludedNet;
+ const taxRate=Math.abs(taxCost-Math.floor(originalNetCost*.1))<=1?.1:.08;
+ const grossCost=codExcludedNet>0?netCost+Math.floor(netCost*taxRate+1e-8)+totals[3]+totals[4]:originalGrossCost;
  return{
   adoptedCount,invoiceCount,grossCost,netCost,otherCount:invoiceCount-adoptedCount,
   codExcludedCount,codExcludedNet,codExcludedGross:originalGrossCost-grossCost,

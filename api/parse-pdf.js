@@ -1,4 +1,4 @@
-const pdf = require('pdf-parse');
+const pdf = require('../lib/pdf-text.cjs');
 
 const SB_URL='https://qfcgxefymdodjrprhfvu.supabase.co';
 const SB_KEY='sb_publishable_KzELBvq1CkhnHL_CXN99GA_5-an2G6m';
