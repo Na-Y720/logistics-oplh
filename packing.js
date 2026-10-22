@@ -31,7 +31,8 @@ function packMetrics(b){
  const auto1Hourly=auto1Hours&&count1!=null?count1/auto1Hours:(lap1?3600/lap1:null),auto2Hourly=auto2Hours&&count2!=null?count2/auto2Hours:(lap2?3600/lap2:null);
  const tdHand=(b?.td||[]).filter(r=>r.activity_key==='hand_pack').reduce((a,r)=>a+(Number(r.work_minutes)||0),0)/60;
  const ptHand=(b?.pt||[]).reduce((a,r)=>a+(Number(r.hand_pack_minutes)||0),0)/60;
- let handHours=tdHand+ptHand+(Number(m.timee_packing_hours)||0);
+ const timeeHand=Number(m.timee_packing_hours)||0;
+ let handHours=tdHand+ptHand+timeeHand;
  const totalPackCount=(b?.shipping||[]).reduce((a,r)=>a+(Number(r.adopted_count)||0),0);
  const autoCount=(count1||0)+(count2||0);let handCount=(count1!=null&&count2!=null&&totalPackCount>=autoCount)?totalPackCount-autoCount:null;
  let handHourly=handCount!=null&&handHours>0?handCount/handHours:null,handLap=handCount&&handHours>0?handHours*3600/handCount:null;
@@ -45,7 +46,7 @@ function packMetrics(b){
 async function loadMonth(ym){
  const[start,end]=monthRange(ym);
  const [monthlyRows,pt,td,shipping,imports]=await Promise.all([
-  rest('logistics_cost_monthly',`owner_id=eq.${user.id}&month_ym=eq.${ym}&select=*`).catch(()=>[]),
+  rest('logistics_cost_monthly',`owner_id=eq.${user.id}&month_ym=eq.${ym}&select=*&order=updated_at.desc&limit=1`).catch(()=>[]),
   rest('logistics_work_time',`owner_id=eq.${user.id}&work_date=gte.${start}&work_date=lte.${end}&select=work_date,hand_pack_minutes`).catch(()=>[]),
   rest('oplh_timedesigner_daily',`owner_id=eq.${user.id}&work_date=gte.${start}&work_date=lte.${end}&activity_key=eq.hand_pack&select=work_date,activity_key,work_minutes`).catch(()=>[]),
   rest('logistics_shipping_monthly',`owner_id=eq.${user.id}&month_ym=eq.${ym}&select=carrier,adopted_count`).catch(()=>[]),
@@ -67,7 +68,8 @@ async function loadFiscal(fy){
   rest('logistics_cost_import_batches',`owner_id=eq.${user.id}&month_ym=gte.${startYm}&month_ym=lte.${endYm}&source=eq.auto_packing&select=month_ym,source,source_filename,metadata,imported_at`).catch(()=>[])
  ]);
  const ptRows=(ptMonthlyRows||[]).flat();
- const mm=new Map((monthlyRows||[]).map(r=>[r.month_ym,r])),pm=new Map(),tm=new Map(),sm=new Map(),im=new Map(),push=(map,k,r)=>{if(!k)return;const a=map.get(k)||[];a.push(r);map.set(k,a)};
+ const mm=new Map(),pm=new Map(),tm=new Map(),sm=new Map(),im=new Map(),push=(map,k,r)=>{if(!k)return;const a=map.get(k)||[];a.push(r);map.set(k,a)};
+ for(const r of monthlyRows||[]){const cur=mm.get(r.month_ym);if(!cur||String(r.updated_at||'')>String(cur.updated_at||''))mm.set(r.month_ym,r)}
  for(const r of ptRows||[])push(pm,companyYmFromDate(r.work_date),r);
  for(const r of tdRows||[])push(tm,companyYmFromDate(r.work_date),r);
  for(const r of shippingRows||[])push(sm,r.month_ym,r);
