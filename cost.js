@@ -77,18 +77,27 @@ async function loadBundle(ym,{create=false}={}){let monthlyRows=await rest('logi
 }
 async function loadBundleRange(startYm,endYm){
  const months=ymRange(startYm,endYm),[startDate]=monthRange(startYm),[,endDate]=monthRange(endYm);
- const [monthlyRows,shippingRows,ptRows,tdRows,orderRows]=await Promise.all([
+ const ptMonthlyPromise=Promise.all(months.map(async ym=>{
+  const[start,end]=monthRange(ym);
+  return rest('logistics_work_time',`owner_id=eq.${user.id}&work_date=gte.${start}&work_date=lte.${end}&select=work_date,picking_minutes,total_picking_minutes,pass_sort_minutes,sorting_minutes,hand_pack_minutes,auto_pack_minutes,stock_move_minutes`).catch(()=>[])
+ }));
+ const tdMonthlyPromise=Promise.all(months.map(async ym=>{
+  const[start,end]=monthRange(ym);
+  return rest('oplh_timedesigner_daily',`owner_id=eq.${user.id}&work_date=gte.${start}&work_date=lte.${end}&select=work_date,activity_key,activity_label,work_minutes,event_count,worker_key,worker_name,employee_no,staff_id,source_department`).catch(()=>[])
+ }));
+ const [monthlyRows,shippingRows,ptMonthlyRows,tdMonthlyRows,orderRows]=await Promise.all([
   rest('logistics_cost_monthly',`owner_id=eq.${user.id}&month_ym=gte.${startYm}&month_ym=lte.${endYm}&select=*&order=month_ym.asc`).catch(()=>[]),
   rest('logistics_shipping_monthly',`owner_id=eq.${user.id}&month_ym=gte.${startYm}&month_ym=lte.${endYm}&select=*`).catch(()=>[]),
-  rest('logistics_work_time',`owner_id=eq.${user.id}&work_date=gte.${startDate}&work_date=lte.${endDate}&select=work_date,picking_minutes,total_picking_minutes,pass_sort_minutes,sorting_minutes,hand_pack_minutes,auto_pack_minutes,stock_move_minutes`).catch(()=>[]),
-  rest('oplh_timedesigner_daily',`owner_id=eq.${user.id}&work_date=gte.${startDate}&work_date=lte.${endDate}&select=work_date,activity_key,activity_label,work_minutes,event_count,worker_key,worker_name,employee_no,staff_id,source_department`).catch(()=>[]),
+  ptMonthlyPromise,
+  tdMonthlyPromise,
   rest('logistics_order_daily',`owner_id=eq.${user.id}&work_date=gte.${startDate}&work_date=lte.${endDate}&select=work_date,order_count,label_955_achieved,note`).catch(()=>[])
  ]);
- const monthlyMap=new Map((monthlyRows||[]).map(r=>[r.month_ym,r])),shipMap=new Map(),ptMap=new Map(),tdMap=new Map(),orderMap=new Map();
+ const monthlyMap=new Map(),shipMap=new Map(),ptMap=new Map(),tdMap=new Map(),orderMap=new Map();
  const push=(map,key,row)=>{if(!key)return;const a=map.get(key)||[];a.push(row);map.set(key,a)};
+ for(const r of monthlyRows||[]){const cur=monthlyMap.get(r.month_ym);if(!cur||String(r.updated_at||'')>String(cur.updated_at||''))monthlyMap.set(r.month_ym,r)}
  for(const r of shippingRows||[])push(shipMap,r.month_ym,r);
- for(const r of ptRows||[])push(ptMap,companyYmFromDate(r.work_date),r);
- for(const r of tdRows||[])push(tdMap,companyYmFromDate(r.work_date),r);
+ for(const rows of ptMonthlyRows||[])for(const r of rows||[])push(ptMap,companyYmFromDate(r.work_date),r);
+ for(const rows of tdMonthlyRows||[])for(const r of rows||[])push(tdMap,companyYmFromDate(r.work_date),r);
  for(const r of orderRows||[])push(orderMap,companyYmFromDate(r.work_date),r);
  return months.map(ym=>{const monthly=monthlyMap.get(ym)||null,[start,end]=monthly?[monthly.period_start,monthly.period_end]:monthRange(ym);return{ym,monthly,shipping:shipMap.get(ym)||[],pt:ptMap.get(ym)||[],td:tdMap.get(ym)||[],imports:[],orderDaily:orderMap.get(ym)||[],start,end}})
 }
@@ -189,7 +198,7 @@ function metrics(b){const m=b?.monthly||{},ship=b?.shipping||[],tdRows=b?.td||[]
  const ptPackMin=ptHandPackMin+ptAutoPackMin;
  const timeePick=(Number(m.timee_picking_hours)||0)*60,timeePack=(Number(m.timee_packing_hours)||0)*60;
  const pickHours=(empPickMin+ptPickMin+timeePick)/60,packHours=(empPackMin+ptPackMin+timeePack)/60,totalHours=pickHours+packHours;
- const pickingKpiHours=(empPickMin+ptOrderPickMin+timeePick)/60;
+ const pickingKpiHours=pickHours;
  const pickingHourlyRate=shipments&&pickingKpiHours?shipments/pickingKpiHours:null;
  let oplh=shipments&&totalHours?shipments/totalHours:null;
  if(m.origin==='legacy_spreadsheet'&&m.oplh_legacy!=null)oplh=Number(m.oplh_legacy);
