@@ -6,6 +6,8 @@ let session=null,user=null,refreshPromise=null,wmsRows=[],tdRows=[],ptRows=[],st
 const ACTIVITY_ORDER=['picking','stock_move','shipping_check','adjustment_out','receiving','receiving_check'];
 const ACTIVITY_LABELS={picking:'ピッキング',stock_move:'在庫移動',shipping_check:'出荷検品',adjustment_out:'調整出庫',receiving:'調整入庫・入庫',receiving_check:'入荷検品'};
 const ACTIVITY_COLORS={picking:'#2589f5',stock_move:'#2637a8',shipping_check:'#ed7d31',adjustment_out:'#7030a0',receiving:'#db3fa7',receiving_check:'#6b7280'};
+const DISPATCH_WMS_SWITCH_DATE='2026-11-07';
+const DISPATCH_WMS_CODES=new Set(['900001','900002','900003','900004','900005']);
 
 function saveSession(s){session=s;if(s)localStorage.setItem(SESSION_KEY,JSON.stringify(s));else localStorage.removeItem(SESSION_KEY)}
 function loadSession(){try{return JSON.parse(localStorage.getItem(SESSION_KEY)||'null')}catch{return null}}
@@ -16,6 +18,18 @@ async function restAll(table,params,pageSize=1000){let out=[],from=0;while(true)
 
 function normalizeName(s){return String(s||'').normalize('NFKC').replace(/[\s　]/g,'').trim()}
 function normalizeCode(s){return String(s||'').normalize('NFKC').trim().replace(/\.0$/,'')}
+function dispatchWpCodeForRow(row){
+ const code=normalizeCode(row?.worker_code||row?.employee_no);
+ if(!DISPATCH_WMS_CODES.has(code))return null;
+ const date=String(row?.work_date||''),name=String(row?.worker_name||'').normalize('NFKC');
+ if(date>=DISPATCH_WMS_SWITCH_DATE)return'WP'+code;
+ if(name.includes('派遣')&&!name.includes('タイミー'))return'WP'+code;
+ return null
+}
+function masterForRow(row){
+ const rawCode=normalizeCode(row?.worker_code||row?.employee_no),dispatchCode=dispatchWpCodeForRow(row),name=workerNormName(row?.worker_name);
+ return(dispatchCode&&staffByCode.get(dispatchCode))||(rawCode&&staffByCode.get(rawCode))||(row?.staff_id&&staffById.get(row.staff_id))||(name&&staffByName.get(name))||null
+}
 function staffParts(s){
  const raw=String(s||'').normalize('NFKC').trim(),m=raw.match(/^([A-Za-z]*\d+)[\s　]+(.+)$/);
  return{raw,code:m?normalizeCode(m[1]):null,display:(m?m[2]:raw).trim(),norm:normalizeName(m?m[2]:raw)}
@@ -41,8 +55,8 @@ function buildAliases(){
   if(p.norm)staffByName.set(p.norm,prefer(staffByName.get(p.norm),s))
  }
  for(const r of [...wmsRows,...tdRows]){
-  const code=normalizeCode(r.worker_code||r.employee_no),name=workerNormName(r.worker_name);
-  const master=(code&&staffByCode.get(code))||(name&&staffByName.get(name))||(r.staff_id&&staffById.get(r.staff_id))||null;
+  const rawCode=normalizeCode(r.worker_code||r.employee_no),aliasCode=dispatchWpCodeForRow(r),code=aliasCode||rawCode,name=workerNormName(r.worker_name);
+  const master=masterForRow(r);
   if(code){
    if(r.staff_id)staffToCode.set(r.staff_id,code);
    if(master?.id)staffToCode.set(master.id,code);
@@ -51,8 +65,8 @@ function buildAliases(){
  }
 }
 function identityFor(row){
- const code=normalizeCode(row.worker_code||row.employee_no),name=workerNormName(row.worker_name);
- const master=(code&&staffByCode.get(code))||(row.staff_id&&staffById.get(row.staff_id))||(name&&staffByName.get(name))||null;
+ const rawCode=normalizeCode(row.worker_code||row.employee_no),aliasCode=dispatchWpCodeForRow(row),code=aliasCode||rawCode,name=workerNormName(row.worker_name);
+ const master=masterForRow(row);
  if(master)return'staff:'+master.id;
  if(code)return'code:'+code;
  return'name:'+name
@@ -118,8 +132,15 @@ function activityTimeMap(workerSet){
    if(!isSupplement)put(ym,r.activity_key,r.work_minutes)
   }
  }
+ const dispatchEvidence=new Set();
+ for(const r of wmsRows){
+  const wpCode=dispatchWpCodeForRow(r);
+  if(wpCode)dispatchEvidence.add(String(r.work_date||'')+'|'+wpCode)
+ }
  for(const r of ptRows){
   const ym=companyYmFromDate(r.work_date),key=canonicalForStaff(r.staff_id);if(!ym||!key||!workerIncluded(key,workerSet))continue;
+  const master=staffById.get(r.staff_id),masterCode=staffParts(master?.name||'').code||'';
+  if(/^WP90000[1-5]$/.test(masterCode)&&String(r.work_date||'')<DISPATCH_WMS_SWITCH_DATE&&!dispatchEvidence.has(String(r.work_date||'')+'|'+masterCode))continue;
   put(ym,'picking',r.picking_minutes);put(ym,'receiving',r.stock_move_minutes)
  }
  return map
