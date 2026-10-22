@@ -147,7 +147,7 @@ function activityTimeMap(workerSet){
   const ym=companyYmFromDate(r.work_date),key=canonicalForStaff(r.staff_id);if(!ym||!key||!workerIncluded(key,workerSet))continue;
   const master=staffById.get(r.staff_id),masterCode=staffParts(master?.name||'').code||'';
   if(/^WP90000[1-5]$/.test(masterCode)&&String(r.work_date||'')<DISPATCH_WMS_SWITCH_DATE&&!dispatchTimeEvidence.has(String(r.work_date||'')+'|'+masterCode))continue;
-  put(ym,'picking',r.picking_minutes);put(ym,'receiving',r.stock_move_minutes)
+  put(ym,'picking',(Number(r.picking_minutes)||0)+(Number(r.total_picking_minutes)||0)+(Number(r.pass_sort_minutes)||0));put(ym,'receiving',r.stock_move_minutes)
  }
  return map
 }
