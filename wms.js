@@ -2,11 +2,11 @@ const SB_URL='https://qfcgxefymdodjrprhfvu.supabase.co';
 const SB_KEY='sb_publishable_KzELBvq1CkhnHL_CXN99GA_5-an2G6m';
 const SESSION_KEY='logistics_monthly_oplh_session_v1';
 const $=id=>document.getElementById(id);
-let session=null,user=null,refreshPromise=null,wmsRows=[],tdRows=[],ptRows=[],staffRows=[],directory=new Map(),staffToCode=new Map(),nameToCode=new Map(),staffById=new Map(),staffByName=new Map(),staffByCode=new Map();
+let session=null,user=null,refreshPromise=null,wmsRows=[],tdRows=[],ptRows=[],staffRows=[],directory=new Map(),staffToCode=new Map(),nameToCode=new Map(),staffById=new Map(),staffByName=new Map(),staffByCode=new Map(),dispatchTimeEvidence=new Set();
 const ACTIVITY_ORDER=['picking','stock_move','shipping_check','adjustment_out','receiving','receiving_check'];
 const ACTIVITY_LABELS={picking:'ピッキング',stock_move:'在庫移動',shipping_check:'出荷検品',adjustment_out:'調整出庫',receiving:'調整入庫・入庫',receiving_check:'入荷検品'};
 const ACTIVITY_COLORS={picking:'#2589f5',stock_move:'#2637a8',shipping_check:'#ed7d31',adjustment_out:'#7030a0',receiving:'#db3fa7',receiving_check:'#6b7280'};
-const DISPATCH_WMS_SWITCH_DATE='2026-11-07';
+const DISPATCH_WMS_SWITCH_DATE='2026-10-07';
 const DISPATCH_WMS_CODES=new Set(['900001','900002','900003','900004','900005']);
 
 function saveSession(s){session=s;if(s)localStorage.setItem(SESSION_KEY,JSON.stringify(s));else localStorage.removeItem(SESSION_KEY)}
@@ -21,10 +21,14 @@ function normalizeCode(s){return String(s||'').normalize('NFKC').trim().replace(
 function dispatchWpCodeForRow(row){
  const code=normalizeCode(row?.worker_code||row?.employee_no);
  if(!DISPATCH_WMS_CODES.has(code))return null;
- const date=String(row?.work_date||''),name=String(row?.worker_name||'').normalize('NFKC');
- if(date>=DISPATCH_WMS_SWITCH_DATE)return'WP'+code;
- if(name.includes('派遣')&&!name.includes('タイミー'))return'WP'+code;
- return null
+ const date=String(row?.work_date||''),wpCode='WP'+code;
+ if(date>=DISPATCH_WMS_SWITCH_DATE)return wpCode;
+ return dispatchTimeEvidence.has(date+'|'+wpCode)?wpCode:null
+}
+function isTimeeWmsRow(row){
+ const code=normalizeCode(row?.worker_code||row?.employee_no),date=String(row?.work_date||'');
+ if(/^800\d+$/.test(code))return true;
+ return DISPATCH_WMS_CODES.has(code)&&date<DISPATCH_WMS_SWITCH_DATE&&!dispatchWpCodeForRow(row)
 }
 function masterForRow(row){
  const rawCode=normalizeCode(row?.worker_code||row?.employee_no),dispatchCode=dispatchWpCodeForRow(row),name=workerNormName(row?.worker_name);
@@ -47,12 +51,18 @@ function hours(v){return v==null||!Number.isFinite(Number(v))?'—':fmt(v,1)+'h'
 function todayCompanyYm(){const d=new Date(),y=d.getFullYear(),m=d.getMonth()+1,day=d.getDate();if(day>=21){let yy=y,mm=m+1;if(mm===13){mm=1;yy++}return yy+'-'+String(mm).padStart(2,'0')}return y+'-'+String(m).padStart(2,'0')}
 
 function buildAliases(){
- staffToCode=new Map();nameToCode=new Map();staffById=new Map();staffByName=new Map();staffByCode=new Map();
+ staffToCode=new Map();nameToCode=new Map();staffById=new Map();staffByName=new Map();staffByCode=new Map();dispatchTimeEvidence=new Set();
  const prefer=(oldRow,newRow)=>!oldRow||(!oldRow.is_active&&newRow.is_active)?newRow:oldRow;
  for(const s of staffRows){
   staffById.set(s.id,s);const p=staffParts(s.name);
   if(p.code)staffByCode.set(p.code,prefer(staffByCode.get(p.code),s));
   if(p.norm)staffByName.set(p.norm,prefer(staffByName.get(p.norm),s))
+ }
+ for(const r of ptRows){
+  const s=staffById.get(r.staff_id),code=staffParts(s?.name||'').code||'';
+  if(!/^WP90000[1-5]$/.test(code))continue;
+  const total=['picking_minutes','total_picking_minutes','pass_sort_minutes','sorting_minutes','hand_pack_minutes','auto_pack_minutes','stock_move_minutes'].reduce((a,k)=>a+(Number(r[k])||0),0);
+  if(total>0)dispatchTimeEvidence.add(String(r.work_date||'')+'|'+code)
  }
  for(const r of [...wmsRows,...tdRows]){
   const rawCode=normalizeCode(r.worker_code||r.employee_no),aliasCode=dispatchWpCodeForRow(r),code=aliasCode||rawCode,name=workerNormName(r.worker_name);
@@ -83,7 +93,8 @@ function buildDirectory(){
   const existing=directory.get(key);
   if(existing){if(row.source_department)existing.sourceDepartment=String(row.source_department).normalize('NFKC').trim();return}
   const code=normalizeCode(row.worker_code||row.employee_no),name=String(row.worker_name||'').normalize('NFKC').trim()||'不明';
-  directory.set(key,{key,name,code:code||null,staffId:null,department:row.source_department||null,employment:null,scope:'other',category:(row.source_department&&row.source_department!=='物流部')?'support':'unknown'})
+  const category=isTimeeWmsRow(row)?'timee':((row.source_department&&row.source_department!=='物流部')?'support':'unknown');
+  directory.set(key,{key,name,code:code||null,staffId:null,department:row.source_department||null,employment:category==='timee'?'タイミー':null,scope:'other',category})
  };
  for(const r of wmsRows)touch(identityFor(r),r);
  for(const r of tdRows)touch(identityFor(r),r)
@@ -98,7 +109,7 @@ async function loadData(){
  [wmsRows,tdRows,ptRows,staffRows]=await Promise.all([
   restAll('oplh_wms_daily','owner_id=eq.'+user.id+'&work_date=gte.'+start+'&work_date=lte.'+end+'&select=work_date,staff_id,worker_key,worker_code,worker_name,activity_key,activity_label,action_count,quantity&order=work_date.asc'),
   restAll('oplh_timedesigner_daily','owner_id=eq.'+user.id+'&work_date=gte.'+start+'&work_date=lte.'+end+'&activity_key=in.(picking,stock_move,shipping_check,receiving)&select=work_date,staff_id,worker_key,employee_no,worker_name,source_department,activity_key,activity_label,work_minutes&order=work_date.asc'),
-  restAll('logistics_work_time','owner_id=eq.'+user.id+'&work_date=gte.'+start+'&work_date=lte.'+end+'&select=work_date,staff_id,picking_minutes,stock_move_minutes&order=work_date.asc'),
+  restAll('logistics_work_time','owner_id=eq.'+user.id+'&work_date=gte.'+start+'&work_date=lte.'+end+'&select=work_date,staff_id,picking_minutes,total_picking_minutes,pass_sort_minutes,sorting_minutes,hand_pack_minutes,auto_pack_minutes,stock_move_minutes&order=work_date.asc'),
   restAll('logistics_staff','owner_id=eq.'+user.id+'&select=id,name,employment_type,is_active,retirement_date')
  ]);
  buildDirectory();renderWorkerOptions();renderAll();
@@ -132,15 +143,10 @@ function activityTimeMap(workerSet){
    if(!isSupplement)put(ym,r.activity_key,r.work_minutes)
   }
  }
- const dispatchEvidence=new Set();
- for(const r of wmsRows){
-  const wpCode=dispatchWpCodeForRow(r);
-  if(wpCode)dispatchEvidence.add(String(r.work_date||'')+'|'+wpCode)
- }
  for(const r of ptRows){
   const ym=companyYmFromDate(r.work_date),key=canonicalForStaff(r.staff_id);if(!ym||!key||!workerIncluded(key,workerSet))continue;
   const master=staffById.get(r.staff_id),masterCode=staffParts(master?.name||'').code||'';
-  if(/^WP90000[1-5]$/.test(masterCode)&&String(r.work_date||'')<DISPATCH_WMS_SWITCH_DATE&&!dispatchEvidence.has(String(r.work_date||'')+'|'+masterCode))continue;
+  if(/^WP90000[1-5]$/.test(masterCode)&&String(r.work_date||'')<DISPATCH_WMS_SWITCH_DATE&&!dispatchTimeEvidence.has(String(r.work_date||'')+'|'+masterCode))continue;
   put(ym,'picking',r.picking_minutes);put(ym,'receiving',r.stock_move_minutes)
  }
  return map
