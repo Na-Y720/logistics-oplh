@@ -127,32 +127,37 @@ function currentWorkerSet(){
 }
 function workerIncluded(key,set){return set.has(key)}
 function activityTimeMap(workerSet){
- const map=new Map(),selected=$('workerFilter').value,scope=$('scopeFilter').value,group=$('groupFilter').value;
+ const monthly=new Map(),daily=new Map(),selected=$('workerFilter').value,scope=$('scopeFilter').value,group=$('groupFilter').value;
  const detailedMode=selected!=='all'||group!=='all';
- const put=(ym,act,min)=>{const k=ym+'|'+act;map.set(k,(map.get(k)||0)+(Number(min)||0))};
+ const put=(date,key,ym,act,min)=>{
+  const v=Number(min)||0;if(v<=0)return;
+  const mk=ym+'|'+act;monthly.set(mk,(monthly.get(mk)||0)+v);
+  if(date&&key){const dk=date+'|'+key+'|'+act;daily.set(dk,(daily.get(dk)||0)+v)}
+ };
  for(const r of tdRows){
   const ym=companyYmFromDate(r.work_date);if(!ym)continue;
   const isSupplement=r.source_department==='物流部個人補完',key=identityFor(r);
   if(detailedMode){
-   if(workerIncluded(key,workerSet))put(ym,r.activity_key,r.work_minutes)
+   if(workerIncluded(key,workerSet))put(r.work_date,key,ym,r.activity_key,r.work_minutes)
   }else if(scope==='logistics'){
-   if(!isSupplement&&r.source_department==='物流部')put(ym,r.activity_key,r.work_minutes)
+   if(!isSupplement&&r.source_department==='物流部')put(r.work_date,key,ym,r.activity_key,r.work_minutes)
   }else if(scope==='other'){
-   if(!isSupplement&&r.source_department!=='物流部')put(ym,r.activity_key,r.work_minutes)
+   if(!isSupplement&&r.source_department!=='物流部')put(r.work_date,key,ym,r.activity_key,r.work_minutes)
   }else{
-   if(!isSupplement)put(ym,r.activity_key,r.work_minutes)
+   if(!isSupplement)put(r.work_date,key,ym,r.activity_key,r.work_minutes)
   }
  }
  for(const r of ptRows){
   const ym=companyYmFromDate(r.work_date),key=canonicalForStaff(r.staff_id);if(!ym||!key||!workerIncluded(key,workerSet))continue;
   const master=staffById.get(r.staff_id),masterCode=staffParts(master?.name||'').code||'';
   if(/^WP90000[1-5]$/.test(masterCode)&&String(r.work_date||'')<DISPATCH_WMS_SWITCH_DATE&&!dispatchTimeEvidence.has(String(r.work_date||'')+'|'+masterCode))continue;
-  put(ym,'picking',(Number(r.picking_minutes)||0)+(Number(r.total_picking_minutes)||0)+(Number(r.pass_sort_minutes)||0));put(ym,'receiving',r.stock_move_minutes)
+  put(r.work_date,key,ym,'picking',(Number(r.picking_minutes)||0)+(Number(r.total_picking_minutes)||0)+(Number(r.pass_sort_minutes)||0));
+  put(r.work_date,key,ym,'receiving',r.stock_move_minutes)
  }
- return map
+ return{monthly,daily}
 }
 function aggregate(){
- const fy=Number($('fiscalYear').value),months=fyMonths(fy),workerSet=currentWorkerSet(),timeMap=activityTimeMap(workerSet),monthMap=new Map(months.map(m=>[m,{ym:m,acts:{},actHours:{},quantity:0,total:0,hours:0,matchedActions:0}]));
+ const fy=Number($('fiscalYear').value),months=fyMonths(fy),workerSet=currentWorkerSet(),timeMaps=activityTimeMap(workerSet),timeMap=timeMaps.monthly,dailyTimeMap=timeMaps.daily,monthMap=new Map(months.map(m=>[m,{ym:m,acts:{},actHours:{},actMatchedActions:{},actMatchedQuantity:{},quantity:0,total:0,hours:0,matchedActions:0,matchedQuantity:0}]));
  const actTotal={};let workersUsed=new Set();
  // 日単位WMSを最優先。月単位補完(BI_SUPPLEMENT)は同じ月×作業者×作業区分に
  // 日単位データが1件も無い場合だけ使用する。
@@ -167,16 +172,24 @@ function aggregate(){
   const act=r.activity_key||'other',isSupplement=String(r.worker_key||'').startsWith('BI_SUPPLEMENT:');
   if(isSupplement&&detailedKeys.has(ym+'|'+key+'|'+act))continue;
   const actions=Number(r.action_count)||0,qty=Number(r.quantity)||0,a=m.acts[act]||(m.acts[act]={actions:0,quantity:0});a.actions+=actions;a.quantity+=qty;m.total+=actions;m.quantity+=qty;workersUsed.add(key);
-  const t=actTotal[act]||(actTotal[act]={actions:0,quantity:0,hours:0});t.actions+=actions;t.quantity+=qty
+  const t=actTotal[act]||(actTotal[act]={actions:0,quantity:0,hours:0,matchedActions:0,matchedQuantity:0});t.actions+=actions;t.quantity+=qty;
+  const dailyMins=dailyTimeMap.get(String(r.work_date||'')+'|'+key+'|'+act)||0,monthlyMins=timeMap.get(ym+'|'+act)||0;
+  const matched=isSupplement?monthlyMins>0:dailyMins>0;
+  if(matched){
+   m.matchedActions+=actions;m.matchedQuantity+=qty;
+   m.actMatchedActions[act]=(m.actMatchedActions[act]||0)+actions;
+   m.actMatchedQuantity[act]=(m.actMatchedQuantity[act]||0)+qty;
+   t.matchedActions+=actions;t.matchedQuantity+=qty
+  }
  }
  for(const m of monthMap.values()){
   for(const act of ACTIVITY_ORDER){
    const mins=timeMap.get(m.ym+'|'+act)||0,hrs=mins/60;m.actHours[act]=hrs;
-   if(hrs>0){m.hours+=hrs;m.matchedActions+=(m.acts[act]?.actions||0)}
-   const t=actTotal[act]||(actTotal[act]={actions:0,quantity:0,hours:0});t.hours+=hrs
+   if(hrs>0)m.hours+=hrs;
+   const t=actTotal[act]||(actTotal[act]={actions:0,quantity:0,hours:0,matchedActions:0,matchedQuantity:0});t.hours+=hrs
   }
  }
- const monthly=[...monthMap.values()],totals=monthly.reduce((a,m)=>({actions:a.actions+m.total,quantity:a.quantity+m.quantity,hours:a.hours+m.hours,matchedActions:a.matchedActions+m.matchedActions}),{actions:0,quantity:0,hours:0,matchedActions:0});
+ const monthly=[...monthMap.values()],totals=monthly.reduce((a,m)=>({actions:a.actions+m.total,quantity:a.quantity+m.quantity,hours:a.hours+m.hours,matchedActions:a.matchedActions+m.matchedActions,matchedQuantity:a.matchedQuantity+m.matchedQuantity}),{actions:0,quantity:0,hours:0,matchedActions:0,matchedQuantity:0});
  return{monthly,actTotal,totals,workerSet,workersUsed}
 }
 function renderWorkerOptions(){
@@ -232,7 +245,7 @@ function renderHumanHours(monthly){
   '<tr>'+ACTIVITY_ORDER.map(()=>'<th>人時</th><th class="work-group-end">件/h</th>').join('')+'<th class="total-group">人時</th><th>件/h</th></tr>';
  $('humanHoursBody').innerHTML=monthly.map(m=>{
   const cells=ACTIVITY_ORDER.map(k=>{
-   const h=Number(m.actHours?.[k]||0),actions=Number(m.acts?.[k]?.actions||0),rate=h>0?actions/h:null;
+   const h=Number(m.actHours?.[k]||0),actions=Number(m.actMatchedActions?.[k]||0),rate=h>0?actions/h:null;
    return'<td>'+hours(h)+'</td><td class="work-group-end">'+(rate==null?'—':fmt(rate,1))+'</td>'
   }).join('');
   const totalRate=m.hours>0?m.matchedActions/m.hours:null;
@@ -240,7 +253,7 @@ function renderHumanHours(monthly){
  }).join('')
 }
 function renderActivities(actTotal){
- $('activityBody').innerHTML=ACTIVITY_ORDER.map(k=>{const x=actTotal[k]||{actions:0,quantity:0,hours:0},rate=x.hours?x.actions/x.hours:null,qrate=x.hours?x.quantity/x.hours:null;return'<tr><td>'+ACTIVITY_LABELS[k]+'</td><td>'+fmt(x.actions)+'</td><td>'+fmt(x.quantity)+'</td><td>'+hours(x.hours)+'</td><td>'+fmt(rate,1)+'</td><td>'+fmt(qrate,1)+'</td></tr>'}).join('')
+ $('activityBody').innerHTML=ACTIVITY_ORDER.map(k=>{const x=actTotal[k]||{actions:0,quantity:0,hours:0,matchedActions:0,matchedQuantity:0},rate=x.hours?x.matchedActions/x.hours:null,qrate=x.hours?x.matchedQuantity/x.hours:null;return'<tr><td>'+ACTIVITY_LABELS[k]+'</td><td>'+fmt(x.actions)+'</td><td>'+fmt(x.quantity)+'</td><td>'+hours(x.hours)+'</td><td>'+fmt(rate,1)+'</td><td>'+fmt(qrate,1)+'</td></tr>'}).join('')
 }
 function initYears(){const fy=fiscalStartYear(todayCompanyYm()),sel=$('fiscalYear');for(let y=fy-2;y<=fy+1;y++){const o=document.createElement('option');o.value=String(y);o.textContent=y+'年度';if(y===fy)o.selected=true;sel.appendChild(o)}}
 function showApp(){const ok=!!user;$('authView').classList.toggle('hidden',ok);$('appView').classList.toggle('hidden',!ok);$('logoutBtn').classList.toggle('hidden',!ok);$('userLabel').textContent=user?.email||''}
