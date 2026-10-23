@@ -220,8 +220,8 @@ function renderWorkerOptions(){
 }
 function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function renderAll(){
- const a=aggregate(),t=a.totals,selected=$('workerFilter').value,info=selected==='all'?null:directory.get(selected);
- $('kActions').textContent=fmt(t.actions);$('kQuantity').textContent=fmt(t.quantity);$('kHours').textContent=hours(t.hours);$('kRate').textContent=t.hours?fmt(t.matchedActions/t.hours,1)+'件/h':'—';$('kWorkers').textContent=fmt(a.workersUsed.size);
+ const a=aggregate(),t=a.totals,selected=$('workerFilter').value,info=selected==='all'?null:directory.get(selected),pick=a.actTotal.picking||{hours:0,matchedQuantity:0};
+ $('kActions').textContent=fmt(t.actions);$('kQuantity').textContent=fmt(t.quantity);$('kHours').textContent=hours(t.hours);$('kRate').textContent=t.hours?fmt(t.matchedActions/t.hours,1)+'件/h':'—';$('kPickQtyRate').textContent=pick.hours?fmt(pick.matchedQuantity/pick.hours,1)+'個/h':'—';$('kWorkers').textContent=fmt(a.workersUsed.size);
  $('selectedWorkerNote').textContent=info?(info.name+(info.code?' / '+info.code:'')+' / '+(info.scope==='logistics'?'物流部':'その他')+(info.employment?' / '+info.employment:'')):'全体';
  renderLegend();renderChart(a.monthly);renderMonthly(a.monthly);renderHumanHours(a.monthly);renderActivities(a.actTotal)
 }
