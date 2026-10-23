@@ -1,7 +1,8 @@
 (function (root) {
   'use strict';
   const areas = ['A','B','C','D','E','F','G','H','I','J','梱包','パスソート','配送佐川','配送南郵便局'];
-  const extras = ['未配置','休憩 11:30','休憩 12:00','休憩 12:30','応援','補充','予備','欠勤'];
+  const extras = ['未配置','休憩 11:30','休憩 12:00','休憩 12:30','欠勤'];
+  function visiblePlace(place) { return ['応援','補充','予備'].includes(place)?'未配置':place; }
   const places = [...areas, ...extras];
   function eligible(staff, date) {
     return !!staff && !String(staff.name).startsWith('__') &&
@@ -53,7 +54,7 @@
       ? String(row.start_time).slice(0,5)+'～'+String(row.end_time).slice(0,5)
       : '時間未設定';
   }
-  const api={areas,extras,places,eligible,cards,move,cleanName,plateName,attendance,pendingCards,planMonth,workHours};
+  const api={areas,extras,places,eligible,cards,move,cleanName,plateName,attendance,pendingCards,planMonth,workHours,visiblePlace};
   if (typeof module !== 'undefined') module.exports=api;
   else root.StaffBoard=api;
 })(globalThis);
