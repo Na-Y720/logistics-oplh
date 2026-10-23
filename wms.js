@@ -127,37 +127,54 @@ function currentWorkerSet(){
 }
 function workerIncluded(key,set){return set.has(key)}
 function activityTimeMap(workerSet){
- const monthly=new Map(),daily=new Map(),selected=$('workerFilter').value,scope=$('scopeFilter').value,group=$('groupFilter').value;
+ const monthly=new Map(),workerMonthly=new Map(),daily=new Map(),granularity=new Map(),selected=$('workerFilter').value,scope=$('scopeFilter').value,group=$('groupFilter').value;
  const detailedMode=selected!=='all'||group!=='all';
- const put=(date,key,ym,act,min)=>{
+ const tdBucketDates=new Map();
+ for(const r of tdRows){
+  const ym=companyYmFromDate(r.work_date);if(!ym)continue;
+  const bk=ym+'|'+String(r.source_department||'')+'|'+String(r.activity_key||'');
+  const set=tdBucketDates.get(bk)||new Set();set.add(String(r.work_date||''));tdBucketDates.set(bk,set)
+ }
+ const isMonthlyTdRow=r=>{
+  const ym=companyYmFromDate(r.work_date);if(!ym)return false;
+  const bk=ym+'|'+String(r.source_department||'')+'|'+String(r.activity_key||''),dates=tdBucketDates.get(bk)||new Set(),end=monthRange(ym)[1];
+  return dates.size===1&&dates.has(end)
+ };
+ const markGranularity=(gk,type)=>{
+  const cur=granularity.get(gk)||{monthly:false,daily:false};cur[type]=true;granularity.set(gk,cur)
+ };
+ const put=(date,key,ym,act,min,type='daily')=>{
   const v=Number(min)||0;if(v<=0)return;
   const mk=ym+'|'+act;monthly.set(mk,(monthly.get(mk)||0)+v);
-  if(date&&key){const dk=date+'|'+key+'|'+act;daily.set(dk,(daily.get(dk)||0)+v)}
+  if(date&&key){
+   const gk=ym+'|'+key+'|'+act;workerMonthly.set(gk,(workerMonthly.get(gk)||0)+v);markGranularity(gk,type);
+   const dk=date+'|'+key+'|'+act;daily.set(dk,(daily.get(dk)||0)+v)
+  }
  };
  for(const r of tdRows){
   const ym=companyYmFromDate(r.work_date);if(!ym)continue;
-  const isSupplement=r.source_department==='物流部個人補完',key=identityFor(r);
+  const isSupplement=r.source_department==='物流部個人補完',key=identityFor(r),type=isMonthlyTdRow(r)?'monthly':'daily';
   if(detailedMode){
-   if(workerIncluded(key,workerSet))put(r.work_date,key,ym,r.activity_key,r.work_minutes)
+   if(workerIncluded(key,workerSet))put(r.work_date,key,ym,r.activity_key,r.work_minutes,type)
   }else if(scope==='logistics'){
-   if(!isSupplement&&r.source_department==='物流部')put(r.work_date,key,ym,r.activity_key,r.work_minutes)
+   if(!isSupplement&&r.source_department==='物流部')put(r.work_date,key,ym,r.activity_key,r.work_minutes,type)
   }else if(scope==='other'){
-   if(!isSupplement&&r.source_department!=='物流部')put(r.work_date,key,ym,r.activity_key,r.work_minutes)
+   if(!isSupplement&&r.source_department!=='物流部')put(r.work_date,key,ym,r.activity_key,r.work_minutes,type)
   }else{
-   if(!isSupplement)put(r.work_date,key,ym,r.activity_key,r.work_minutes)
+   if(!isSupplement)put(r.work_date,key,ym,r.activity_key,r.work_minutes,type)
   }
  }
  for(const r of ptRows){
   const ym=companyYmFromDate(r.work_date),key=canonicalForStaff(r.staff_id);if(!ym||!key||!workerIncluded(key,workerSet))continue;
   const master=staffById.get(r.staff_id),masterCode=staffParts(master?.name||'').code||'';
   if(/^WP90000[1-5]$/.test(masterCode)&&String(r.work_date||'')<DISPATCH_WMS_SWITCH_DATE&&!dispatchTimeEvidence.has(String(r.work_date||'')+'|'+masterCode))continue;
-  put(r.work_date,key,ym,'picking',(Number(r.picking_minutes)||0)+(Number(r.total_picking_minutes)||0)+(Number(r.pass_sort_minutes)||0));
-  put(r.work_date,key,ym,'receiving',r.stock_move_minutes)
+  put(r.work_date,key,ym,'picking',(Number(r.picking_minutes)||0)+(Number(r.total_picking_minutes)||0)+(Number(r.pass_sort_minutes)||0),'daily');
+  put(r.work_date,key,ym,'receiving',r.stock_move_minutes,'daily')
  }
- return{monthly,daily}
+ return{monthly,workerMonthly,daily,granularity}
 }
 function aggregate(){
- const fy=Number($('fiscalYear').value),months=fyMonths(fy),workerSet=currentWorkerSet(),timeMaps=activityTimeMap(workerSet),timeMap=timeMaps.monthly,dailyTimeMap=timeMaps.daily,monthMap=new Map(months.map(m=>[m,{ym:m,acts:{},actHours:{},actMatchedActions:{},actMatchedQuantity:{},quantity:0,total:0,hours:0,matchedActions:0,matchedQuantity:0}]));
+ const fy=Number($('fiscalYear').value),months=fyMonths(fy),workerSet=currentWorkerSet(),timeMaps=activityTimeMap(workerSet),timeMap=timeMaps.monthly,workerMonthly=timeMaps.workerMonthly,dailyTimeMap=timeMaps.daily,granularity=timeMaps.granularity,monthMap=new Map(months.map(m=>[m,{ym:m,acts:{},actHours:{},actMatchedActions:{},actMatchedQuantity:{},quantity:0,total:0,hours:0,matchedActions:0,matchedQuantity:0}]));
  const actTotal={};let workersUsed=new Set();
  // 日単位WMSを最優先。月単位補完(BI_SUPPLEMENT)は同じ月×作業者×作業区分に
  // 日単位データが1件も無い場合だけ使用する。
@@ -169,12 +186,13 @@ function aggregate(){
  }
  for(const r of wmsRows){
   const key=identityFor(r);if(!workerIncluded(key,workerSet))continue;const ym=companyYmFromDate(r.work_date),m=monthMap.get(ym);if(!m)continue;
-  const act=r.activity_key||'other',isSupplement=String(r.worker_key||'').startsWith('BI_SUPPLEMENT:');
-  if(isSupplement&&detailedKeys.has(ym+'|'+key+'|'+act))continue;
+  const act=r.activity_key||'other',isSupplement=String(r.worker_key||'').startsWith('BI_SUPPLEMENT:'),gk=ym+'|'+key+'|'+act;
+  if(isSupplement&&detailedKeys.has(gk))continue;
   const actions=Number(r.action_count)||0,qty=Number(r.quantity)||0,a=m.acts[act]||(m.acts[act]={actions:0,quantity:0});a.actions+=actions;a.quantity+=qty;m.total+=actions;m.quantity+=qty;workersUsed.add(key);
   const t=actTotal[act]||(actTotal[act]={actions:0,quantity:0,hours:0,matchedActions:0,matchedQuantity:0});t.actions+=actions;t.quantity+=qty;
-  const dailyMins=dailyTimeMap.get(String(r.work_date||'')+'|'+key+'|'+act)||0,monthlyMins=timeMap.get(ym+'|'+act)||0;
-  const matched=isSupplement?monthlyMins>0:dailyMins>0;
+  const dailyMins=dailyTimeMap.get(String(r.work_date||'')+'|'+key+'|'+act)||0,workerMonthlyMins=workerMonthly.get(gk)||0,g=granularity.get(gk)||{monthly:false,daily:false};
+  const monthlyTimeOnly=g.monthly&&!g.daily;
+  const matched=isSupplement?workerMonthlyMins>0:(monthlyTimeOnly?workerMonthlyMins>0:dailyMins>0);
   if(matched){
    m.matchedActions+=actions;m.matchedQuantity+=qty;
    m.actMatchedActions[act]=(m.actMatchedActions[act]||0)+actions;
