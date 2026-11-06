@@ -18,7 +18,7 @@ test('AM and PM can differ; full day replaces both atomically',()=>{
   const all=B.move(row,'AM','ALL','C');
   assert.deepEqual(B.cards(all),[{slot:'ALL',place:'C'}]);
   assert.equal(all.am,all.pm);
-  assert.deepEqual(B.cards(B.move(all,'ALL','PM','応援')),[{slot:'PM',place:'応援'}]);
+  assert.deepEqual(B.cards(B.move(all,'ALL','PM','休憩 11:30')),[{slot:'PM',place:'休憩 11:30'}]);
 });
 test('invalid targets are rejected and name formatting does not change ID',()=>{
   assert.throws(()=>B.move(null,null,'night','A'));
@@ -53,3 +53,4 @@ test('working hours follow the company month and keep unset monthly values',()=>
   assert.equal(B.workHours({start_time:null,end_time:null},defaults),'時間未設定');
   for(const place of ['J','梱包','パスソート','配送佐川','配送南郵便局'])assert.equal(B.move(null,null,'ALL',place).am,place);
 });
+
