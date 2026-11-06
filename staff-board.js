@@ -87,7 +87,7 @@
     hours.textContent=B.workHours(monthlyHours.get(staff.id),defaultHours.get(staff.id));
     el.append(hours);el.title+=' / '+hours.textContent;
     if(invalid){const warning=document.createElement('small');warning.textContent='在籍要確認';el.append(warning)}
-    el.setAttribute('aria-label',`${B.cleanName(staff.name)} ${slot==='ALL'?'全日':slot||'新しく配置'} 配置先を選択`);
+    el.setAttribute('aria-label',`${B.cleanName(staff.name)} ${automatic?'追加':slot==='ALL'?'全日':slot||'新しく配置'} 配置先を選択`);
     return el;
   }
   function render(){
@@ -109,7 +109,12 @@
     const support=$('supportBoard');support.replaceChildren();
     const unassigned=$('unassignedBoard');unassigned.replaceChildren();
     const pending=document.createElement('div');pending.className='unassigned-drop';
-    fillCombined(pending,'未配置');unassigned.append(pending);
+    pending.dataset.drop='true';pending.dataset.slot='AUTO';pending.dataset.place='未配置';
+    employees.filter(staff=>B.eligible(staff,loadedDate)&&(B.attendance(shifts.get(staff.id)).working ||
+      rows.some(row=>row.staff_id===staff.id&&B.cards(row).some(c=>B.visiblePlace(c.place)==='未配置'))))
+      .forEach(staff=>pending.append(card(staff,'ALL',false,true)));
+    if(!pending.children.length)pending.textContent='対象の従業員がいません。';
+    unassigned.append(pending);
     B.extras.filter(place=>place!=='未配置').forEach(place=>{
       const section=document.createElement('section');section.className='support-panel panel';
       const title=document.createElement('h3');title.textContent=place==='欠勤'?'休み':place;section.append(title);
@@ -117,7 +122,7 @@
       fillCombined(target,place);section.append(target);support.append(section);
     });
     renderRoster();
-    const count=new Set(rows.filter(r=>r.am||r.pm).map(r=>r.staff_id)).size;
+    const count=new Set(rows.filter(r=>B.cards(r).some(c=>B.visiblePlace(c.place)!=='未配置')).map(r=>r.staff_id)).size;
     const eligible=employees.filter(s=>B.eligible(s,loadedDate));
     const tally=key=>eligible.filter(s=>B.attendance(shifts.get(s.id)).key===key).length;
     $('summary').textContent=`配置記録 ${count}人 ｜ 出勤予定 ${tally('work')}人・休み ${tally('off')}人・有給 ${tally('leave')}人・未登録 ${tally('unknown')}人`;
@@ -132,6 +137,7 @@
       const source=saved.length>1?'ALL':saved[0]?.slot;
       const preferred=pending.length>1?'ALL':pending[0]?.slot||'ALL';
       const el=card(staff,source||preferred,!B.eligible(staff,loadedDate),!source);
+      if(source){el.dataset.sourcePlace=place;el.dataset.combined='true';}
       target.append(el);
     });
     if(!target.children.length){const hint=document.createElement('span');hint.className='cell-hint';hint.textContent='ここへ移動';target.append(hint)}
@@ -142,6 +148,7 @@
       if(!B.cards(row).some(c=>c.slot===slot&&c.place===place))return;
       const staff=employees.find(s=>s.id===row.staff_id);
       const el=card(staff||{id:row.staff_id,name:'マスタ参照不可'},slot,!B.eligible(staff,loadedDate));
+      el.dataset.sourcePlace=place;
       if(['off','leave'].includes(B.attendance(shifts.get(row.staff_id)).key)&&place!=='欠勤'){
         el.classList.add('attendance-conflict');
         const warning=document.createElement('small');warning.textContent='⚠ シフトは休み・有給';el.append(warning);
@@ -174,19 +181,14 @@
     if(!selected||busy||!ready)return;
     const selection=selected,staff=employees.find(s=>s.id===selection.id);
     if(slot==='AUTO')slot=selection.from||selection.preferred||'ALL';
+    if(place==='未配置'&&!selection.source)return;
     if(!B.eligible(staff,loadedDate)){message('この日の在籍状況を確認してください。');return}
     const attendance=B.attendance(shifts.get(staff.id));
-    if(['off','leave'].includes(attendance.key)&&place!=='欠勤'&&
+    if(['off','leave'].includes(attendance.key)&&place!=='欠勤'&&place!=='未配置'&&
        !confirm(`${B.cleanName(staff.name)}さんのシフトは「${attendance.label}」です。配置しますか？ シフト自体は変更されません。`))return;
     const old=rows.find(r=>r.staff_id===staff.id);
-    if(old?.full_day&&selection.from===null&&slot!=='ALL'){
-      message('全日カードを移動するか、全日配置を変更してください。');return;
-    }
-    const next=B.move(old,selection.from,slot,place);
-    const existing=old&&B.cards(old).filter(c=>c.slot!==selection.from);
-    if(existing?.some(c=>slot==='ALL'||c.slot===slot||c.slot==='ALL')){
-      if(!confirm(`${B.cleanName(staff.name)}さんの既存の配置を置き換えますか？`))return;
-    }
+    const next={placements:B.changeCards(old,selection.source,slot,place)};
+    if(JSON.stringify(next.placements)===JSON.stringify(old?B.cards(old):[]))return;
     lock(true);$('saveStatus').textContent='保存中…';message();
     const payload={owner_id:user.id,staff_id:staff.id,work_date:loadedDate,...next,revision:old?old.revision+1:1};
     try{
@@ -204,9 +206,13 @@
       message('変更は画面に反映していません。最新の配置を読み込んで保存結果を確認してください。 '+error.message);
     }finally{lock(false)}
   }
+  function selectionFor(el){
+    return {id:el.dataset.staff,from:el.dataset.slot||null,preferred:el.dataset.preferredSlot,
+      source:el.dataset.sourcePlace?{slot:el.dataset.slot,place:el.dataset.sourcePlace,combined:el.dataset.combined==='true'}:null};
+  }
   function openMove(el){
     if(busy||!ready||el.disabled)return;
-    selected={id:el.dataset.staff,from:el.dataset.slot||null,preferred:el.dataset.preferredSlot};
+    selected=selectionFor(el);
     $('moveTitle').textContent=B.cleanName(employees.find(s=>s.id===selected.id)?.name)+' の配置';
     $('slot').value=selected.from||el.dataset.preferredSlot||'AM';updateMoveFields();$('moveDialog').showModal();
   }
@@ -246,12 +252,12 @@
     suppressClick=true;setTimeout(()=>{suppressClick=false},100);
     if(cancel)return;
     const target=document.elementFromPoint(event.clientX,event.clientY)?.closest('[data-drop]');
-    if(target){selected={id:current.el.dataset.staff,from:current.el.dataset.slot||null,preferred:current.el.dataset.preferredSlot};void placeSelection(target.dataset.slot,target.dataset.place)}
+    if(target){selected=selectionFor(current.el);void placeSelection(target.dataset.slot,target.dataset.place)}
   }
   document.addEventListener('pointerup',e=>endDrag(e));
   document.addEventListener('pointercancel',e=>endDrag(e,true));
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&drag)endDrag({pointerId:drag.id},true)});
-  B.places.forEach(p=>{const option=document.createElement('option');option.value=p;option.textContent=p;$('place').append(option)});
+  B.places.forEach(p=>{const option=document.createElement('option');option.value=p;option.textContent=p==='未配置'?'配置を外す':p;$('place').append(option)});
   function updateMoveFields(){$('slot').parentElement.hidden=!B.areas.includes($('place').value)}
   $('place').onchange=updateMoveFields;
   $('moveForm').onsubmit=e=>{e.preventDefault();$('moveDialog').close();void placeSelection(B.areas.includes($('place').value)?$('slot').value:'AUTO',$('place').value)};

@@ -54,3 +54,13 @@ test('working hours follow the company month and keep unset monthly values',()=>
   for(const place of ['J','梱包','パスソート','配送佐川','配送南郵便局'])assert.equal(B.move(null,null,'ALL',place).am,place);
 });
 
+
+test('adds several locations and moves or removes only the selected card',()=>{
+  const legacy={am:'A',pm:'A',full_day:true};
+  let placements=B.changeCards(legacy,null,'ALL','B');
+  assert.deepEqual(placements,[{slot:'ALL',place:'A'},{slot:'ALL',place:'B'}]);
+  assert.deepEqual(B.changeCards({placements},null,'ALL','B'),placements);
+  placements=B.changeCards({placements},{slot:'ALL',place:'B'},'AM','C');
+  assert.deepEqual(placements,[{slot:'ALL',place:'A'},{slot:'AM',place:'C'}]);
+  assert.deepEqual(B.changeCards({placements},{slot:'AM',place:'C'},'AM','未配置'),[{slot:'ALL',place:'A'}]);
+});

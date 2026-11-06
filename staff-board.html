@@ -30,10 +30,10 @@
       <div class="save-tools"><span id="saveStatus" role="status" aria-live="polite">読み込み中…</span><button id="reload">最新の配置を読み込む</button></div>
     </div>
     <p id="message" role="alert"></p>
-    <div class="board-title"><div><h2>今日の配置</h2><p>名前をつかんで移動。タップして配置先を選ぶこともできます。</p></div><span id="summary"></span></div>
+    <div class="board-title"><div><h2>今日の配置</h2><p>左の名札から追加。配置済みの名札は移動できます。タップでも操作できます。</p></div><span id="summary"></span></div>
     <div class="plate-legend" aria-label="名前プレートの色"><span class="employee">社員</span><span class="part-time">PT・パート</span><span class="dispatch">派遣</span><span class="silver">シルバー</span><span class="other">その他</span></div>
     <div class="placement-workspace">
-    <aside class="unassigned-sidebar panel" aria-label="未配置の名前一覧"><h2>未配置</h2><p>右の表へ移動</p><div id="unassignedBoard"></div></aside>
+    <aside class="unassigned-sidebar panel" aria-label="配置用の名前一覧"><h2>配置用名札</h2><p>右へドラッグして追加。名札はここに残ります。</p><div id="unassignedBoard"></div></aside>
     <div class="placement-main">
     <div class="board-scroll panel"><table id="board" aria-label="時間帯とエリアの人員配置"></table></div>
     <p class="hint">全日＝午前・午後とも同じ配置。AMとPMを別々に配置することもできます。</p>
@@ -53,7 +53,7 @@
     <h2 id="moveTitle">配置を変更</h2>
     <label>時間帯<select id="slot"><option value="AM">AM</option><option value="ALL">全日</option><option value="PM">PM</option></select></label>
     <label>配置先<select id="place"></select></label>
-    <p>同じ時間帯に既存の配置がある場合は置き換えます。</p>
+    <p>左の名札からは配置を追加します。配置済みの名札を選んだ場合は、その札だけを移動します。</p>
     <div class="dialog-actions"><button type="button" id="cancelMove">キャンセル</button><button class="primary">配置する</button></div>
   </form>
 </dialog>
