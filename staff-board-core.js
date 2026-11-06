@@ -9,6 +9,7 @@
       (staff.retirement_date ? date <= staff.retirement_date : staff.is_active === true);
   }
   function cards(row) {
+    if (Array.isArray(row.placements)) return row.placements;
     if (row.full_day) return [{slot:'ALL', place:row.am}];
     return ['AM','PM'].filter(s=>row[s.toLowerCase()]).map(s=>({slot:s,place:row[s.toLowerCase()]}));
   }
@@ -21,6 +22,14 @@
     if (to === 'ALL') { next.am=place; next.pm=place; next.full_day=true; }
     else { next[to.toLowerCase()]=place; next.full_day=false; }
     return next;
+  }
+  function changeCards(row, source, slot, place) {
+    if (!['AM','ALL','PM'].includes(slot) || !places.includes(place)) throw Error('配置先が不正です');
+    const result=(row?cards(row):[]).filter(c=>!source ||
+      (source.combined ? visiblePlace(c.place)!==source.place :
+        c.slot!==source.slot || c.place!==source.place));
+    if(place!=='未配置'&&!result.some(c=>c.slot===slot&&c.place===place)) result.push({slot,place});
+    return result;
   }
   function cleanName(name) {
     return String(name ?? '').replace(/^(?:\d{6}|LEGACY-S\d+)[\s\u00a0]+/,'');
@@ -39,10 +48,11 @@
   function pendingCards(row, shift) {
     const state=attendance(shift);
     if(state.key==='unknown')return [];
-    if(row?.full_day)return [];
+    const assigned=row?cards(row):[];
+    if(assigned.some(c=>c.slot==='ALL'))return [];
     const place=state.working?'未配置':'欠勤';
-    if(!row?.am&&!row?.pm)return [{slot:'ALL',place}];
-    return ['AM','PM'].filter(slot=>!row?.[slot.toLowerCase()]).map(slot=>({slot,place}));
+    if(!assigned.length)return [{slot:'ALL',place}];
+    return ['AM','PM'].filter(slot=>!assigned.some(c=>c.slot===slot)).map(slot=>({slot,place}));
   }
   function planMonth(date) {
     const [y,m,d]=date.split('-').map(Number);
@@ -54,7 +64,7 @@
       ? String(row.start_time).slice(0,5)+'～'+String(row.end_time).slice(0,5)
       : '時間未設定';
   }
-  const api={areas,extras,places,eligible,cards,move,cleanName,plateName,attendance,pendingCards,planMonth,workHours,visiblePlace};
+  const api={areas,extras,places,eligible,cards,move,cleanName,plateName,attendance,pendingCards,planMonth,workHours,visiblePlace,changeCards};
   if (typeof module !== 'undefined') module.exports=api;
   else root.StaffBoard=api;
 })(globalThis);
