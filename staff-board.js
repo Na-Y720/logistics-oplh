@@ -138,7 +138,11 @@
       lanes.forEach((carrier,index)=>{
         const tr=body.insertRow();
         if(index===0)label(tr,slot==='ALL'?'全日':slot,lanes.length,lanes.length>1?'rowgroup':'row');
-        if(withCarriers)label(tr,carrier);
+        if(withCarriers){
+          const carrierLabel=label(tr,carrier);
+          const color=['sagawa','yamato','japan-post'][B.carriers.indexOf(carrier)];
+          if(color){tr.dataset.carrier=color;carrierLabel.classList.add('carrier-label');}
+        }
         columns.forEach(place=>{
           const td=tr.insertCell();
           fillCell(td,slot,B.carriers.includes(carrier)?B.carrierPlace(place,carrier):place);
