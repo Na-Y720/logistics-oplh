@@ -64,3 +64,10 @@ test('adds several locations and moves or removes only the selected card',()=>{
   assert.deepEqual(placements,[{slot:'ALL',place:'A'},{slot:'AM',place:'C'}]);
   assert.deepEqual(B.changeCards({placements},{slot:'AM',place:'C'},'AM','未配置'),[{slot:'ALL',place:'A'}]);
 });
+
+test('carrier lanes retain independent placements in the same area',()=>{
+  const a=B.changeCards(null,null,'AM',B.carrierPlace('A','佐川'));
+  const b=B.changeCards({placements:a},null,'AM',B.carrierPlace('A','ヤマト'));
+  assert.deepEqual(b,[{slot:'AM',place:'A｜佐川'},{slot:'AM',place:'A｜ヤマト'}]);
+  assert.deepEqual(B.changeCards({placements:b},b[0],'PM',B.carrierPlace('J','日本郵便')),[b[1],{slot:'PM',place:'J｜日本郵便'}]);
+});

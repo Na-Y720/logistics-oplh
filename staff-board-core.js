@@ -3,7 +3,9 @@
   const areas = ['A','B','C','D','E','F','G','H','I','J','梱包','パスソート','配送佐川','配送南郵便局'];
   const extras = ['未配置','休憩 11:30','休憩 12:00','休憩 12:30','欠勤'];
   function visiblePlace(place) { return ['応援','補充','予備'].includes(place)?'未配置':place; }
-  const places = [...areas, ...extras];
+  const zones=areas.slice(0,10),tasks=areas.slice(10),carriers=['佐川','ヤマト','日本郵便'];
+  const carrierPlace=(zone,carrier)=>zone+'｜'+carrier;
+  const places = [...areas, ...zones.flatMap(z=>carriers.map(c=>carrierPlace(z,c))), ...extras];
   function eligible(staff, date) {
     return !!staff && !String(staff.name).startsWith('__') &&
       (staff.retirement_date ? date <= staff.retirement_date : staff.is_active === true);
@@ -64,7 +66,7 @@
       ? String(row.start_time).slice(0,5)+'～'+String(row.end_time).slice(0,5)
       : '時間未設定';
   }
-  const api={areas,extras,places,eligible,cards,move,cleanName,plateName,attendance,pendingCards,planMonth,workHours,visiblePlace,changeCards};
+  const api={areas,extras,places,eligible,cards,move,cleanName,plateName,attendance,pendingCards,planMonth,workHours,visiblePlace,changeCards,zones,tasks,carriers,carrierPlace};
   if (typeof module !== 'undefined') module.exports=api;
   else root.StaffBoard=api;
 })(globalThis);
