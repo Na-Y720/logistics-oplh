@@ -32,3 +32,5 @@
 #board tr[data-carrier=japan-post]{--lane:#fdf2f2;--label:#f8dddd;--ink:#832a31}
 #board tbody tr[data-carrier]>td{background:var(--lane)}
 #board tbody tr[data-carrier]>.carrier-label{background:var(--label);color:var(--ink);font-weight:800}
+
+#taskBoard{min-width:610px}#taskBoard thead th{font-size:15px;line-height:1.5;overflow-wrap:anywhere}

@@ -92,7 +92,7 @@
   }
   function render(){
     renderGrid($('board'),B.zones,true);
-    renderGrid($('taskBoard'),B.tasks,false);
+    renderGrid($('taskBoard'),[...B.tasks,...(rows.some(r=>B.cards(r).some(c=>c.place==='梱包'))?['梱包']:[])],false);
     const support=$('supportBoard');support.replaceChildren();$('restBoard').replaceChildren();
     const unassigned=$('unassignedBoard');unassigned.replaceChildren();
     const pending=document.createElement('div');pending.className='unassigned-drop';
@@ -125,7 +125,8 @@
     const label=(row,value,span=1,scope='row')=>{
       const th=document.createElement('th');th.scope=scope;th.rowSpan=span;
       if(value.startsWith('配送')&&value!=='配送会社未指定')th.append('配送',document.createElement('br'),value.slice(2));
-      else th.textContent=value;
+      else if(value.startsWith('自動梱包機'))th.append('自動梱包機',document.createElement('br'),value.slice(5));
+      else th.textContent=value==='梱包'?'梱包（区分未設定）':value;
       row.append(th);return th;
     };
     label(heading,'時間帯',1,'col').colSpan=withCarriers?2:1;
