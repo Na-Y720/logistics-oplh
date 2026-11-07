@@ -1,11 +1,11 @@
 (function (root) {
   'use strict';
-  const areas = ['A','B','C','D','E','F','G','H','I','J','梱包','パスソート','配送佐川','配送南郵便局'];
+  const areas = ['A','B','C','D','E','F','G','H','I','J','自動梱包機ネコポス','自動梱包機ゆうぱっく','パスソート','配送佐川','配送南郵便局'];
   const extras = ['未配置','休憩 11:30','休憩 12:00','休憩 12:30','欠勤'];
   function visiblePlace(place) { return ['応援','補充','予備'].includes(place)?'未配置':place; }
   const zones=areas.slice(0,10),tasks=areas.slice(10),carriers=['佐川','ヤマト','日本郵便'];
   const carrierPlace=(zone,carrier)=>zone+'｜'+carrier;
-  const places = [...areas, ...zones.flatMap(z=>carriers.map(c=>carrierPlace(z,c))), ...extras];
+  const places = ['梱包',...areas, ...zones.flatMap(z=>carriers.map(c=>carrierPlace(z,c))), ...extras];
   function eligible(staff, date) {
     return !!staff && !String(staff.name).startsWith('__') &&
       (staff.retirement_date ? date <= staff.retirement_date : staff.is_active === true);

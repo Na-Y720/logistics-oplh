@@ -1,6 +1,6 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const B=require('../staff-board-core.js');
-test('area order matches the board',()=>assert.deepEqual(B.areas,['A','B','C','D','E','F','G','H','I','J','梱包','パスソート','配送佐川','配送南郵便局']));
+test('area order matches the board',()=>assert.deepEqual(B.areas,['A','B','C','D','E','F','G','H','I','J','自動梱包機ネコポス','自動梱包機ゆうぱっく','パスソート','配送佐川','配送南郵便局']));
 test('retirement date is inclusive; former staff remain usable on historical dates',()=>{
   assert.equal(B.eligible({name:'test',is_active:false,retirement_date:'2026-10-20'},'2026-10-20'),true);
   assert.equal(B.eligible({name:'test',is_active:true,retirement_date:'2026-10-20'},'2026-10-21'),false);
@@ -70,4 +70,12 @@ test('carrier lanes retain independent placements in the same area',()=>{
   const b=B.changeCards({placements:a},null,'AM',B.carrierPlace('A','ヤマト'));
   assert.deepEqual(b,[{slot:'AM',place:'A｜佐川'},{slot:'AM',place:'A｜ヤマト'}]);
   assert.deepEqual(B.changeCards({placements:b},b[0],'PM',B.carrierPlace('J','日本郵便')),[b[1],{slot:'PM',place:'J｜日本郵便'}]);
+});
+
+test('automatic packing machines can be assigned independently',()=>{
+  let placements=B.changeCards(null,null,'AM','自動梱包機ネコポス');
+  placements=B.changeCards({placements},null,'PM','自動梱包機ゆうぱっく');
+  assert.equal(placements.length,2);
+  assert.equal(placements[1].place,'自動梱包機ゆうぱっく');
+  assert.deepEqual(B.cards({am:'梱包',pm:null,full_day:false}),[{slot:'AM',place:'梱包'}]);
 });
