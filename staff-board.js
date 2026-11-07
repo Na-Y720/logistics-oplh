@@ -91,22 +91,9 @@
     return el;
   }
   function render(){
-    const board=$('board');board.replaceChildren();
-    const head=board.createTHead().insertRow();
-    ['時間帯',...B.areas].forEach(p=>{
-      const th=document.createElement('th');th.scope='col';
-      if(p.startsWith('配送'))th.append('配送',document.createElement('br'),p.slice(2));
-      else th.textContent=p;
-      head.append(th);
-    });
-    const body=board.createTBody();
-    ['AM','ALL','PM'].forEach(slot=>{
-      const tr=body.insertRow(),th=document.createElement('th');th.scope='row';th.textContent=slot==='ALL'?'全日':slot;tr.append(th);
-      B.areas.forEach(place=>{
-        const td=tr.insertCell();fillCell(td,slot,place);
-      });
-    });
-    const support=$('supportBoard');support.replaceChildren();
+    renderGrid($('board'),B.zones,true);
+    renderGrid($('taskBoard'),B.tasks,false);
+    const support=$('supportBoard');support.replaceChildren();$('restBoard').replaceChildren();
     const unassigned=$('unassignedBoard');unassigned.replaceChildren();
     const pending=document.createElement('div');pending.className='unassigned-drop';
     pending.dataset.drop='true';pending.dataset.slot='AUTO';pending.dataset.place='未配置';
@@ -119,13 +106,46 @@
       const section=document.createElement('section');section.className='support-panel panel';
       const title=document.createElement('h3');title.textContent=place==='欠勤'?'休み':place;section.append(title);
       const target=document.createElement('div');target.className='support-drop';
-      fillCombined(target,place);section.append(target);support.append(section);
+      fillCombined(target,place);section.append(target);(place==='欠勤'?$('restBoard'):support).append(section);
     });
     renderRoster();
     const count=new Set(rows.filter(r=>B.cards(r).some(c=>B.visiblePlace(c.place)!=='未配置')).map(r=>r.staff_id)).size;
     const eligible=employees.filter(s=>B.eligible(s,loadedDate));
     const tally=key=>eligible.filter(s=>B.attendance(shifts.get(s.id)).key===key).length;
     $('summary').textContent=`配置記録 ${count}人 ｜ 出勤予定 ${tally('work')}人・休み ${tally('off')}人・有給 ${tally('leave')}人・未登録 ${tally('unknown')}人`;
+  }
+  function renderGrid(table,columns,withCarriers){
+    table.replaceChildren();
+    const cols=document.createElement('colgroup');
+    for(const kind of ['time',...(withCarriers?['carrier']:[]),...columns.map(()=> 'work')]){
+      const col=document.createElement('col');col.className='column-'+kind;cols.append(col);
+    }
+    table.append(cols);
+    const heading=table.createTHead().insertRow();
+    const label=(row,value,span=1,scope='row')=>{
+      const th=document.createElement('th');th.scope=scope;th.rowSpan=span;
+      if(value.startsWith('配送')&&value!=='配送会社未指定')th.append('配送',document.createElement('br'),value.slice(2));
+      else th.textContent=value;
+      row.append(th);return th;
+    };
+    label(heading,'時間帯',1,'col').colSpan=withCarriers?2:1;
+    columns.forEach(place=>label(heading,place,1,'col'));
+    for(const slot of ['AM','PM','ALL']){
+      const legacy=rows.some(row=>B.cards(row).some(c=>c.slot===slot&&columns.includes(c.place)));
+      if(slot==='ALL'&&!legacy)continue;
+      const lanes=withCarriers?(slot==='ALL'?['配送会社未指定']:[...B.carriers,...(legacy?['配送会社未指定']:[])]):[''];
+      const body=table.createTBody();
+      lanes.forEach((carrier,index)=>{
+        const tr=body.insertRow();
+        if(index===0)label(tr,slot==='ALL'?'全日':slot,lanes.length,lanes.length>1?'rowgroup':'row');
+        if(withCarriers)label(tr,carrier);
+        columns.forEach(place=>{
+          const td=tr.insertCell();
+          fillCell(td,slot,B.carriers.includes(carrier)?B.carrierPlace(place,carrier):place);
+          if(slot==='ALL'||carrier==='配送会社未指定')delete td.dataset.drop;
+        });
+      });
+    }
   }
   function fillCombined(target,place){
     target.dataset.drop='true';target.dataset.slot='AUTO';target.dataset.place=place;
@@ -214,7 +234,7 @@
     if(busy||!ready||el.disabled)return;
     selected=selectionFor(el);
     $('moveTitle').textContent=B.cleanName(employees.find(s=>s.id===selected.id)?.name)+' の配置';
-    $('slot').value=selected.from||el.dataset.preferredSlot||'AM';updateMoveFields();$('moveDialog').showModal();
+    $('slot').value=(selected.from==='PM'||el.dataset.preferredSlot==='PM')?'PM':'AM';updateMoveFields();$('moveDialog').showModal();
   }
   document.addEventListener('click',event=>{
     if(suppressClick){event.preventDefault();return}
@@ -257,10 +277,10 @@
   document.addEventListener('pointerup',e=>endDrag(e));
   document.addEventListener('pointercancel',e=>endDrag(e,true));
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&drag)endDrag({pointerId:drag.id},true)});
-  B.places.forEach(p=>{const option=document.createElement('option');option.value=p;option.textContent=p==='未配置'?'配置を外す':p;$('place').append(option)});
-  function updateMoveFields(){$('slot').parentElement.hidden=!B.areas.includes($('place').value)}
+  [...B.zones.flatMap(z=>B.carriers.map(c=>B.carrierPlace(z,c))),...B.tasks,...B.extras].forEach(p=>{const option=document.createElement('option');option.value=p;option.textContent=p==='未配置'?'配置を外す':p;$('place').append(option)});
+  function updateMoveFields(){$('slot').parentElement.hidden=B.extras.includes($('place').value)}
   $('place').onchange=updateMoveFields;
-  $('moveForm').onsubmit=e=>{e.preventDefault();$('moveDialog').close();void placeSelection(B.areas.includes($('place').value)?$('slot').value:'AUTO',$('place').value)};
+  $('moveForm').onsubmit=e=>{e.preventDefault();$('moveDialog').close();void placeSelection(!B.extras.includes($('place').value)?$('slot').value:'AUTO',$('place').value)};
   $('cancelMove').onclick=()=>$('moveDialog').close();
   $('search').oninput=renderRoster;
   $('attendanceFilter').onchange=renderRoster;

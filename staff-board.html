@@ -36,9 +36,12 @@
     <aside class="unassigned-sidebar panel" aria-label="配置用の名前一覧"><h2>配置用名札</h2><p>右へドラッグして追加。名札はここに残ります。</p><div id="unassignedBoard"></div></aside>
     <div class="placement-main">
     <div class="board-scroll panel"><table id="board" aria-label="時間帯とエリアの人員配置"></table></div>
-    <p class="hint">全日＝午前・午後とも同じ配置。AMとPMを別々に配置することもできます。</p>
-    <div class="board-title"><div><h2>休憩・休み</h2><p>休み・有給の人はシフトから自動表示します。</p></div></div>
-    <section id="supportBoard" class="support-board" aria-label="未配置・休憩・休みの配置"></section>
+    <p class="hint">以前の配送会社が未登録の配置は「配送会社未指定」に表示します。</p>
+    <div class="secondary-layout">
+      <section><h2>休憩</h2><div id="supportBoard" class="support-board"></div></section>
+      <section><h2>梱包・パスソート・配送</h2><div class="task-scroll panel"><table id="taskBoard" aria-label="時間帯と作業の人員配置"></table></div></section>
+    </div>
+    <div id="restBoard" class="support-board" aria-label="休み"></div>
     <p class="hint">出勤状況は保存済みシフトを参照します。実際の打刻・当日の欠勤とは異なります。配置を動かしてもシフトは変更しません。</p>
     </div>
     </div>
@@ -51,7 +54,7 @@
 <dialog id="moveDialog">
   <form id="moveForm">
     <h2 id="moveTitle">配置を変更</h2>
-    <label>時間帯<select id="slot"><option value="AM">AM</option><option value="ALL">全日</option><option value="PM">PM</option></select></label>
+    <label>時間帯<select id="slot"><option value="AM">AM</option><option value="PM">PM</option></select></label>
     <label>配置先<select id="place"></select></label>
     <p>左の名札からは配置を追加します。配置済みの名札を選んだ場合は、その札だけを移動します。</p>
     <div class="dialog-actions"><button type="button" id="cancelMove">キャンセル</button><button class="primary">配置する</button></div>
