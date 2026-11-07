@@ -25,3 +25,10 @@
 @media(max-width:1000px){.secondary-layout{grid-template-columns:minmax(0,1fr)}}
 
 #board .column-time,#taskBoard .column-time{width:46px}#board .column-carrier{width:80px}#board tbody th{position:static;width:auto}#board thead th:first-child{position:static;width:auto}#taskBoard{table-layout:fixed}#taskBoard th:first-child{position:static;width:auto}#taskBoard th:nth-child(n),#taskBoard td:nth-child(n){border-left:1px solid #dbe7e3}
+
+/* Carrier colors use pale row fills and darker, readable headings. */
+#board tr[data-carrier=sagawa]{--lane:#f1f6fd;--label:#dceafe;--ink:#174579}
+#board tr[data-carrier=yamato]{--lane:#f0f8f2;--label:#dcf0e1;--ink:#1e5636}
+#board tr[data-carrier=japan-post]{--lane:#fdf2f2;--label:#f8dddd;--ink:#832a31}
+#board tbody tr[data-carrier]>td{background:var(--lane)}
+#board tbody tr[data-carrier]>.carrier-label{background:var(--label);color:var(--ink);font-weight:800}
