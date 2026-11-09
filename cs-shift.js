@@ -1,5 +1,6 @@
 (function(){
   const state={month:'',planMonth:'',start:'',end:'',dates:[],staff:[],shifts:new Map(),loaded:false};
+  let clearingAuto=false;
   const jpWeek=['日','月','火','水','木','金','土'];
   const holidayCache=new Map();
   const key=(sid,d)=>sid+'|'+d;
@@ -119,6 +120,8 @@
     const a=$('shiftAutoBtn'),r=$('shiftReloadBtn'),c=$('shiftClearBtn');
     if(a){a.disabled=on;a.textContent=on?label:'自動作成'}
     if(r)r.disabled=on;if(c)c.disabled=on;
+    const clearAutoButton=$('shiftClearAutoBtn');
+    if(clearAutoButton)clearAutoButton.disabled=on;
   }
 
   async function load(force=false){
@@ -220,6 +223,7 @@
     for(const c of cells)c.exists=true;
   }
   async function cycleCell(sid,date){
+    if(clearingAuto)return;
     const c=getCell(sid,date),before={...c};
     try{
       if(c.lock_type==='manual_paid'){
@@ -304,6 +308,29 @@
     }catch(e){setNotice('クリアに失敗しました: '+e.message,'bad')}
     finally{setBusy(false)}
   }
+  async function clearAuto(){
+    if(!state.loaded||clearingAuto)return;
+    if(!confirm(`${state.start} ～ ${state.end} の自動作成分をクリアします。\n手動入力は残ります。よろしいですか？`))return;
+
+    clearingAuto=true;
+    setBusy(true,'クリア中…');
+    const month=$('shiftMonth'),prev=$('shiftPrevMonth'),next=$('shiftNextMonth');
+    month.disabled=prev.disabled=next.disabled=true;
+    try{
+      const filters=`owner_id=eq.${user.id}&shift_date=gte.${state.start}&shift_date=lte.${state.end}&lock_type=eq.auto`;
+      await rest('cs_daily_shifts',filters,{method:'DELETE'});
+      for(const [cellKey,cell] of state.shifts){
+        if(cell.lock_type==='auto')state.shifts.delete(cellKey);
+      }
+      render();
+      setNotice('自動作成分のみクリアしました','good');
+    }catch(e){setNotice('自動作成分のクリアに失敗しました: '+e.message,'bad')}
+    finally{
+      clearingAuto=false;
+      month.disabled=prev.disabled=next.disabled=false;
+      setBusy(false);
+    }
+  }
   function navMonth(delta){$('shiftMonth').value=shiftYm($('shiftMonth').value||companyMonthToday(),delta);state.loaded=false;load(true)}
 
   $('shiftMonth').value=companyMonthToday();
@@ -313,6 +340,8 @@
   $('shiftReloadBtn').onclick=()=>load(true);
   $('shiftAutoBtn').onclick=generate;
   $('shiftClearBtn').onclick=clearAll;
+  const clearAutoButton=$('shiftClearAutoBtn');
+  if(clearAutoButton)clearAutoButton.onclick=clearAuto;
 
   window.csShiftLoad=load;
   window.csShiftInvalidate=()=>{state.loaded=false};
