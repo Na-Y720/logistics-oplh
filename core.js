@@ -97,7 +97,7 @@ function forecastRecalibrationRatio(r){
 
 // 2026-11-12 review. Weather effects are conservative scenarios, not fitted elasticities.
 const FORECAST365_REVIEW = {
- version:'tokyo_rakuten_v2_20261112', start:'2026-11-13', end:'2026-12-30',
+ version:'tokyo_rakuten_v3_payday_20261112', start:'2026-11-13', end:'2026-12-30',
  weatherSources:['https://www.jma.go.jp/bosai/season/','https://weathernews.jp/news/202611/060031/','https://news.livedoor.com/article/detail/32799443/'],
  calendarSource:'User-provided November/December 2026 Rakuten calendar; BF corroborated by Rakuten announcement',
  // Shift the prior-year event phase, separately preserving the 5/0 next-day effect.
@@ -105,7 +105,7 @@ const FORECAST365_REVIEW = {
  removedPriorEventDates:['2026-11-27','2026-11-28','2026-12-26'],
 };
 function reviewShiftDate(d,n){return new Date(Date.parse(d+'T00:00:00Z')+n*86400000).toISOString().slice(0,10)}
-function reviewPayday(d){return [1,6,11,16,21,26,31].includes(Number(d.slice(-2)))}
+function reviewPayday(d){const previous=Number(reviewShiftDate(d,-1).slice(-2));return previous%5===0}
 function reviewWeather(d){
  // Tokyo/Kanto 60%, rest of Japan 40%; planning weights, not customer-location shares.
  // Shipping lags demand by roughly one day. Recent cold-driven uplift is in recent actuals.
@@ -139,15 +139,30 @@ function reviewForecast(r,all,asOf){
  let baseline=r.prior_year_actual,baselineSource=r.forecast_date;
  if(donorDate){
   const donor=all.find(x=>x.forecast_date===donorDate);
-  if(donor){baseline=donor.prior_year_actual/(reviewPayday(donorDate)?payEffect:1)*(reviewPayday(r.forecast_date)?payEffect:1);baselineSource=donorDate}
+  if(donor&&reviewPayday(donorDate)===reviewPayday(r.forecast_date)){baseline=reviewPayday(r.forecast_date)?Math.max(r.prior_year_actual,donor.prior_year_actual):Math.min(r.prior_year_actual,donor.prior_year_actual);baselineSource=donorDate}
  }else if(FORECAST365_REVIEW.removedPriorEventDates.includes(r.forecast_date)){
   // Replace last year's now-missing sale phase using nearby ordinary, non-payday days.
   const dates=r.forecast_date.startsWith('2026-11')?['2026-11-13','2026-11-14','2026-11-17','2026-11-18','2026-11-19','2026-11-29','2026-11-30','2026-12-02','2026-12-03']:['2026-12-17','2026-12-18','2026-12-19','2026-12-27','2026-12-28','2026-12-29'];
   const pool=all.filter(x=>dates.includes(x.forecast_date)&&x.prior_year_actual>0);
-  if(pool.length){baseline=priorMean(pool)*(reviewPayday(r.forecast_date)?payEffect:1);baselineSource='nearby_non_event_mean'}
+  if(pool.length){baseline=reviewPayday(r.forecast_date)?Math.max(r.prior_year_actual,priorMean(pool)*payEffect):priorMean(pool);baselineSource='nearby_non_event_mean'}
  }
  const weather=reviewWeather(r.forecast_date);
- return {forecast:Math.max(0,Math.round(baseline*trend*weather)),version:FORECAST365_REVIEW.version,asOf,baseline,baselineSource,payEffect,trend,r30,r7,recentWeight,weather,samples30:thirty.length,samples7:seven.length};
+ let forecast=Math.max(0,Math.round(baseline*trend*weather)),paydayFloor=0;
+ if(reviewPayday(r.forecast_date)){
+  // Business constraint: sale phase shifts must never erase the 5/0 next-day peak.
+  // Only recurse into ordinary non-paydays, so this cannot form a cycle.
+  const peers=all.filter(x=>x.event_type==='通常'&&!reviewPayday(x.forecast_date)&&Math.abs(Date.parse(x.forecast_date)-Date.parse(r.forecast_date))<=3*86400000);
+  const estimates=peers.map(x=>({date:x.forecast_date,value:reviewForecast(x,all,asOf)?.forecast})).filter(x=>Number.isFinite(x.value)&&x.value>0);
+  const sorted=estimates.map(x=>x.value).sort((a,b)=>a-b);
+  const typical=sorted.length?(sorted[Math.floor((sorted.length-1)/2)]+sorted[Math.floor(sorted.length/2)])/2:0;
+  const meanActual=s=>s.length?s.reduce((z,x)=>z+x.actual_total,0)/s.length:0;
+  const observed=normalRows.length&&payRows.length?meanActual(payRows)/meanActual(normalRows):payEffect;
+  const uplift=clamp(observed,1.25,2.5);
+  const adjacent=estimates.filter(x=>Math.abs(Date.parse(x.date)-Date.parse(r.forecast_date))===86400000);
+  paydayFloor=Math.ceil(Math.max(r.prior_year_actual*trend*weather,typical*uplift,...adjacent.map(x=>x.value*1.1)));
+  forecast=Math.max(forecast,paydayFloor);
+ }
+ return {forecast,paydayFloor,version:FORECAST365_REVIEW.version,asOf,baseline,baselineSource,payEffect,trend,r30,r7,recentWeight,weather,samples30:thirty.length,samples7:seven.length};
 }
 
 function recalcFuture(){
