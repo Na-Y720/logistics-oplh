@@ -84,18 +84,34 @@ function calculateAutoRules(){
  const sag=actual.reduce((z,r)=>z+Number(r.actual_sagawa||0),0),nek=actual.reduce((z,r)=>z+Number(r.actual_nekopos||0),0),yu=actual.reduce((z,r)=>z+Number(r.actual_yupack||0),0),t=sag+nek+yu;if(t){setRuleLocal('carrier_share','sagawa',sag/t,true,actual.length);setRuleLocal('carrier_share','nekopos',nek/t,true,actual.length);setRuleLocal('carrier_share','yupack',yu/t,true,actual.length)}
  return rules
 }
+function forecastRecalibrationRatio(r){
+ const active=rules.some(x=>x.rule_group==='forecast_recalibration');
+ if(!active)return null;
+ const validUntil=Math.round(getRule('forecast_recalibration','valid_until',0));
+ const ymd=Number(String(r.forecast_date||'').replaceAll('-',''));
+ if(!validUntil||!ymd||ymd>validUntil)return null;
+ if(r.event_type==='休止日')return 0;
+ const normal=getRule('forecast_recalibration','通常',1);
+ return getRule('forecast_recalibration',r.event_type||'通常',normal);
+}
 function recalcFuture(){
  calculateAutoRules();const productivity=getRule('productivity','shipments_per_person',180)||180,sag=getRule('carrier_share','sagawa',.403),nek=getRule('carrier_share','nekopos',.382);
- for(const r of rows){if(Number(r.actual_total)>0)continue;const wg=getRule('weekday_growth',r.weekday,1),ef=r.event_type==='通常'?1:getRule('event_multiplier',r.event_type,1);r.system_forecast=Math.max(0,Math.round(Number(r.prior_year_actual||0)*wg*ef));r.final_forecast=Math.max(0,r.system_forecast+Number(r.manual_adjustment||0));r.required_people=Math.ceil(r.final_forecast/productivity);r.forecast_sagawa=Math.round(r.final_forecast*sag);r.forecast_nekopos=Math.round(r.final_forecast*nek);r.forecast_yupack=Math.max(0,r.final_forecast-r.forecast_sagawa-r.forecast_nekopos);r.data_state='forecast';r.updated_at=new Date().toISOString()}
+ for(const r of rows){
+  if(r.actual_total!=null)continue;
+  const rr=forecastRecalibrationRatio(r);
+  if(rr!=null)r.system_forecast=Math.max(0,Math.round(Number(r.prior_year_actual||0)*rr));
+  else{const wg=getRule('weekday_growth',r.weekday,1),ef=r.event_type==='通常'?1:getRule('event_multiplier',r.event_type,1);r.system_forecast=Math.max(0,Math.round(Number(r.prior_year_actual||0)*wg*ef))}
+  r.final_forecast=Math.max(0,r.system_forecast+Number(r.manual_adjustment||0));r.required_people=Math.ceil(r.final_forecast/productivity);r.forecast_sagawa=Math.round(r.final_forecast*sag);r.forecast_nekopos=Math.round(r.final_forecast*nek);r.forecast_yupack=Math.max(0,r.final_forecast-r.forecast_sagawa-r.forecast_nekopos);r.data_state='forecast';r.updated_at=new Date().toISOString()
+ }
  saveLocal()
 }
 async function persistRecalculation(){
  recalcFuture();if(storageMode!=='cloud')return;
- const now=new Date().toISOString(),future=rows.filter(r=>!(Number(r.actual_total)>0)).map(r=>({owner_id:user.id,forecast_date:r.forecast_date,weekday:r.weekday,event_type:r.event_type,prior_year_actual:r.prior_year_actual,data_state:'forecast',system_forecast:r.system_forecast,manual_adjustment:r.manual_adjustment||0,final_forecast:r.final_forecast,required_people:r.required_people,forecast_sagawa:r.forecast_sagawa,forecast_nekopos:r.forecast_nekopos,forecast_yupack:r.forecast_yupack,updated_at:now}));
+ const now=new Date().toISOString(),future=rows.filter(r=>r.actual_total==null).map(r=>({owner_id:user.id,forecast_date:r.forecast_date,weekday:r.weekday,event_type:r.event_type,prior_year_actual:r.prior_year_actual,data_state:'forecast',system_forecast:r.system_forecast,manual_adjustment:r.manual_adjustment||0,final_forecast:r.final_forecast,required_people:r.required_people,forecast_sagawa:r.forecast_sagawa,forecast_nekopos:r.forecast_nekopos,forecast_yupack:r.forecast_yupack,updated_at:now}));
  for(let i=0;i<future.length;i+=80)await rest('forecast365_daily','on_conflict=owner_id%2Cforecast_date',{method:'POST',headers:{Prefer:'resolution=merge-duplicates'},body:JSON.stringify(future.slice(i,i+80))});
- const rr=rules.map(r=>({owner_id:user.id,rule_group:r.rule_group,rule_key:r.rule_key,rule_value:r.rule_value,sample_count:r.sample_count||0,auto_calculated:!!r.auto_calculated,source_period_start:'2026-02-21',source_period_end:latestActualDate(),updated_at:now}));for(let i=0;i<rr.length;i+=80)await rest('forecast365_rules','on_conflict=owner_id%2Crule_group%2Crule_key',{method:'POST',headers:{Prefer:'resolution=merge-duplicates'},body:JSON.stringify(rr.slice(i,i+80))})
+ const rr=rules.map(r=>({owner_id:user.id,rule_group:r.rule_group,rule_key:r.rule_key,rule_value:r.rule_value,sample_count:r.sample_count||0,auto_calculated:!!r.auto_calculated,source_period_start:r.rule_group==='forecast_recalibration'?(r.source_period_start||'2026-10-13'):'2026-02-21',source_period_end:r.rule_group==='forecast_recalibration'?(r.source_period_end||'2026-11-11'):latestActualDate(),updated_at:now}));for(let i=0;i<rr.length;i+=80)await rest('forecast365_rules','on_conflict=owner_id%2Crule_group%2Crule_key',{method:'POST',headers:{Prefer:'resolution=merge-duplicates'},body:JSON.stringify(rr.slice(i,i+80))})
 }
-function latestActualDate(){const a=rows.filter(r=>Number(r.actual_total)>0).map(r=>r.forecast_date).sort();return a.at(-1)||'2026-02-21'}
+function latestActualDate(){const a=rows.filter(r=>r.actual_total!=null).map(r=>r.forecast_date).sort();return a.at(-1)||'2026-02-21'}
 
 async function saveActual(input){
  const r=rows.find(x=>x.forecast_date===input.forecast_date);if(!r)throw new Error('対象日が見つかりません。');
