@@ -94,18 +94,82 @@ function forecastRecalibrationRatio(r){
  const normal=getRule('forecast_recalibration','通常',1);
  return getRule('forecast_recalibration',r.event_type||'通常',normal);
 }
+
+// 2026-11-12 review. Weather effects are conservative scenarios, not fitted elasticities.
+const FORECAST365_REVIEW = {
+ version:'tokyo_rakuten_v2_20261112', start:'2026-11-13', end:'2026-12-30',
+ weatherSources:['https://www.jma.go.jp/bosai/season/','https://weathernews.jp/news/202611/060031/','https://news.livedoor.com/article/detail/32799443/'],
+ calendarSource:'User-provided November/December 2026 Rakuten calendar; BF corroborated by Rakuten announcement',
+ // Shift the prior-year event phase, separately preserving the 5/0 next-day effect.
+ donors:{'2026-11-20':'2026-11-21','2026-11-21':'2026-11-22','2026-11-22':'2026-11-23','2026-11-23':'2026-11-24','2026-11-24':'2026-11-25','2026-11-25':'2026-11-27','2026-11-26':'2026-11-28','2026-12-24':'2026-12-26','2026-12-25':'2026-12-27'},
+ removedPriorEventDates:['2026-11-27','2026-11-28','2026-12-26'],
+};
+function reviewShiftDate(d,n){return new Date(Date.parse(d+'T00:00:00Z')+n*86400000).toISOString().slice(0,10)}
+function reviewPayday(d){return [1,6,11,16,21,26,31].includes(Number(d.slice(-2)))}
+function reviewWeather(d){
+ // Tokyo/Kanto 60%, rest of Japan 40%; planning weights, not customer-location shares.
+ // Shipping lags demand by roughly one day. Recent cold-driven uplift is in recent actuals.
+ if(d>='2026-11-13'&&d<='2026-11-14')return 1;
+ if(d>='2026-11-15'&&d<='2026-11-17')return .6*.97+.4*.98;
+ if(d>='2026-11-18'&&d<='2026-11-21')return .6*1.03+.4*1.02;
+ if(d>='2026-11-22'&&d<='2026-12-06')return .99;
+ return 1; // Do not invent daily weather beyond the available forecast horizon.
+}
+function reviewForecast(r,all,asOf){
+ if(r.forecast_date<FORECAST365_REVIEW.start||r.forecast_date>FORECAST365_REVIEW.end)return null;
+ if(r.event_type==='休止日')return {forecast:0,version:FORECAST365_REVIEW.version,reason:'closed'};
+ const eligible=all.filter(x=>x.actual_total!=null&&x.prior_year_actual>0&&x.forecast_date<=asOf&&x.forecast_date<r.forecast_date);
+ const recent=(days,type)=>eligible.filter(x=>x.forecast_date>=reviewShiftDate(asOf,1-days)&&(!type||x.event_type===type));
+ const ratio=(s,fallback=1)=>{const p=s.reduce((z,x)=>z+x.prior_year_actual,0);return p?s.reduce((z,x)=>z+x.actual_total,0)/p:fallback};
+ const kind=r.event_type.startsWith('SS')?'通常':(r.event_type==='5/0翌日'?'5/0翌日':'通常');
+ const thirty=recent(30,kind),seven=recent(7,kind),r30=ratio(thirty),r7=ratio(seven,r30);
+ const horizon=Math.max(1,(Date.parse(r.forecast_date)-Date.parse(asOf))/86400000);
+ const recentWeight=.3+.3*Math.exp(-(horizon-1)/14);
+ let trend=r30+(r7-r30)*recentWeight;
+ if(r.event_type.startsWith('SS')){
+   const ss=eligible.filter(x=>x.event_type===r.event_type);
+   // Shrink sparse SS evidence toward the rolling normal-day trend.
+   trend=trend+(ratio(ss,r30)-r30)*ss.length/(ss.length+5);
+ }
+ // Estimate the prior-year 5/0 increment on recent data, excluding SS.
+ const priorMean=s=>s.length?s.reduce((z,x)=>z+x.prior_year_actual,0)/s.length:0;
+ const payRows=recent(30,'5/0翌日'),normalRows=recent(30,'通常');
+ const payEffect=clamp(priorMean(payRows)/(priorMean(normalRows)||1),1,2.5);
+ const donorDate=FORECAST365_REVIEW.donors[r.forecast_date];
+ let baseline=r.prior_year_actual,baselineSource=r.forecast_date;
+ if(donorDate){
+  const donor=all.find(x=>x.forecast_date===donorDate);
+  if(donor){baseline=donor.prior_year_actual/(reviewPayday(donorDate)?payEffect:1)*(reviewPayday(r.forecast_date)?payEffect:1);baselineSource=donorDate}
+ }else if(FORECAST365_REVIEW.removedPriorEventDates.includes(r.forecast_date)){
+  // Replace last year's now-missing sale phase using nearby ordinary, non-payday days.
+  const dates=r.forecast_date.startsWith('2026-11')?['2026-11-13','2026-11-14','2026-11-17','2026-11-18','2026-11-19','2026-11-29','2026-11-30','2026-12-02','2026-12-03']:['2026-12-17','2026-12-18','2026-12-19','2026-12-27','2026-12-28','2026-12-29'];
+  const pool=all.filter(x=>dates.includes(x.forecast_date)&&x.prior_year_actual>0);
+  if(pool.length){baseline=priorMean(pool)*(reviewPayday(r.forecast_date)?payEffect:1);baselineSource='nearby_non_event_mean'}
+ }
+ const weather=reviewWeather(r.forecast_date);
+ return {forecast:Math.max(0,Math.round(baseline*trend*weather)),version:FORECAST365_REVIEW.version,asOf,baseline,baselineSource,payEffect,trend,r30,r7,recentWeight,weather,samples30:thirty.length,samples7:seven.length};
+}
+
 function recalcFuture(){
  calculateAutoRules();const productivity=getRule('productivity','shipments_per_person',180)||180,sag=getRule('carrier_share','sagawa',.403),nek=getRule('carrier_share','nekopos',.382);
+ const asOf=rows.filter(r=>r.actual_total!=null&&r.forecast_date<=todayISO()).map(r=>r.forecast_date).sort().at(-1)||todayISO();
  for(const r of rows){
   if(r.actual_total!=null)continue;
+  const revised=reviewForecast(r,rows,asOf);
   const rr=forecastRecalibrationRatio(r);
-  if(rr!=null)r.system_forecast=Math.max(0,Math.round(Number(r.prior_year_actual||0)*rr));
+  if(revised)r.system_forecast=revised.forecast;
+  else if(rr!=null)r.system_forecast=Math.max(0,Math.round(Number(r.prior_year_actual||0)*rr));
   else{const wg=getRule('weekday_growth',r.weekday,1),ef=r.event_type==='通常'?1:getRule('event_multiplier',r.event_type,1);r.system_forecast=Math.max(0,Math.round(Number(r.prior_year_actual||0)*wg*ef))}
   r.final_forecast=Math.max(0,r.system_forecast+Number(r.manual_adjustment||0));r.required_people=Math.ceil(r.final_forecast/productivity);r.forecast_sagawa=Math.round(r.final_forecast*sag);r.forecast_nekopos=Math.round(r.final_forecast*nek);r.forecast_yupack=Math.max(0,r.final_forecast-r.forecast_sagawa-r.forecast_nekopos);r.data_state='forecast';r.updated_at=new Date().toISOString()
  }
  saveLocal()
 }
 async function persistRecalculation(){
+ // Capture old predictions before any recalculation write; fail closed if history cannot be saved.
+ if(storageMode==='cloud'){
+  const history=rows.filter(r=>r.actual_total==null&&r.forecast_date>=FORECAST365_REVIEW.start&&r.forecast_date<=FORECAST365_REVIEW.end).map(r=>({owner_id:user.id,forecast_date:r.forecast_date,captured_on:todayISO(),system_forecast:r.system_forecast,manual_adjustment:r.manual_adjustment||0,final_forecast:r.final_forecast,source:'before_'+FORECAST365_REVIEW.version,details:{row:r,model:FORECAST365_REVIEW}}));
+  if(history.length)await rest('forecast365_history','',{method:'POST',body:JSON.stringify(history)});
+ }
  recalcFuture();if(storageMode!=='cloud')return;
  const now=new Date().toISOString(),future=rows.filter(r=>r.actual_total==null).map(r=>({owner_id:user.id,forecast_date:r.forecast_date,weekday:r.weekday,event_type:r.event_type,prior_year_actual:r.prior_year_actual,data_state:'forecast',system_forecast:r.system_forecast,manual_adjustment:r.manual_adjustment||0,final_forecast:r.final_forecast,required_people:r.required_people,forecast_sagawa:r.forecast_sagawa,forecast_nekopos:r.forecast_nekopos,forecast_yupack:r.forecast_yupack,updated_at:now}));
  for(let i=0;i<future.length;i+=80)await rest('forecast365_daily','on_conflict=owner_id%2Cforecast_date',{method:'POST',headers:{Prefer:'resolution=merge-duplicates'},body:JSON.stringify(future.slice(i,i+80))});
