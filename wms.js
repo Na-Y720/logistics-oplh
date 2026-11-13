@@ -108,11 +108,11 @@ async function loadData(){
  $('loadStatus').textContent='データ読込中…';
  [wmsRows,tdRows,ptRows,staffRows]=await Promise.all([
   restAll('oplh_wms_daily','owner_id=eq.'+user.id+'&work_date=gte.'+start+'&work_date=lte.'+end+'&select=work_date,staff_id,worker_key,worker_code,worker_name,activity_key,activity_label,action_count,quantity&order=work_date.asc'),
-  restAll('oplh_timedesigner_daily','owner_id=eq.'+user.id+'&work_date=gte.'+start+'&work_date=lte.'+end+'&activity_key=in.(picking,stock_move,shipping_check,receiving)&select=work_date,staff_id,worker_key,employee_no,worker_name,source_department,activity_key,activity_label,work_minutes&order=work_date.asc'),
+  restAll('oplh_timedesigner_daily','owner_id=eq.'+user.id+'&work_date=gte.'+start+'&work_date=lte.'+end+'&activity_key=in.(picking,stock_move,shipping_check,receiving,pass_sort,total_picking,hand_pack,auto_pack)&select=work_date,staff_id,worker_key,employee_no,worker_name,source_department,activity_key,activity_label,work_minutes&order=work_date.asc'),
   restAll('logistics_work_time','owner_id=eq.'+user.id+'&work_date=gte.'+start+'&work_date=lte.'+end+'&select=work_date,staff_id,picking_minutes,total_picking_minutes,pass_sort_minutes,sorting_minutes,hand_pack_minutes,auto_pack_minutes,stock_move_minutes&order=work_date.asc'),
   restAll('logistics_staff','owner_id=eq.'+user.id+'&select=id,name,employment_type,is_active,retirement_date')
  ]);
- buildDirectory();renderWorkerOptions();renderAll();
+ buildDirectory();renderWorkerOptions();initRankingMonths();renderAll();
  $('loadStatus').textContent='WMS '+fmt(wmsRows.length)+'集計行 / TimeDesigner '+fmt(tdRows.length)+'集計行 / 物流PT '+fmt(ptRows.length)+'日次行';
 }
 function currentWorkerSet(){
@@ -126,9 +126,9 @@ function currentWorkerSet(){
  return set
 }
 function workerIncluded(key,set){return set.has(key)}
-function activityTimeMap(workerSet){
+function activityTimeMap(workerSet,individual=false){
  const monthly=new Map(),workerMonthly=new Map(),daily=new Map(),granularity=new Map(),selected=$('workerFilter').value,scope=$('scopeFilter').value,group=$('groupFilter').value;
- const detailedMode=selected!=='all'||group!=='all';
+ const detailedMode=individual||selected!=='all'||group!=='all';
  const tdBucketDates=new Map();
  for(const r of tdRows){
   const ym=companyYmFromDate(r.work_date);if(!ym)continue;
@@ -144,7 +144,7 @@ function activityTimeMap(workerSet){
   const cur=granularity.get(gk)||{monthly:false,daily:false};cur[type]=true;granularity.set(gk,cur)
  };
  const put=(date,key,ym,act,min,type='daily')=>{
-  const v=Number(min)||0;if(v<=0)return;
+  const v=Number(min)||0;if(!Number.isFinite(v)||v<=0)return;
   const mk=ym+'|'+act;monthly.set(mk,(monthly.get(mk)||0)+v);
   if(date&&key){
    const gk=ym+'|'+key+'|'+act;workerMonthly.set(gk,(workerMonthly.get(gk)||0)+v);markGranularity(gk,type);
@@ -169,7 +169,8 @@ function activityTimeMap(workerSet){
   const master=staffById.get(r.staff_id),masterCode=staffParts(master?.name||'').code||'';
   if(/^WP90000[1-5]$/.test(masterCode)&&String(r.work_date||'')<DISPATCH_WMS_SWITCH_DATE&&!dispatchTimeEvidence.has(String(r.work_date||'')+'|'+masterCode))continue;
   put(r.work_date,key,ym,'picking',(Number(r.picking_minutes)||0)+(Number(r.total_picking_minutes)||0)+(Number(r.pass_sort_minutes)||0),'daily');
-  put(r.work_date,key,ym,'receiving',r.stock_move_minutes,'daily')
+  put(r.work_date,key,ym,'receiving',r.stock_move_minutes,'daily');
+  if(individual)for(const act of ['pass_sort','total_picking','hand_pack','auto_pack'])put(r.work_date,key,ym,act,r[act+'_minutes'],'daily')
  }
  return{monthly,workerMonthly,daily,granularity}
 }
@@ -241,7 +242,7 @@ function renderAll(){
  const a=aggregate(),t=a.totals,selected=$('workerFilter').value,info=selected==='all'?null:directory.get(selected),pick=a.actTotal.picking||{hours:0,matchedQuantity:0};
  $('kActions').textContent=fmt(t.actions);$('kQuantity').textContent=fmt(t.quantity);$('kHours').textContent=hours(t.hours);$('kRate').textContent=t.hours?fmt(t.matchedActions/t.hours,1)+'件/h':'—';$('kPickQtyRate').textContent=pick.hours?fmt(pick.matchedQuantity/pick.hours,1)+'個/h':'—';$('kWorkers').textContent=fmt(a.workersUsed.size);
  $('selectedWorkerNote').textContent=info?(info.name+(info.code?' / '+info.code:'')+' / '+(info.scope==='logistics'?'物流部':'その他')+(info.employment?' / '+info.employment:'')):'全体';
- renderLegend();renderChart(a.monthly);renderMonthly(a.monthly);renderHumanHours(a.monthly);renderActivities(a.actTotal)
+ renderLegend();renderChart(a.monthly);renderMonthly(a.monthly);renderHumanHours(a.monthly);renderActivities(a.actTotal);renderRanking()
 }
 function renderLegend(){$('chartLegend').innerHTML=ACTIVITY_ORDER.map(k=>'<span class="legend-item"><i class="legend-dot" style="background:'+ACTIVITY_COLORS[k]+'"></i>'+ACTIVITY_LABELS[k]+'</span>').join('')}
 function renderChart(monthly){
@@ -278,4 +279,4 @@ function showApp(){const ok=!!user;$('authView').classList.toggle('hidden',ok);$
 async function login(){const email=$('email').value.trim(),password=$('password').value;$('authError').textContent='';try{const d=await req('/auth/v1/token?grant_type=password',{method:'POST',skipRefresh:true,body:JSON.stringify({email,password})});saveSession(d);user=d.user;showApp();await loadData()}catch(e){$('authError').textContent=e.message}}
 function logout(){saveSession(null);session=null;user=null;showApp()}
 async function restoreLogin(){session=loadSession();if(session?.refresh_token){try{if(!session?.access_token||accessTokenNearExpiry())await refreshSession();user=await req('/auth/v1/user');showApp();await loadData();return}catch(e){console.warn(e)}}saveSession(null);session=null;user=null;showApp()}
-initYears();$('loginBtn').onclick=login;$('logoutBtn').onclick=logout;$('reloadBtn').onclick=loadData;$('fiscalYear').onchange=loadData;$('scopeFilter').onchange=()=>{renderWorkerOptions();$('workerFilter').value='all';renderAll()};$('groupFilter').onchange=()=>{renderWorkerOptions();$('workerFilter').value='all';renderAll()};$('workerFilter').onchange=renderAll;window.addEventListener('resize',()=>{if(user)renderAll()});setInterval(()=>{if(session?.refresh_token&&accessTokenNearExpiry())refreshSession()},5*60*1000);restoreLogin();
+initYears();for(const id of ['rankingActivity','rankingMonth','rankingMetric'])$(id).onchange=renderRanking;$('loginBtn').onclick=login;$('logoutBtn').onclick=logout;$('reloadBtn').onclick=loadData;$('fiscalYear').onchange=loadData;$('scopeFilter').onchange=()=>{renderWorkerOptions();$('workerFilter').value='all';renderAll()};$('groupFilter').onchange=()=>{renderWorkerOptions();$('workerFilter').value='all';renderAll()};$('workerFilter').onchange=renderAll;window.addEventListener('resize',()=>{if(user)renderAll()});setInterval(()=>{if(session?.refresh_token&&accessTokenNearExpiry())refreshSession()},5*60*1000);restoreLogin();
