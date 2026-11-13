@@ -98,23 +98,6 @@
     <div id="loadStatus" class="hint" style="margin-top:10px"></div>
   </section>
 
-  <section class="card" style="margin-top:16px">
-    <h3>作業者ランキング</h3>
-    <div class="analysis-filters">
-      <label>作業カテゴリ<select id="rankingActivity">
-        <option value="picking">ピッキング（統合）</option><option value="pass_sort">パスソート</option><option value="total_picking">トータルピッキング</option><option value="hand_pack">手梱包</option><option value="auto_pack">自動梱包機</option><option value="receiving">入庫・在庫移動（PT人時）</option><option value="stock_move">在庫移動（WMS）</option><option value="shipping_check">出荷検品</option><option value="adjustment_out">調整出庫</option><option value="receiving_check">入荷検品</option>
-      </select></label>
-      <label>ランキング期間<select id="rankingMonth"><option value="all">年度全体</option></select></label>
-      <label>並び順<select id="rankingMetric"><option value="rate">1時間当たり生産数</option><option value="quantity">作業数量</option><option value="hours">作業人時</option></select></label>
-    </div>
-    <p id="rankingNote" class="hint"></p>
-    <div class="tablewrap"><table>
-      <thead><tr><th>作業者</th><th>区分</th><th>数量順位</th><th>作業数量</th><th>人時順位</th><th>作業人時</th><th>生産数順位</th><th>生産数/h</th><th>突合数量</th><th>状態</th></tr></thead>
-      <tbody id="rankingBody"></tbody>
-    </table></div>
-    <p class="hint">年度・所属・区分・作業者に連動。各順位は大きい順（同値は同順位、次順位は人数分繰り下げ）。人時順位は投入時間の順位です。生産数/hは時間と突合できた数量÷人時。人時0・突合なしは生産数順位の対象外です。</p>
-  </section>
-
   <section class="analysis-kpis">
     <div class="analysis-kpi"><span>WMS作業回数</span><b id="kActions">—</b></div>
     <div class="analysis-kpi"><span>WMS実績数</span><b id="kQuantity">—</b></div>
@@ -162,6 +145,16 @@
       </table>
     </div>
     <div class="hint">調整出庫・入荷検品など、TimeDesigner側に直接対応する作業時間がない区分は処理能力を「—」で表示します。</div>
+  </section>
+  <section class="card" style="margin-top:16px">
+    <h3>ピッキング 件/h ランキング</h3>
+    <label>ランキング期間<select id="rankingMonth"><option value="all">年度全体</option></select></label>
+    <p class="hint">「月次 作業別人時」のピッキング 件/hと同じ計算です。対応人時と突合できた作業回数÷ピッキング人時の高い順に表示します。年度・所属・区分・作業者の選択に連動します。</p>
+    <div class="tablewrap"><table>
+      <thead><tr><th>順位</th><th>作業者</th><th>ピッキング 件/h</th></tr></thead>
+      <tbody id="rankingBody"></tbody>
+    </table></div>
+    <p class="hint">人時0・対応する作業履歴なしは順位対象外。同値は同順位です。月度は前月21日～当月20日。</p>
   </section>
 </div>
 </main>
