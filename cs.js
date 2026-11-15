@@ -309,6 +309,29 @@ function shiftPeriod(dir){
 function emptyAgg(){const o={};numericFields.forEach(f=>o[f]=0);o.complaint_within_20min=null;o.work_avg_sum=0;o.work_avg_days=0;return o}
 function addReport(a,r){numericFields.forEach(f=>a[f]+=n(r[f]));const x=Number(r.work_avg_minutes);if(Number.isFinite(x)&&x>0){a.work_avg_sum+=x;a.work_avg_days++}return a}
 function periodWorkAvg(a){if(a.work_case_count>0)return avg(a.work_minutes,a.work_case_count);return a.work_avg_days>0?(a.work_avg_sum/a.work_avg_days).toFixed(1)+'分':'—'}
+async function loadPeriodTotals(ownerId,{start,end}){
+  const filter=`owner_id=eq.${ownerId}&report_date=gte.${start}&report_date=lte.${end}&select=*`;
+  const [reports,summaries]=await Promise.all([rest('cs_daily_reports',filter),rest('cs_daily_summary',filter)]);
+  const rows=reports||[],metrics=calcMetrics(rows.reduce(addReport,emptyAgg()));
+  const orders=(summaries||[]).reduce((sum,row)=>sum+n(row.order_count),0);
+  return {rows,orders,...metrics};
+}
+function renderPeriodKpis(current,previous,label){
+  function render(id,value,prior,delta){
+    const card=$(id),comparison=document.createElement('small');
+    comparison.textContent=`（${label}${prior} ${delta}）`;
+    card.replaceChildren(value,comparison);
+  }
+  for(const [id,key] of [['sOrders','orders'],['sPhone','phone'],['sMail','mail'],['sTotal','total']]){
+    const delta=current[key]-previous[key];
+    render(id,current[key].toLocaleString('ja-JP'),previous[key].toLocaleString('ja-JP'),(delta>0?'+':'')+delta.toLocaleString('ja-JP'));
+  }
+  for(const [id,num,den] of [['sFirstRate','resolved','resolutionBase'],['sResponseRate','total','orders']]){
+    const value=pct(current[num],current[den]),prior=pct(previous[num],previous[den]);
+    const delta=Number.parseFloat(value)-Number.parseFloat(prior);
+    render(id,value,prior,Number.isFinite(delta)?(delta>0?'+':'')+delta.toFixed(1)+'pt':'—');
+  }
+}
 let periodRequest=0;
 async function loadPeriod(){
   const request=++periodRequest,ownerId=user.id;
@@ -316,19 +339,13 @@ async function loadPeriod(){
   if(window.csLoadTrends)window.csLoadTrends(mode);
   $('periodRange').textContent=shortDate(start)+' ～ '+shortDate(end);setMessage('periodMessage');
   try{
-    const [rows,sums]=await Promise.all([
-      rest('cs_daily_reports',`owner_id=eq.${user.id}&report_date=gte.${start}&report_date=lte.${end}&select=*`),
-      rest('cs_daily_summary',`owner_id=eq.${user.id}&report_date=gte.${start}&report_date=lte.${end}&select=*`)
+    const priorRange=getPeriodRange(addDays(start,-1),mode);
+    const [current,previous]=await Promise.all([
+      loadPeriodTotals(ownerId,{start,end}),loadPeriodTotals(ownerId,priorRange)
     ]);
     if(request!==periodRequest||user?.id!==ownerId)return;
-    const totalAgg=emptyAgg();(rows||[]).forEach(r=>addReport(totalAgg,r));
-    const totalM=calcMetrics(totalAgg),orders=(sums||[]).reduce((a,r)=>a+n(r.order_count),0);
-    $('sOrders').textContent=orders.toLocaleString('ja-JP');
-    $('sPhone').textContent=totalM.phone.toLocaleString('ja-JP');
-    $('sMail').textContent=totalM.mail.toLocaleString('ja-JP');
-    $('sTotal').textContent=totalM.total.toLocaleString('ja-JP');
-    $('sFirstRate').textContent=pct(totalM.resolved,totalM.resolutionBase);
-    $('sResponseRate').textContent=pct(totalM.total,orders);
+    const {rows}=current;
+    renderPeriodKpis(current,previous,mode==='week'?'先週':'先月');
 
     const by=new Map(staff.map(s=>[s.id,emptyAgg()]));
     (rows||[]).forEach(r=>{if(!by.has(r.staff_id))by.set(r.staff_id,emptyAgg());addReport(by.get(r.staff_id),r)});

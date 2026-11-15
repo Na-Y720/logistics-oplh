@@ -440,6 +440,8 @@ main:has(#summaryTab:not(.hidden)){max-width:none;padding-inline:12px}
 #summaryTab .summary-table td .muted{font-size:14px}
 #summaryTab .kpi span,#summaryTab .period-controls label{font-size:14px}
 #summaryTab .kpi b{font-size:26px}
+#summaryTab .kpi{min-width:0;overflow-wrap:anywhere}
+#summaryTab .kpi small{display:inline-block;max-width:100%;font-size:13px;font-weight:500;color:var(--muted)}
 #summaryTab .rangebox{min-width:0;overflow-wrap:anywhere}
 #summaryTab .period-controls>*{max-width:100%}
 /* Below tablet landscape width, keep every value readable in labelled rows. */
