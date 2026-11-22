@@ -317,6 +317,24 @@
     </div>
 
     <section class="card">
+      <div class="section-head">
+        <div>
+          <h3>取込履歴・取り消し</h3>
+          <div class="muted">選択中の月度へ取り込んだファイルを確認し、誤った月度への取込を取り消せます。</div>
+          <div class="hint">取り消すと、その月度の対象データを削除して未取込状態へ戻します。確定済み月はロック解除後に操作してください。旧スプレッド移行値は対象外です。</div>
+        </div>
+      </div>
+      <div id="importUndoLockedNotice" class="notice hidden"></div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>種別</th><th>ファイル</th><th>対象期間</th><th>取込日時</th><th>操作</th></tr></thead>
+          <tbody id="importUndoBody"></tbody>
+        </table>
+      </div>
+      <div id="importUndoMessage" class="message"></div>
+    </section>
+
+    <section class="card">
       <div class="section-head"><div><h3>自動振分</h3><div class="muted">CSVのタスク名から以下へ自動振分します。</div></div></div>
       <div class="tablewrap">
         <table>
