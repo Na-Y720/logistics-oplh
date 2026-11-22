@@ -70,7 +70,7 @@ async function loadBundle(ym,{create=false}={}){let monthlyRows=await rest('logi
   rest('logistics_shipping_monthly',`owner_id=eq.${user.id}&month_ym=eq.${ym}&select=*`).catch(()=>[]),
   rest('logistics_work_time',`owner_id=eq.${user.id}&work_date=gte.${start}&work_date=lte.${end}&select=work_date,picking_minutes,total_picking_minutes,pass_sort_minutes,sorting_minutes,hand_pack_minutes,auto_pack_minutes,stock_move_minutes`).catch(()=>[]),
   rest('oplh_timedesigner_daily',`owner_id=eq.${user.id}&work_date=gte.${start}&work_date=lte.${end}&select=activity_key,activity_label,work_minutes,event_count,worker_key,worker_name,employee_no,staff_id,source_department`).catch(()=>[]),
-  rest('logistics_cost_import_batches',`owner_id=eq.${user.id}&month_ym=eq.${ym}&select=source,source_filename,source_rows,imported_at,metadata,period_start,period_end&order=imported_at.desc`).catch(()=>[]),
+  rest('logistics_cost_import_batches',`owner_id=eq.${user.id}&month_ym=eq.${ym}&select=id,source,source_filename,source_rows,imported_at,metadata,period_start,period_end&order=imported_at.desc`).catch(()=>[]),
   rest('logistics_order_daily',`owner_id=eq.${user.id}&work_date=gte.${start}&work_date=lte.${end}&select=work_date,order_count,label_955_achieved,note&order=work_date.asc`).catch(()=>[])
  ]);
  return{ym,monthly,shipping:shipping||[],pt:pt||[],td:td||[],imports:imports||[],orderDaily:orderDaily||[],start,end}
@@ -572,6 +572,81 @@ async function importAutoPacking(){
  }catch(e){console.error(e);$('autoPackImportMessage').className='message bad';$('autoPackImportMessage').textContent=e.message}
  finally{btn.disabled=false}
 }
+
+const IMPORT_UNDO_LABELS={
+ timedesigner:'TimeDesigner',
+ wms:'WMS 日次作業履歴',
+ wms_monthly_supplement:'WMS 月次補完',
+ auto_packing:'自動梱包機',
+ sagawa:'佐川急便',
+ yamato:'ヤマト運輸',
+ japanpost:'日本郵便'
+};
+const IMPORT_UNDO_SOURCES=new Set(Object.keys(IMPORT_UNDO_LABELS));
+function importUndoDate(v){
+ if(!v)return'—';
+ const d=new Date(v);return Number.isNaN(d.getTime())?String(v):d.toLocaleString('ja-JP',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})
+}
+function renderImportUndo(){
+ const locked=currentBundle?.monthly?.status==='confirmed',rows=(currentBundle?.imports||[]).filter(x=>IMPORT_UNDO_SOURCES.has(x.source));
+ $('importUndoLockedNotice').classList.toggle('hidden',!locked);
+ $('importUndoLockedNotice').textContent=locked?'確定済み月は取り消せません。月度ロックを解除してから操作してください。':'';
+ $('importUndoBody').innerHTML=rows.length?rows.map(x=>`
+  <tr>
+   <td><b>${esc(IMPORT_UNDO_LABELS[x.source]||x.source)}</b></td>
+   <td>${esc(x.source_filename||'—')}</td>
+   <td>${esc(x.period_start||'—')} ～ ${esc(x.period_end||'—')}</td>
+   <td>${esc(importUndoDate(x.imported_at))}</td>
+   <td><button type="button" class="ghost" data-undo-source="${esc(x.source)}" ${locked?'disabled':''}>取込を取り消す</button></td>
+  </tr>`).join(''):'<tr><td colspan="5">この月度に取り消せるファイル取込はありません。</td></tr>';
+}
+async function deleteImportBatchHistory(item){
+ if(item?.id){
+  await rest('logistics_cost_import_batches',`owner_id=eq.${user.id}&id=eq.${item.id}`,{method:'DELETE',headers:{Prefer:'return=minimal'}});
+ }else{
+  await rest('logistics_cost_import_batches',`owner_id=eq.${user.id}&month_ym=eq.${currentBundle.ym}&source=eq.${item.source}`,{method:'DELETE',headers:{Prefer:'return=minimal'}});
+ }
+}
+async function matchingOplhBatchIds(source,item){
+ const rows=await rest('oplh_import_batches',`owner_id=eq.${user.id}&source=eq.${source}&period_start=eq.${item.period_start}&period_end=eq.${item.period_end}&select=id`).catch(()=>[]);
+ return(rows||[]).map(x=>x.id).filter(Boolean)
+}
+async function undoImportedSource(source){
+ const item=(currentBundle?.imports||[]).find(x=>x.source===source);
+ if(!item)return;
+ if(currentBundle?.monthly?.status==='confirmed'){alert('確定済み月は取り消せません。ロック解除後に操作してください。');return}
+ const label=IMPORT_UNDO_LABELS[source]||source,file=item.source_filename||'—';
+ const extra=source==='wms'?'\n※WMS月次補完は自動復元されません。必要な場合は補完ファイルを再取込してください。':'';
+ if(!confirm(`${currentBundle.ym}月度の「${label}」取込を取り消します。\nファイル：${file}\n\nこの月度の対象データを削除して未取込状態に戻します。元に戻せません。${extra}\n\n実行しますか？`))return;
+ $('importUndoMessage').className='message';$('importUndoMessage').textContent=label+' の取込を取り消しています…';
+ try{
+  if(source==='timedesigner'){
+   const ids=await matchingOplhBatchIds('timedesigner',item);
+   if(!ids.length)throw new Error('このTimeDesigner取込は旧形式のため、安全に特定できません。再取込で置き換えるか、個別対応が必要です。');
+   await rest('oplh_timedesigner_daily',`owner_id=eq.${user.id}&batch_id=in.(${ids.join(',')})`,{method:'DELETE',headers:{Prefer:'return=minimal'}});
+   await rest('oplh_import_batches',`owner_id=eq.${user.id}&id=in.(${ids.join(',')})`,{method:'DELETE',headers:{Prefer:'return=minimal'}});
+  }else if(source==='wms'){
+   const ids=await matchingOplhBatchIds('wms',item);
+   if(!ids.length)throw new Error('このWMS取込は旧形式のため、安全に特定できません。再取込で置き換えるか、個別対応が必要です。');
+   await rest('oplh_wms_daily',`owner_id=eq.${user.id}&batch_id=in.(${ids.join(',')})`,{method:'DELETE',headers:{Prefer:'return=minimal'}});
+   await rest('oplh_import_batches',`owner_id=eq.${user.id}&id=in.(${ids.join(',')})`,{method:'DELETE',headers:{Prefer:'return=minimal'}});
+   await rest('inventory_wms_sources',`owner_id=eq.${user.id}&month_ym=eq.${currentBundle.ym}`,{method:'DELETE',headers:{Prefer:'return=minimal'}}).catch(()=>{});
+  }else if(source==='wms_monthly_supplement'){
+   const rows=await restAll('oplh_wms_daily',`owner_id=eq.${user.id}&work_date=gte.${item.period_start}&work_date=lte.${item.period_end}&select=id,worker_key`);
+   const ids=(rows||[]).filter(x=>String(x.worker_key||'').startsWith('BI_SUPPLEMENT:')).map(x=>x.id);
+   if(ids.length)await deleteRowsByIds('oplh_wms_daily',ids);
+  }else if(source==='auto_packing'){
+   await rest('logistics_cost_monthly',`owner_id=eq.${user.id}&month_ym=eq.${currentBundle.ym}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({auto1_lap_seconds:null,auto1_count:null,auto2_lap_seconds:null,auto2_count:null,updated_at:new Date().toISOString()})});
+  }else if(['sagawa','yamato','japanpost'].includes(source)){
+   await rest('logistics_shipping_monthly',`owner_id=eq.${user.id}&month_ym=eq.${currentBundle.ym}&carrier=eq.${source}`,{method:'DELETE',headers:{Prefer:'return=minimal'}});
+  }else throw new Error('この取込種別は取り消し対象外です。');
+  await deleteImportBatchHistory(item);
+  $('importUndoMessage').className='message ok';$('importUndoMessage').textContent=label+' の取込を取り消しました。';
+  await loadAll()
+ }catch(e){
+  console.error(e);$('importUndoMessage').className='message bad';$('importUndoMessage').textContent='取消に失敗しました: '+e.message
+ }
+}
 function renderTDImport(){
  const m=currentBundle?.monthly||{},locked=m.status==='confirmed';
  $('tdImportBtn').disabled=locked;$('tdImportFile').disabled=locked;$('tdLockedNotice').classList.toggle('hidden',!locked);
@@ -627,7 +702,7 @@ async function loadAll(){const ym=$('monthPick').value||companyMonthToday();$('m
  clearTimeout(orderAutoSaveTimer);orderDirty=false;renderAll()
  }catch(e){console.error(e);alert('読み込みに失敗しました: '+e.message)}
 }
-function renderAll(){renderStatus();renderDashboard();renderMonthly();renderShipping();renderTDImport();renderWork();renderComparison()}
+function renderAll(){renderStatus();renderDashboard();renderMonthly();renderShipping();renderTDImport();renderImportUndo();renderWork();renderComparison()}
 function renderStatus(){const m=currentBundle.monthly||{},locked=m.status==='confirmed';$('statusBadge').textContent=locked?'確定済':'運用中';$('statusBadge').className='badge '+(locked?'confirmed':'open');$('confirmBtn').disabled=locked;$('unlockBtn').classList.toggle('hidden',!locked)}
 function renderDashboard(){const c=metrics(currentBundle),p=metrics(prevBundle),y=metrics(yearBundle),m=currentBundle.monthly||{},pm=prevBundle.monthly||{},ym=yearBundle.monthly||{};
  const vals=[
@@ -995,6 +1070,7 @@ function activateTab(name){
 async function initApp(){$('monthPick').value=companyMonthToday();await loadAll();activateTab(new URLSearchParams(location.search).get('tab')||'dashboard')}
 
 document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>activateTab(b.dataset.tab));
+$('importUndoBody').onclick=e=>{const b=e.target.closest('[data-undo-source]');if(b&&!b.disabled)undoImportedSource(b.dataset.undoSource)};
 $('loginBtn').onclick=login;$('logoutBtn').onclick=logout;$('reloadBtn').onclick=async()=>{await flushOrderAutoSave();await loadAll()};$('monthPick').onchange=async()=>{await flushOrderAutoSave();await loadAll()};$('prevMonthBtn').onclick=async()=>{await flushOrderAutoSave();$('monthPick').value=shiftYm($('monthPick').value,-1);await loadAll()};$('nextMonthBtn').onclick=async()=>{await flushOrderAutoSave();$('monthPick').value=shiftYm($('monthPick').value,1);await loadAll()};$('saveMonthlyBtn').onclick=saveMonthly;$('unlockBtn').onclick=unlockMonth;$('confirmBtn').onclick=confirmMonth;$('tdImportBtn').onclick=importTimeDesigner;$('wmsImportBtn').onclick=importWms;$('wmsSupplementImportBtn').onclick=importWmsSupplement;$('autoPackImportBtn').onclick=importAutoPacking;$('sagawaImportBtn').onclick=importSagawa;$('yamatoImportBtn').onclick=importYamato;$('japanPostImportBtn').onclick=importJapanPost;
 async function restoreLogin(){session=loadSession();if(session?.refresh_token){try{if(!session?.access_token||accessTokenNearExpiry())await refreshSession();user=await req('/auth/v1/user');showApp();await initApp();return}catch(e){console.warn('session restore failed',e)}}saveSession(null);session=null;user=null;showApp()}
 setInterval(()=>{if(session?.refresh_token&&accessTokenNearExpiry())refreshSession()},5*60*1000);
