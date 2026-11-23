@@ -250,7 +250,7 @@ async function streamShiftJisLines(file,onLine,onProgress){
 async function parseWmsFile(file,onProgress){
  const[periodStart,periodEnd]=monthRange(currentBundle.ym),staff=await tdStaffMaps(),agg=new Map(),summary={},unmapped=new Map();
  let head=null,ix=null,sourceRows=0,periodRows=0,recognizedRows=0,outsideRows=0,unparsedRows=0;
- const inventoryRecords=[];
+ const inventoryRecords=[],timeeEvents=[];
  await streamShiftJisLines(file,line=>{
   if(!head){
    head=csvLine(line).map(normalizeHeader);const find=n=>head.indexOf(n);
@@ -266,6 +266,7 @@ async function parseWmsFile(file,onProgress){
   if(rawActivity==='調整入庫'||rawActivity==='調整出庫')inventoryRecords.push({row:sourceRows+1,work_date:date,activity:rawActivity,values:r});
   if(!map){if(rawActivity)unmapped.set(rawActivity,(unmapped.get(rawActivity)||0)+1);return}
   const workerCode=String(r[ix.code]||'').normalize('NFKC').trim().replace(/\.0$/,'');
+  if(map.key==='picking'&&['800001','800002','800003'].includes(workerCode)){const at=head.indexOf('登録日時');if(at<0)throw Error('タイミー時間抽出に必要な登録日時列がありません');timeeEvents.push({work_date:date,worker_code:workerCode,timestamp:r[at]})}
   const rawName=String(r[ix.name]||'').normalize('NFKC').trim(),workerName=rawName||'不明',normName=normalizeWorkerName(workerName),workerKey=workerCode||normName||workerName;
   if(!workerKey){unparsedRows++;return}
   const qty=Number(String(r[ix.qty]||'0').replace(/,/g,'')),staffId=(workerCode&&staff.byCode.get(workerCode))||staff.byName.get(normName)||null;
@@ -276,7 +277,7 @@ async function parseWmsFile(file,onProgress){
  const rows=[...agg.values()].map(x=>({...x,quantity:Number((Number(x.quantity)||0).toFixed(3))}));
  for(const r of rows){const s=summary[r.activity_key]||(summary[r.activity_key]={label:r.activity_label,actions:0,quantity:0,aggregate_rows:0});s.aggregate_rows++}
  if(!rows.length)throw new Error(periodStart+'～'+periodEnd+' に取り込めるWMS作業履歴がありません。');
- return{fileName:file.name,fileSize:file.size,periodStart,periodEnd,sourceRows,periodRows,recognizedRows,outsideRows,unparsedRows,rows,summary,inventoryHeaders:head,inventoryRecords,unmapped:[...unmapped.entries()].map(([activity,count])=>({activity,count})).sort((a,b)=>b.count-a.count)}
+ return{fileName:file.name,fileSize:file.size,periodStart,periodEnd,sourceRows,periodRows,recognizedRows,outsideRows,unparsedRows,rows,summary,timeeHistory:TimeeHistory.build(timeeEvents).map(r=>({...r,source_filename:file.name})),inventoryHeaders:head,inventoryRecords,unmapped:[...unmapped.entries()].map(([activity,count])=>({activity,count})).sort((a,b)=>b.count-a.count)}
 }
 function normalizeAutoLine(v){const s=String(v||'').normalize('NFKC').trim();if(/Auto0?1/i.test(s))return'Auto01';if(/Auto0?2/i.test(s))return'Auto02';if(/Hand0?1/i.test(s))return'Hand01';return null}
 function parseAutoDateTime(v){
@@ -533,6 +534,7 @@ async function importWms(){
   $('wmsImportMessage').textContent='DBへ保存しています…';
   const batchRows=await rest('oplh_import_batches','',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify({owner_id:user.id,source:'wms',source_filename:parsed.fileName,period_start:parsed.periodStart,period_end:parsed.periodEnd,source_rows:parsed.recognizedRows,aggregate_rows:parsed.rows.length})});
   const batchId=batchRows?.[0]?.id;if(!batchId)throw new Error('WMS取込バッチを作成できませんでした。');
+  await rest('rpc/replace_timee_wms_history','',{method:'POST',body:JSON.stringify({p_start:parsed.periodStart,p_end:parsed.periodEnd,p_rows:parsed.timeeHistory})});
   const now=new Date().toISOString(),rows=parsed.rows.map(r=>({...r,batch_id:batchId,updated_at:now}));
   for(let i=0;i<rows.length;i+=400){
    $('wmsImportMessage').textContent='DBへ保存しています… '+Math.min(i+400,rows.length).toLocaleString()+' / '+rows.length.toLocaleString()+'集計行';
@@ -631,6 +633,7 @@ async function undoImportedSource(source){
    await rest('oplh_wms_daily',`owner_id=eq.${user.id}&batch_id=in.(${ids.join(',')})`,{method:'DELETE',headers:{Prefer:'return=minimal'}});
    await rest('oplh_import_batches',`owner_id=eq.${user.id}&id=in.(${ids.join(',')})`,{method:'DELETE',headers:{Prefer:'return=minimal'}});
    await rest('inventory_wms_sources',`owner_id=eq.${user.id}&month_ym=eq.${currentBundle.ym}`,{method:'DELETE',headers:{Prefer:'return=minimal'}}).catch(()=>{});
+   await rest('logistics_timee_wms_history',`owner_id=eq.${user.id}&work_date=gte.${item.period_start}&work_date=lte.${item.period_end}`,{method:'PATCH',body:JSON.stringify({is_active:false})});
   }else if(source==='wms_monthly_supplement'){
    const rows=await restAll('oplh_wms_daily',`owner_id=eq.${user.id}&work_date=gte.${item.period_start}&work_date=lte.${item.period_end}&select=id,worker_key`);
    const ids=(rows||[]).filter(x=>String(x.worker_key||'').startsWith('BI_SUPPLEMENT:')).map(x=>x.id);
@@ -1077,3 +1080,4 @@ setInterval(()=>{if(session?.refresh_token&&accessTokenNearExpiry())refreshSessi
 window.addEventListener('online',()=>{if(session?.refresh_token)refreshSession()});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&session?.refresh_token&&accessTokenNearExpiry())refreshSession()});
 restoreLogin();
+

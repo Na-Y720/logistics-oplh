@@ -2,7 +2,7 @@ const SB_URL='https://qfcgxefymdodjrprhfvu.supabase.co';
 const SB_KEY='sb_publishable_KzELBvq1CkhnHL_CXN99GA_5-an2G6m';
 const SESSION_KEY='logistics_monthly_oplh_session_v1';
 const $=id=>document.getElementById(id);
-let session=null,user=null,refreshPromise=null,wmsRows=[],tdRows=[],ptRows=[],timeeRows=[],staffRows=[],directory=new Map(),staffToCode=new Map(),nameToCode=new Map(),staffById=new Map(),staffByName=new Map(),staffByCode=new Map(),dispatchTimeEvidence=new Set();
+let session=null,user=null,refreshPromise=null,wmsRows=[],tdRows=[],ptRows=[],timeeRows=[],timeeHistoryRows=[],staffRows=[],directory=new Map(),staffToCode=new Map(),nameToCode=new Map(),staffById=new Map(),staffByName=new Map(),staffByCode=new Map(),dispatchTimeEvidence=new Set();
 const ACTIVITY_ORDER=['picking','stock_move','shipping_check','adjustment_out','receiving','receiving_check'];
 const ACTIVITY_LABELS={picking:'ピッキング',stock_move:'在庫移動',shipping_check:'出荷検品',adjustment_out:'調整出庫',receiving:'調整入庫・入庫',receiving_check:'入荷検品'};
 const ACTIVITY_COLORS={picking:'#2589f5',stock_move:'#2637a8',shipping_check:'#ed7d31',adjustment_out:'#7030a0',receiving:'#db3fa7',receiving_check:'#6b7280'};
@@ -107,13 +107,15 @@ function canonicalForStaff(staffId){
 async function loadData(){
  const fy=Number($('fiscalYear').value),months=fyMonths(fy),[start]=monthRange(months[0]),[,end]=monthRange(months[11]);
  $('loadStatus').textContent='データ読込中…';
- [wmsRows,tdRows,ptRows,staffRows,timeeRows]=await Promise.all([
+ [wmsRows,tdRows,ptRows,staffRows,timeeRows,timeeHistoryRows]=await Promise.all([
   restAll('oplh_wms_daily','owner_id=eq.'+user.id+'&work_date=gte.'+start+'&work_date=lte.'+end+'&select=work_date,staff_id,worker_key,worker_code,worker_name,activity_key,activity_label,action_count,quantity&order=work_date.asc'),
   restAll('oplh_timedesigner_daily','owner_id=eq.'+user.id+'&work_date=gte.'+start+'&work_date=lte.'+end+'&activity_key=in.(picking,stock_move,shipping_check,receiving,pass_sort,total_picking,hand_pack,auto_pack)&select=work_date,staff_id,worker_key,employee_no,worker_name,source_department,activity_key,activity_label,work_minutes&order=work_date.asc'),
   restAll('logistics_work_time','owner_id=eq.'+user.id+'&work_date=gte.'+start+'&work_date=lte.'+end+'&select=work_date,staff_id,picking_minutes,total_picking_minutes,pass_sort_minutes,sorting_minutes,hand_pack_minutes,auto_pack_minutes,stock_move_minutes&order=work_date.asc'),
   restAll('logistics_staff','owner_id=eq.'+user.id+'&select=id,name,employment_type,is_active,retirement_date'),
-  restAll('logistics_timee_work_time','owner_id=eq.'+user.id+'&work_date=gte.'+start+'&work_date=lte.'+end+'&select=work_date,worker_code,picking_minutes,paid_minutes&order=work_date.asc,worker_code.asc')
+  restAll('logistics_timee_work_time','owner_id=eq.'+user.id+'&work_date=gte.'+start+'&work_date=lte.'+end+'&select=work_date,worker_code,picking_minutes,paid_minutes&order=work_date.asc,worker_code.asc'),
+  restAll('logistics_timee_wms_history','owner_id=eq.'+user.id+'&work_date=gte.'+start+'&work_date=lte.'+end+'&is_active=eq.true&select=work_date,worker_code,picking_minutes,paid_minutes&order=work_date.asc,worker_code.asc')
  ]);
+ const manualKeys=new Set(timeeRows.map(r=>r.work_date+'|'+r.worker_code));timeeRows.push(...timeeHistoryRows.filter(r=>!manualKeys.has(r.work_date+'|'+r.worker_code)));
  buildDirectory();renderWorkerOptions();initRankingMonths();renderAll();
  $('loadStatus').textContent='WMS '+fmt(wmsRows.length)+'集計行 / TimeDesigner '+fmt(tdRows.length)+'集計行 / 物流PT '+fmt(ptRows.length)+'日次行 / タイミー '+fmt(timeeRows.length)+'日次行';
 }

@@ -110,7 +110,7 @@
  </form>
  <p id="timeeMessage" role="status"></p>
  <p class="muted">件数はWMSのピッキング作業回数。梱包時間＝実働時間−ピッキング時間です。WMS未取込でも時間を先に保存できます。</p>
- <h3>月内の入力一覧</h3><p class="muted">保存するたびにこの月の一覧へ追加されます。過去の月も切り替えて確認・編集できます。「編集」から作業日も修正できます。</p><div class="tablewrap"><table><thead><tr><th>作業日</th><th>氏名</th><th>WMS番号</th><th>時間帯①</th><th>時間帯②</th><th>ピッキング</th><th>実働</th><th>梱包</th><th>件数</th><th>件/時</th><th>操作</th></tr></thead><tbody id="timeeBody"></tbody></table></div>
+ <h3>WMS履歴から抽出したタイミー</h3><p>800001〜800003のピッキング履歴を登録日時順に並べ、30分以上空いたら次の時間帯に分けます。各時間帯の最初〜最後を推定時間として合計します。名前は後から入力してください。実働が未入力の場合、梱包時間は未確定です。</p><p id="timeeHistorySummary"></p><div class="tablewrap"><table><thead><tr><th>作業日</th><th>WMS番号</th><th>氏名</th><th>推定時間帯</th><th>推定ピッキング</th><th>件数</th><th>実働</th><th>梱包</th><th>状態</th><th>操作</th></tr></thead><tbody id="timeeHistoryBody"></tbody></table></div><h3>月内の手入力一覧</h3><p class="muted">保存するたびにこの月の一覧へ追加されます。過去の月も切り替えて確認・編集できます。「編集」から作業日も修正できます。</p><div class="tablewrap"><table><thead><tr><th>作業日</th><th>氏名</th><th>WMS番号</th><th>時間帯①</th><th>時間帯②</th><th>ピッキング</th><th>実働</th><th>梱包</th><th>件数</th><th>件/時</th><th>操作</th></tr></thead><tbody id="timeeBody"></tbody></table></div>
 </section>
 <style>.timee-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin:18px 0}.timee-grid label{display:flex;flex-direction:column;gap:6px}.timee-grid input{width:100%;box-sizing:border-box;min-height:40px}.timee-duration{display:flex;align-items:center;gap:5px}.timee-duration input{width:65px}#timeePanel{margin:20px 0}#timeePanel td,#timeePanel th{padding:12px;white-space:nowrap}#timeePreview{font-weight:600}</style></section>
   <section id="monthlyTab" class="hidden">
@@ -176,6 +176,7 @@
 
 <script src="worktime.js"></script>
 <script src="timee-model.js"></script>
+<script src="timee-history-ui.js"></script>
 <script src="timee.js"></script>
 </body>
 </html>
