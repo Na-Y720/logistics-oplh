@@ -702,7 +702,7 @@ function renderTDImport(){
 async function loadAll(){const ym=$('monthPick').value||companyMonthToday();$('monthPick').value=ym;const[start,end]=monthRange(ym);$('monthRange').textContent=`${start} ～ ${end}（21日～翌20日）`;try{
  const [cb,pb,yb,fy]=await Promise.all([loadBundle(ym,{create:true}),loadBundle(previousYm(ym)),loadBundle(priorYearYm(ym)),loadFiscalComparison()]);
  currentBundle=cb;prevBundle=pb;yearBundle=yb;fiscalCurrent=fy.current;fiscalPrior=fy.prior;fiscalMeta=fy.meta;fiscalMonthlyBundles=fy.monthly||[];
- clearTimeout(orderAutoSaveTimer);orderDirty=false;renderAll()
+ clearTimeout(orderAutoSaveTimer);orderDirty=false;renderAll();await loadSagawaSizeHistory()
  }catch(e){console.error(e);alert('読み込みに失敗しました: '+e.message)}
 }
 function renderAll(){renderStatus();renderDashboard();renderMonthly();renderShipping();renderTDImport();renderImportUndo();renderWork();renderComparison()}
@@ -745,23 +745,11 @@ async function saveMonthly(){const m=currentBundle.monthly;if(m.status==='confir
  try{await rest('logistics_cost_monthly','on_conflict=owner_id%2Cmonth_ym',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(body)});$('monthlyMessage').className='message ok';$('monthlyMessage').textContent='保存しました。';await loadAll()}catch(e){$('monthlyMessage').className='message bad';$('monthlyMessage').textContent=e.message}}
 
 async function parseSagawaFile(file){
- const text=await readShiftJisCsv(file),lines=text.replace(/\r/g,'').split('\n').filter(x=>x.trim());
- if(lines.length<2)throw new Error('佐川CSVにデータがありません。');
- const head=csvLine(lines[0]).map(normalizeHeader);
- const findContains=word=>head.findIndex(h=>h.includes(word));
- const ix={cost:findContains('運賃請求金額'),dest:findContains('着店名称'),from:findContains('集荷店名称')};
- if(ix.cost<0)throw new Error('「運賃請求金額」列が見つかりません。');
- let sourceRows=0,invoiceCount=0,excludedCount=0,netCost=0;
- for(let i=1;i<lines.length;i++){
-  const r=csvLine(lines[i]);sourceRows++;
-  const dest=ix.dest>=0?String(r[ix.dest]||'').trim():'',from=ix.from>=0?String(r[ix.from]||'').trim():'';
-  if(dest.includes('丸岡')&&!from.includes('丸岡')){excludedCount++;continue}
-  const cost=Number(String(r[ix.cost]||'').replace(/[¥￥,\s]/g,''));
-  if(!Number.isFinite(cost))continue;
-  invoiceCount++;netCost+=cost;
- }
- if(!invoiceCount)throw new Error('集計対象の佐川明細がありません。');
- return{fileName:file.name,sourceRows,invoiceCount,excludedCount,netCost:Number(netCost.toFixed(3)),grossCost:Number((netCost*1.1).toFixed(3))};
+ const acc=SagawaSizes.parse(await readShiftJisCsv(file),file.name);
+ if(acc.months.size!==1)throw new Error('通常取込は1か月分の明細を選択してください。');
+ const x=[...acc.months.values()][0];
+ if(!x.shipping.totalInvoices)throw new Error('集計対象の佐川明細がありません。');
+ return{fileName:file.name,month:x.month,sizeBreakdown:x,sourceRows:x.all.totalInvoices,invoiceCount:x.shipping.totalInvoices,excludedCount:x.excludedInvoices,netCost:Number(x.netCost.toFixed(3)),grossCost:Number((x.netCost*1.1).toFixed(3))};
 }
 async function importSagawa(){
  const m=currentBundle?.monthly||{};if(m.status==='confirmed'){alert('確定済み月には取り込めません。ロック解除後に再度お試しください。');return}
@@ -769,8 +757,9 @@ async function importSagawa(){
  const btn=$('sagawaImportBtn');btn.disabled=true;$('sagawaImportMessage').className='message';$('sagawaImportMessage').textContent='佐川CSVを集計しています…';
  try{
   const x=await parseSagawaFile(file),old=currentBundle.shipping.find(r=>r.carrier==='sagawa');
+  if(x.month!==currentBundle.ym)throw new Error(`請求締め月は${x.month}です。対象月度を切り替えてください。`);
   const adoptedCount=(old?.metadata?.adopted_count_source==='wms'||old?.metadata?.adopted_count_source==='manual')?Number(old.adopted_count):x.invoiceCount;
-  const metadata={source_rows:x.sourceRows,excluded_maruoka:x.excludedCount,adopted_count_source:(adoptedCount===x.invoiceCount?'invoice_rows':old.metadata.adopted_count_source),rule:'着店=丸岡 かつ 集荷店≠丸岡を除外'};
+  const metadata={...old?.metadata,size_breakdown:x.sizeBreakdown,source_rows:x.sourceRows,excluded_maruoka:x.excludedCount,adopted_count_source:(adoptedCount===x.invoiceCount?'invoice_rows':old.metadata.adopted_count_source),rule:'着店=丸岡 かつ 集荷店≠丸岡を除外'};
   const body={owner_id:user.id,month_ym:currentBundle.ym,carrier:'sagawa',adopted_count:adoptedCount,invoice_count:x.invoiceCount,gross_cost:x.grossCost,net_cost:x.netCost,source_kind:'invoice_file',source_filename:x.fileName,imported_at:new Date().toISOString(),metadata,updated_at:new Date().toISOString()};
   await rest('logistics_shipping_monthly','on_conflict=owner_id%2Cmonth_ym%2Ccarrier',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(body)});
   await replaceCostImportBatch('sagawa',{owner_id:user.id,month_ym:currentBundle.ym,source:'sagawa',source_filename:x.fileName,source_rows:x.sourceRows,period_start:currentBundle.start,period_end:currentBundle.end,metadata:{...metadata,replace_rule:'同月度の佐川データを置換。同一ファイル再取込は二重計上しない'}});
