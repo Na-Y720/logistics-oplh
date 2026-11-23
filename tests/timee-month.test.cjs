@@ -16,8 +16,9 @@ assert.ok(get('timeeNames').innerHTML.includes('value="A"'));assert.ok(get('time
 get('timeeName').value='C';get('timeeCode').value='800001';get('timeeStart1').value='09:00';get('timeeEnd1').value='10:00';get('timeeHours').value='4';get('timeeMinutes').value='0';get('timeeNote').value='';
 await get('timeeForm').onsubmit({preventDefault(){}});assert.equal(writes.length,1);assert.equal(writes[0].work_date,'2026-11-23');
 get('timeeBody').editButtons[0].onclick();assert.equal(get('timeeDate').readOnly,false);
-get('timeeDate').value='2026-11-22';await get('timeeForm').onsubmit({preventDefault(){}});assert.equal(writes.length,1);assert.ok(get('timeeMessage').textContent.includes('重複'));
-get('timeeDate').value='2026-11-24';await get('timeeForm').onsubmit({preventDefault(){}});assert.equal(writes.length,2);assert.equal(writes[1].work_date,'2026-11-24');assert.ok(queries.some(q=>q.includes('id=eq.a')));
+assert.equal(get('timeeCode').value,'800001');assert.equal(get('timeeCode').readOnly,true);
+get('timeeDate').value='2026-11-22';get('timeeDate').onchange();assert.equal(get('timeeCode').value,'800002');await get('timeeForm').onsubmit({preventDefault(){}});assert.equal(writes.length,2);assert.equal(writes[1].worker_code,'800002');assert.ok(queries.some(q=>q.includes('id=eq.a')));
+get('timeeDate').value='2026-11-24';get('timeeDate').onchange();assert.equal(get('timeeCode').value,'800001');
 get('timeeMonth').value='2026-02';get('timeeMonthMode').value='calendar';await get('timeeMonthMode').onchange();await new Promise(r=>setImmediate(r));assert.ok(queries.some(q=>q.includes('work_date=gte.2026-02-01&work_date=lte.2026-02-28')));
 const html=fs.readFileSync(__dirname+'/../worktime.html','utf8');assert.ok(html.indexOf('id="timeePanel"')>html.indexOf('id="timeeTab"'));assert.equal((html.match(/id="timeeReload"/g)||[]).length,1);
 console.log('PASS: dedicated tab, monthly date bounds, separate daily WMS matching, monthly totals, same code on another day, calendar February');

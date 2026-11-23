@@ -12,5 +12,6 @@
   if(!Number.isInteger(r.paid_minutes)||r.paid_minutes<pick||r.paid_minutes>1440)throw Error('実働時間はピッキング時間以上、24時間以内で入力してください。');
   return {picking:pick,packing:r.paid_minutes-pick};
  }
- const api={minutes,validCode,calculate};if(typeof module!=='undefined')module.exports=api;else root.TimeeModel=api;
+ const nextCode=(rows,date)=>{const n=Math.max(0,...rows.filter(r=>r.work_date===date&&/^800\d{3}$/.test(r.worker_code)).map(r=>Number(r.worker_code.slice(3))))+1;return n<=999?'800'+String(n).padStart(3,'0'):''};
+ const api={minutes,validCode,calculate,nextCode};if(typeof module!=='undefined')module.exports=api;else root.TimeeModel=api;
 })(globalThis);

@@ -94,12 +94,12 @@
   <section id="timeeTab" class="hidden"><section class="card" id="timeePanel">
  <h2>タイミー 入力・月別管理</h2>
 <div class="section-head"><label>表示月度<input id="timeeMonth" type="month"></label><label>集計期間<select id="timeeMonthMode"><option value="closing">21日〜翌20日</option><option value="calendar">1日〜月末</option></select></label><button id="timeeReload" type="button">再読み込み</button></div><p id="timeeRange" class="muted"></p><p id="timeeSummary" aria-live="polite"></p>
- <p class="muted">WMS番号は当日使用した番号です。同じ番号でも日付ごとに氏名を記録します。ピッキングの開始・終了を最大2回入力できます。</p>
+ <p class="muted">WMS番号は作業日ごとに保存順で800001、800002…と自動採番します。日付を変更して保存すると、変更先の日付の続き番号になります。ピッキングの開始・終了を最大2回入力できます。</p>
  <div class="section-head"><label>作業日<input type="date" id="timeeDate" required></label></div>
  <form id="timeeForm">
  <div class="timee-grid">
  <label>氏名<input id="timeeName" list="timeeNames" maxlength="100" required autocomplete="off"><datalist id="timeeNames"></datalist><small>入力済みの名前から選択／新しい名前も入力できます</small></label>
- <label>WMS番号<input id="timeeCode" list="timeeCodes" placeholder="800001" required autocomplete="off"><datalist id="timeeCodes"></datalist></label>
+ <label>WMS番号（自動）<input id="timeeCode" placeholder="800001" required readonly><small>表示は予定番号です。保存時に確定します。</small><datalist id="timeeCodes"></datalist></label>
  <label>開始①<input id="timeeStart1" type="time" required></label><label>終了①<input id="timeeEnd1" type="time" required></label>
  <label>開始②（任意）<input id="timeeStart2" type="time"></label><label>終了②（任意）<input id="timeeEnd2" type="time"></label>
  <label>実働時間<span class="timee-duration"><input id="timeeHours" type="number" min="0" max="24" step="1" value="4" required aria-label="実働時間の時">時 <input id="timeeMinutes" type="number" min="0" max="59" step="1" value="0" required aria-label="実働時間の分">分</span></label>
