@@ -2,7 +2,7 @@ const SB_URL='https://qfcgxefymdodjrprhfvu.supabase.co';
 const SB_KEY='sb_publishable_KzELBvq1CkhnHL_CXN99GA_5-an2G6m';
 const SESSION_KEY='logistics_monthly_oplh_session_v1';
 const $=id=>document.getElementById(id);
-let session=null,user=null,refreshPromise=null,wmsRows=[],tdRows=[],ptRows=[],staffRows=[],directory=new Map(),staffToCode=new Map(),nameToCode=new Map(),staffById=new Map(),staffByName=new Map(),staffByCode=new Map(),dispatchTimeEvidence=new Set();
+let session=null,user=null,refreshPromise=null,wmsRows=[],tdRows=[],ptRows=[],timeeRows=[],staffRows=[],directory=new Map(),staffToCode=new Map(),nameToCode=new Map(),staffById=new Map(),staffByName=new Map(),staffByCode=new Map(),dispatchTimeEvidence=new Set();
 const ACTIVITY_ORDER=['picking','stock_move','shipping_check','adjustment_out','receiving','receiving_check'];
 const ACTIVITY_LABELS={picking:'ピッキング',stock_move:'在庫移動',shipping_check:'出荷検品',adjustment_out:'調整出庫',receiving:'調整入庫・入庫',receiving_check:'入荷検品'};
 const ACTIVITY_COLORS={picking:'#2589f5',stock_move:'#2637a8',shipping_check:'#ed7d31',adjustment_out:'#7030a0',receiving:'#db3fa7',receiving_check:'#6b7280'};
@@ -97,7 +97,8 @@ function buildDirectory(){
   directory.set(key,{key,name,code:code||null,staffId:null,department:row.source_department||null,employment:category==='timee'?'タイミー':null,scope:'other',category})
  };
  for(const r of wmsRows)touch(identityFor(r),r);
- for(const r of tdRows)touch(identityFor(r),r)
+ for(const r of tdRows)touch(identityFor(r),r);
+ for(const r of timeeRows)touch(identityFor(r),{...r,worker_name:'タイミー '+r.worker_code})
 }
 function canonicalForStaff(staffId){
  return staffId&&staffById.has(staffId)?'staff:'+staffId:null
@@ -106,14 +107,15 @@ function canonicalForStaff(staffId){
 async function loadData(){
  const fy=Number($('fiscalYear').value),months=fyMonths(fy),[start]=monthRange(months[0]),[,end]=monthRange(months[11]);
  $('loadStatus').textContent='データ読込中…';
- [wmsRows,tdRows,ptRows,staffRows]=await Promise.all([
+ [wmsRows,tdRows,ptRows,staffRows,timeeRows]=await Promise.all([
   restAll('oplh_wms_daily','owner_id=eq.'+user.id+'&work_date=gte.'+start+'&work_date=lte.'+end+'&select=work_date,staff_id,worker_key,worker_code,worker_name,activity_key,activity_label,action_count,quantity&order=work_date.asc'),
   restAll('oplh_timedesigner_daily','owner_id=eq.'+user.id+'&work_date=gte.'+start+'&work_date=lte.'+end+'&activity_key=in.(picking,stock_move,shipping_check,receiving,pass_sort,total_picking,hand_pack,auto_pack)&select=work_date,staff_id,worker_key,employee_no,worker_name,source_department,activity_key,activity_label,work_minutes&order=work_date.asc'),
   restAll('logistics_work_time','owner_id=eq.'+user.id+'&work_date=gte.'+start+'&work_date=lte.'+end+'&select=work_date,staff_id,picking_minutes,total_picking_minutes,pass_sort_minutes,sorting_minutes,hand_pack_minutes,auto_pack_minutes,stock_move_minutes&order=work_date.asc'),
-  restAll('logistics_staff','owner_id=eq.'+user.id+'&select=id,name,employment_type,is_active,retirement_date')
+  restAll('logistics_staff','owner_id=eq.'+user.id+'&select=id,name,employment_type,is_active,retirement_date'),
+  restAll('logistics_timee_work_time','owner_id=eq.'+user.id+'&work_date=gte.'+start+'&work_date=lte.'+end+'&select=work_date,worker_code,picking_minutes&order=work_date.asc,worker_code.asc')
  ]);
  buildDirectory();renderWorkerOptions();initRankingMonths();renderAll();
- $('loadStatus').textContent='WMS '+fmt(wmsRows.length)+'集計行 / TimeDesigner '+fmt(tdRows.length)+'集計行 / 物流PT '+fmt(ptRows.length)+'日次行';
+ $('loadStatus').textContent='WMS '+fmt(wmsRows.length)+'集計行 / TimeDesigner '+fmt(tdRows.length)+'集計行 / 物流PT '+fmt(ptRows.length)+'日次行 / タイミー '+fmt(timeeRows.length)+'日次行';
 }
 function currentWorkerSet(){
  const selected=$('workerFilter').value,scope=$('scopeFilter').value,group=$('groupFilter').value;
@@ -172,6 +174,7 @@ function activityTimeMap(workerSet,individual=false){
   put(r.work_date,key,ym,'receiving',r.stock_move_minutes,'daily');
   if(individual)for(const act of ['pass_sort','total_picking','hand_pack','auto_pack'])put(r.work_date,key,ym,act,r[act+'_minutes'],'daily')
  }
+ for(const r of timeeRows){const key=identityFor(r),ym=companyYmFromDate(r.work_date);if(ym&&workerIncluded(key,workerSet))put(r.work_date,key,ym,'picking',r.picking_minutes,'daily')}
  return{monthly,workerMonthly,daily,granularity}
 }
 function aggregate(){
@@ -280,3 +283,4 @@ async function login(){const email=$('email').value.trim(),password=$('password'
 function logout(){saveSession(null);session=null;user=null;showApp()}
 async function restoreLogin(){session=loadSession();if(session?.refresh_token){try{if(!session?.access_token||accessTokenNearExpiry())await refreshSession();user=await req('/auth/v1/user');showApp();await loadData();return}catch(e){console.warn(e)}}saveSession(null);session=null;user=null;showApp()}
 initYears();$('rankingMonth').onchange=renderRanking;$('loginBtn').onclick=login;$('logoutBtn').onclick=logout;$('reloadBtn').onclick=loadData;$('fiscalYear').onchange=loadData;$('scopeFilter').onchange=()=>{renderWorkerOptions();$('workerFilter').value='all';renderAll()};$('groupFilter').onchange=()=>{renderWorkerOptions();$('workerFilter').value='all';renderAll()};$('workerFilter').onchange=renderAll;window.addEventListener('resize',()=>{if(user)renderAll()});setInterval(()=>{if(session?.refresh_token&&accessTokenNearExpiry())refreshSession()},5*60*1000);restoreLogin();
+

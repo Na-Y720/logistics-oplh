@@ -1,0 +1,15 @@
+const assert=require('node:assert/strict'),fs=require('fs'),vm=require('vm'),M=require('../timee-model');
+const sample={work_date:'2026-11-09',worker_code:'800001',worker_name:'テスト',first_start:'09:59',first_end:'12:04',second_start:null,second_end:null,paid_minutes:240};
+assert.deepEqual(M.calculate(sample),{picking:125,other:115});
+assert.deepEqual(M.calculate({...sample,first_start:'10:02',first_end:'11:01',second_start:'13:44',second_end:'14:00'}),{picking:75,other:165});
+for(const bad of [{first_end:'09:00'},{second_start:'13:00'},{second_start:'11:00',second_end:'12:30'},{paid_minutes:100},{worker_code:'900001'}])assert.throws(()=>M.calculate({...sample,...bad}));
+assert.equal(M.validCode('900001','2026-10-06'),true);assert.equal(M.validCode('900001','2026-10-07'),false);
+const filters={fiscalYear:{value:'2026'},workerFilter:{value:'all'},scopeFilter:{value:'other'},groupFilter:{value:'timee'}};
+const ctx=vm.createContext({console,document:{getElementById:id=>filters[id]},window:{}});
+vm.runInContext(fs.readFileSync(__dirname+'/../wms.js','utf8').split('initYears();')[0],ctx);
+vm.runInContext(`wmsRows=[{work_date:'2026-11-09',worker_code:'800001',worker_name:'タイミー1',activity_key:'picking',action_count:262,quantity:300},{work_date:'2026-11-10',worker_code:'800001',worker_name:'タイミー1',activity_key:'picking',action_count:100,quantity:120}];timeeRows=[{work_date:'2026-11-09',worker_code:'800001',picking_minutes:125}];buildDirectory();`,ctx);
+const a=vm.runInContext('aggregate()',ctx);assert.equal(a.totals.actions,362);assert.equal(a.totals.matchedActions,262);assert.equal(a.totals.hours,125/60);
+vm.runInContext("timeeRows.push({work_date:'2026-11-10',worker_code:'800001',picking_minutes:60});buildDirectory()",ctx);
+assert.equal(vm.runInContext('aggregate().totals.matchedActions',ctx),362);
+assert.equal(vm.runInContext('aggregate().totals.hours',ctx),185/60);
+console.log('PASS: screenshot examples, invalid intervals, overlap, paid-time bounds, historical code switch, WMS date matching and reused codes');

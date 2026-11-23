@@ -52,6 +52,27 @@
       <button id="reloadTodayBtn" class="ghost">再読み込み</button>
     </section>
 
+<section class="card" id="timeePanel">
+ <h3>タイミー 作業時間入力</h3>
+ <p class="muted">WMS番号は当日使用した番号です。同じ番号でも日付ごとに氏名を記録します。ピッキングの開始・終了を最大2回入力できます。</p>
+ <div class="section-head"><label>作業日<input type="date" id="timeeDate" required></label><button id="timeeReload" type="button">再読み込み</button></div>
+ <form id="timeeForm">
+ <div class="timee-grid">
+ <label>氏名<input id="timeeName" maxlength="100" required autocomplete="off"></label>
+ <label>WMS番号<input id="timeeCode" list="timeeCodes" placeholder="800001" required autocomplete="off"><datalist id="timeeCodes"></datalist></label>
+ <label>開始①<input id="timeeStart1" type="time" required></label><label>終了①<input id="timeeEnd1" type="time" required></label>
+ <label>開始②（任意）<input id="timeeStart2" type="time"></label><label>終了②（任意）<input id="timeeEnd2" type="time"></label>
+ <label>実働時間（休憩を除く）<span class="timee-duration"><input id="timeeHours" type="number" min="0" max="24" step="1" value="4" required aria-label="実働時間の時">時 <input id="timeeMinutes" type="number" min="0" max="59" step="1" value="0" required aria-label="実働時間の分">分</span></label>
+ <label>メモ<input id="timeeNote" maxlength="1000"></label>
+ </div>
+ <p id="timeePreview" aria-live="polite">開始・終了を入力すると時間を計算します。</p>
+ <button type="submit" class="primary">タイミーの時間を保存</button> <button type="button" id="timeeClear" class="ghost">新規入力に戻す</button>
+ </form>
+ <p id="timeeMessage" role="status"></p>
+ <p class="muted">件数はWMSのピッキング作業回数。その他作業時間＝実働時間−ピッキング時間です。WMS未取込でも時間を先に保存できます。</p>
+ <div class="tablewrap"><table><thead><tr><th>氏名</th><th>WMS番号</th><th>時間帯①</th><th>時間帯②</th><th>ピッキング</th><th>実働</th><th>その他</th><th>件数</th><th>件/時</th><th>操作</th></tr></thead><tbody id="timeeBody"></tbody></table></div>
+</section>
+<style>.timee-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin:18px 0}.timee-grid label{display:flex;flex-direction:column;gap:6px}.timee-grid input{width:100%;box-sizing:border-box;min-height:40px}.timee-duration{display:flex;align-items:center;gap:5px}.timee-duration input{width:65px}#timeePanel{margin:20px 0}#timeePanel td,#timeePanel th{padding:12px;white-space:nowrap}#timeePreview{font-weight:600}</style>
     <section class="kpis">
       <div class="kpi"><span>対象人数</span><b id="todayStaffCount">0人</b></div>
       <div class="kpi"><span>入力済</span><b id="todayDoneCount">0人</b></div>
@@ -151,5 +172,8 @@
 </main>
 
 <script src="worktime.js"></script>
+<script src="timee-model.js"></script>
+<script src="timee.js"></script>
 </body>
 </html>
+
