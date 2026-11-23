@@ -175,6 +175,26 @@
       </div>
       <div class="hint">運用中月は現時点の途中実績です。配送会社の未取込分は「—」で表示します。金額・単価は税抜です。</div>
     </section>
+
+    <section class="card" id="sagawaSizeSection">
+      <div class="section-head"><div><h3>佐川急便 サイズ別出荷推移</h3><div class="muted">請求締め月ごとに、出荷量と構成比を確認できます。</div></div></div>
+      <div class="form-grid">
+        <label>表示期間<select id="sagawaSizeYear"><option value="all">全期間</option></select></label>
+        <label>集計単位<select id="sagawaSizeUnit"><option value="invoices">出荷件数（伝票数）</option><option value="packages">荷物個数</option></select></label>
+        <label>対象範囲<select id="sagawaSizeScope"><option value="shipping">発送分（丸岡への入荷を除外）</option><option value="all">請求明細すべて</option></select></label>
+        <label>グラフ<select id="sagawaSizeMode"><option value="volume">出荷量</option><option value="ratio">構成比（100%）</option></select></label>
+      </div>
+      <div id="sagawaSizeLegend" class="size-legend"></div>
+      <div id="sagawaSizeChart" aria-label="サイズ別出荷推移グラフ"></div>
+      <div class="tablewrap"><table><thead><tr><th>月度</th><th>合計</th><th>60サイズ</th><th>比率</th><th>80サイズ</th><th>比率</th><th>100サイズ以上</th><th>比率</th><th>判定不能</th><th>比率</th><th>丸岡除外対象</th></tr></thead><tbody id="sagawaSizeBody"></tbody></table></div>
+      <div class="hint">サイズ表記を優先。重量表記は2kg以下＝60、5kg以下＝80、5kg超＝100サイズ以上に換算。伝票数は複数個口の最大サイズ、荷物個数は明細ごとのサイズで集計。比率の分母には判定不能分も含みます。サイズ実績は自動梱包の対象件数とは一致しません。</div>
+      <details class="size-import"><summary>過去の明細からサイズ内訳を補完する</summary>
+        <p class="muted">CSV複数選択・ZIPに対応。請求締め月を自動判定し、各月の内訳を置き換えます。各月の全明細を選択してください。発送費・採用件数・確定状態は変更しません。</p>
+        <label>佐川拡張請求CSV / ZIP<input id="sagawaSizeFiles" type="file" multiple accept=".csv,.zip"></label>
+        <button id="sagawaSizeImportBtn" class="primary">サイズ内訳を取り込む</button>
+      </details>
+      <div id="sagawaSizeMessage" class="message" role="status"></div>
+    </section>
   </section>
 
   <section id="timedesignerTab" class="hidden">
@@ -467,7 +487,9 @@
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="timee-history-model.js"></script>
+<script src="sagawa-sizes.js"></script>
 <script src="cost.js"></script>
+<script src="cost-size-trends.js"></script>
 </body>
 </html>
 
