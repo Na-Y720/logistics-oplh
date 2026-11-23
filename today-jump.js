@@ -11,7 +11,7 @@
 
   function jumpToToday(){
     const today=todayISO();
-    const month=monthKey(today);
+    const month=closingMonthKey(today);
     const monthFilter=$('monthFilter');
     const stateFilter=$('stateFilter');
 
@@ -36,3 +36,4 @@
   const button=$('jumpTodayBtn');
   if(button)button.onclick=jumpToToday;
 })();
+

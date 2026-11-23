@@ -33,10 +33,11 @@
   function ensureOptions(){
     const select=$('monthlyPeriod');if(!select||!rows.length)return [];
     const keys=[...new Set(rows.map(r=>closeMonthKey(r.forecast_date)))];
-    if(select.dataset.ready!=='1'){
+    if(select.dataset.keys!==keys.join(',')){
+      const previous=select.value;
       select.innerHTML=keys.map(k=>`<option value="${k}">${closeMonthLabel(k)}</option>`).join('');
-      const current=closeMonthKey(todayISO());select.value=keys.includes(current)?current:keys.at(-1);
-      select.dataset.ready='1';
+      const current=closeMonthKey(todayISO());select.value=keys.includes(previous)?previous:keys.includes(current)?current:keys.at(-1);
+      select.dataset.keys=keys.join(',');
     }
     return keys;
   }
@@ -65,8 +66,14 @@
   renderDashboard=function(){
     originalRenderDashboard();
     const today=todayISO(),current=rows.find(r=>r.forecast_date===today)||rows.find(r=>r.forecast_date>=today)||rows.at(-1);if(!current)return;
-    const key=closeMonthKey(current.forecast_date),list=rows.filter(r=>closeMonthKey(r.forecast_date)===key);
-    $('kpiMonth').textContent=fmtInt(summarize(list).outlook)+'件';
+    const select=$('dashboardPeriod'),keys=[...new Set(rows.map(r=>closeMonthKey(r.forecast_date)))];
+    const previous=select.value;select.innerHTML=keys.map(k=>`<option value="${k}">${closeMonthLabel(k)}</option>`).join('');
+    select.value=keys.includes(previous)?previous:closeMonthKey(current.forecast_date);
+    const key=select.value,list=rows.filter(r=>closeMonthKey(r.forecast_date)===key);
+    $('dashboardPeriodText').textContent=periodLabel(list);
+    $('dashboardOutlook').textContent=fmtInt(summarize(list).outlook)+'件';
+    select.onchange=renderDashboard;
+    $('kpiMonth').textContent=fmtInt(summarize(rows.filter(r=>closeMonthKey(r.forecast_date)===closeMonthKey(current.forecast_date))).outlook)+'件';
   };
   const originalRenderAll=renderAll;
   renderAll=function(){originalRenderAll();renderMonthly()};
@@ -167,3 +174,4 @@
   };
   $('dayForm').onsubmit=submitDay;
 })();
+

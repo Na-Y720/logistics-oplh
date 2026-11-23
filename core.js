@@ -165,14 +165,51 @@ function reviewForecast(r,all,asOf){
  return {forecast,paydayFloor,version:FORECAST365_REVIEW.version,asOf,baseline,baselineSource,payEffect,trend,r30,r7,recentWeight,weather,samples30:thirty.length,samples7:seven.length};
 }
 
+// Annual planning: confirmed actuals first; otherwise carry the latest forecast.
+// Event dates and closures are provisional copies of the previous year.
+const ANNUAL_START='2027-02-21', ANNUAL_END='2028-02-20';
+function annualDate(d){return d>=ANNUAL_START&&d<=ANNUAL_END}
+function annualDonor(d,all){return all.find(x=>x.forecast_date===(Number(d.slice(0,4))-1)+d.slice(4))}
+function annualEstimate(r,all,asOf,withFloor=true){
+ if(!annualDate(r.forecast_date))return null;
+ const donor=annualDonor(r.forecast_date,all);if(!donor)throw new Error('前年の参照日がありません: '+r.forecast_date);
+ const confirmed=donor.actual_total!=null&&donor.forecast_date<=asOf;
+ const baseline=Number(confirmed?donor.actual_total:donor.final_forecast);
+ const kind=r.event_type.startsWith('SS')?r.event_type:(reviewPayday(r.forecast_date)?'5/0翌日':'通常');
+ const eligible=all.filter(x=>x.forecast_date<ANNUAL_START&&x.forecast_date<=asOf&&x.actual_total!=null&&x.prior_year_actual>0);
+ const ratio=s=>s.length?s.reduce((n,x)=>n+x.actual_total,0)/s.reduce((n,x)=>n+x.prior_year_actual,0):1;
+ const normal=eligible.filter(x=>x.event_type==='通常'&&x.forecast_date>=reviewShiftDate(asOf,-29));
+ const group=eligible.filter(x=>x.event_type===kind&&(kind.startsWith('SS')||x.forecast_date>=reviewShiftDate(asOf,-29)));
+ const trend=kind.startsWith('SS')?ratio(normal)+(ratio(group)-ratio(normal))*group.length/(group.length+5):ratio(group.length?group:normal);
+ // Existing predictions already contain growth/event/weather corrections; do not compound them.
+ let forecast=Math.max(0,Math.round(baseline*(confirmed?trend:1))),floor=0;
+ if(r.event_type==='休止日')forecast=0;
+ else if(withFloor&&reviewPayday(r.forecast_date)){
+  const peers=all.filter(x=>annualDate(x.forecast_date)&&x.event_type==='通常'&&!reviewPayday(x.forecast_date)&&Math.abs(Date.parse(x.forecast_date)-Date.parse(r.forecast_date))<=3*86400000);
+  const values=peers.map(x=>({date:x.forecast_date,value:annualEstimate(x,all,asOf,false).forecast})).filter(x=>x.value>0);
+  const sorted=values.map(x=>x.value).sort((a,b)=>a-b);
+  const typical=sorted.length?(sorted[Math.floor((sorted.length-1)/2)]+sorted[Math.floor(sorted.length/2)])/2:0;
+  const pay=eligible.filter(x=>x.event_type==='5/0翌日'&&x.forecast_date>=reviewShiftDate(asOf,-29));
+  const mean=s=>s.length?s.reduce((n,x)=>n+x.actual_total,0)/s.length:0;
+  const uplift=clamp(normal.length&&pay.length?mean(pay)/mean(normal):1.25,1.25,2.5);
+  floor=Math.ceil(Math.max(typical*uplift,...values.filter(x=>Math.abs(Date.parse(x.date)-Date.parse(r.forecast_date))===86400000).map(x=>x.value*1.1)));
+  forecast=Math.max(forecast,floor);
+ }
+ return {forecast,version:'annual_2027_v1',sourceDate:donor.forecast_date,sourceType:confirmed?'actual':'forecast',baseline,trend:confirmed?trend:1,weather:1,paydayFloor:floor,eventCalendar:'前年同日を仮置き',asOf};
+}
+function annualPriorLabel(r){if(!annualDate(r.forecast_date))return fmtInt(r.prior_year_actual);const d=annualDonor(r.forecast_date,rows);return d?.actual_total!=null?fmtInt(d.actual_total):'未確定（予測参照）'}
+
 function recalcFuture(){
  calculateAutoRules();const productivity=getRule('productivity','shipments_per_person',180)||180,sag=getRule('carrier_share','sagawa',.403),nek=getRule('carrier_share','nekopos',.382);
  const asOf=rows.filter(r=>r.actual_total!=null&&r.forecast_date<=todayISO()).map(r=>r.forecast_date).sort().at(-1)||todayISO();
- for(const r of rows){
+ for(const r of [...rows].sort((a,b)=>a.forecast_date.localeCompare(b.forecast_date))){
   if(r.actual_total!=null)continue;
+  const annual=annualEstimate(r,rows,asOf);
+  if(annual)r.prior_year_actual=annual.sourceType==='actual'?annual.baseline:0;
   const revised=reviewForecast(r,rows,asOf);
   const rr=forecastRecalibrationRatio(r);
-  if(revised)r.system_forecast=revised.forecast;
+  if(annual)r.system_forecast=annual.forecast;
+  else if(revised)r.system_forecast=revised.forecast;
   else if(rr!=null)r.system_forecast=Math.max(0,Math.round(Number(r.prior_year_actual||0)*rr));
   else{const wg=getRule('weekday_growth',r.weekday,1),ef=r.event_type==='通常'?1:getRule('event_multiplier',r.event_type,1);r.system_forecast=Math.max(0,Math.round(Number(r.prior_year_actual||0)*wg*ef))}
   r.final_forecast=Math.max(0,r.system_forecast+Number(r.manual_adjustment||0));r.required_people=Math.ceil(r.final_forecast/productivity);r.forecast_sagawa=Math.round(r.final_forecast*sag);r.forecast_nekopos=Math.round(r.final_forecast*nek);r.forecast_yupack=Math.max(0,r.final_forecast-r.forecast_sagawa-r.forecast_nekopos);r.data_state='forecast';r.updated_at=new Date().toISOString()
@@ -182,7 +219,7 @@ function recalcFuture(){
 async function persistRecalculation(){
  // Capture old predictions before any recalculation write; fail closed if history cannot be saved.
  if(storageMode==='cloud'){
-  const history=rows.filter(r=>r.actual_total==null&&r.forecast_date>=FORECAST365_REVIEW.start&&r.forecast_date<=FORECAST365_REVIEW.end).map(r=>({owner_id:user.id,forecast_date:r.forecast_date,captured_on:todayISO(),system_forecast:r.system_forecast,manual_adjustment:r.manual_adjustment||0,final_forecast:r.final_forecast,source:'before_'+FORECAST365_REVIEW.version,details:{row:r,model:FORECAST365_REVIEW}}));
+  const history=rows.filter(r=>r.actual_total==null&&(annualDate(r.forecast_date)||(r.forecast_date>=FORECAST365_REVIEW.start&&r.forecast_date<=FORECAST365_REVIEW.end))).map(r=>({owner_id:user.id,forecast_date:r.forecast_date,captured_on:todayISO(),system_forecast:r.system_forecast,manual_adjustment:r.manual_adjustment||0,final_forecast:r.final_forecast,source:annualDate(r.forecast_date)?'before_annual_2027_v1':'before_'+FORECAST365_REVIEW.version,details:{row:r,model:annualDate(r.forecast_date)?'annual_2027_v1':FORECAST365_REVIEW}}));
   if(history.length)await rest('forecast365_history','',{method:'POST',body:JSON.stringify(history)});
  }
  recalcFuture();if(storageMode!=='cloud')return;
@@ -205,3 +242,4 @@ async function saveProductivity(v){const x=Math.max(1,Number(v||180));setRuleLoc
 
 function rowError(r){if(!Number(r.actual_total)||!Number(r.final_forecast))return null;return Number(r.actual_total)-Number(r.final_forecast)}
 function rowErrorRate(r){if(!Number(r.actual_total)||!Number(r.final_forecast))return null;return Math.abs(Number(r.actual_total)-Number(r.final_forecast))/Number(r.actual_total)}
+
