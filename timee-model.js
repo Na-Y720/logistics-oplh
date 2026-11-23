@@ -10,7 +10,7 @@
   let pick=end-start;
   if(r.second_start||r.second_end){const s=minutes(r.second_start),e=minutes(r.second_end);if(!Number.isFinite(s)||!Number.isFinite(e)||s<end||e<=s)throw Error('②は①の終了以降で、開始・終了を両方入力してください。');pick+=e-s}
   if(!Number.isInteger(r.paid_minutes)||r.paid_minutes<pick||r.paid_minutes>1440)throw Error('実働時間はピッキング時間以上、24時間以内で入力してください。');
-  return {picking:pick,other:r.paid_minutes-pick};
+  return {picking:pick,packing:r.paid_minutes-pick};
  }
  const api={minutes,validCode,calculate};if(typeof module!=='undefined')module.exports=api;else root.TimeeModel=api;
 })(globalThis);

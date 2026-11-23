@@ -112,7 +112,7 @@ async function loadData(){
   restAll('oplh_timedesigner_daily','owner_id=eq.'+user.id+'&work_date=gte.'+start+'&work_date=lte.'+end+'&activity_key=in.(picking,stock_move,shipping_check,receiving,pass_sort,total_picking,hand_pack,auto_pack)&select=work_date,staff_id,worker_key,employee_no,worker_name,source_department,activity_key,activity_label,work_minutes&order=work_date.asc'),
   restAll('logistics_work_time','owner_id=eq.'+user.id+'&work_date=gte.'+start+'&work_date=lte.'+end+'&select=work_date,staff_id,picking_minutes,total_picking_minutes,pass_sort_minutes,sorting_minutes,hand_pack_minutes,auto_pack_minutes,stock_move_minutes&order=work_date.asc'),
   restAll('logistics_staff','owner_id=eq.'+user.id+'&select=id,name,employment_type,is_active,retirement_date'),
-  restAll('logistics_timee_work_time','owner_id=eq.'+user.id+'&work_date=gte.'+start+'&work_date=lte.'+end+'&select=work_date,worker_code,picking_minutes&order=work_date.asc,worker_code.asc')
+  restAll('logistics_timee_work_time','owner_id=eq.'+user.id+'&work_date=gte.'+start+'&work_date=lte.'+end+'&select=work_date,worker_code,picking_minutes,paid_minutes&order=work_date.asc,worker_code.asc')
  ]);
  buildDirectory();renderWorkerOptions();initRankingMonths();renderAll();
  $('loadStatus').textContent='WMS '+fmt(wmsRows.length)+'集計行 / TimeDesigner '+fmt(tdRows.length)+'集計行 / 物流PT '+fmt(ptRows.length)+'日次行 / タイミー '+fmt(timeeRows.length)+'日次行';
@@ -174,7 +174,7 @@ function activityTimeMap(workerSet,individual=false){
   put(r.work_date,key,ym,'receiving',r.stock_move_minutes,'daily');
   if(individual)for(const act of ['pass_sort','total_picking','hand_pack','auto_pack'])put(r.work_date,key,ym,act,r[act+'_minutes'],'daily')
  }
- for(const r of timeeRows){const key=identityFor(r),ym=companyYmFromDate(r.work_date);if(ym&&workerIncluded(key,workerSet))put(r.work_date,key,ym,'picking',r.picking_minutes,'daily')}
+ for(const r of timeeRows){const key=identityFor(r),ym=companyYmFromDate(r.work_date);if(ym&&workerIncluded(key,workerSet)){put(r.work_date,key,ym,'picking',r.picking_minutes,'daily');put(r.work_date,key,ym,'packing',Math.max(0,Number(r.paid_minutes||0)-Number(r.picking_minutes||0)),'daily')}}
  return{monthly,workerMonthly,daily,granularity}
 }
 function aggregate(){
@@ -205,6 +205,7 @@ function aggregate(){
   }
  }
  for(const m of monthMap.values()){
+  m.packingHours=(timeMap.get(m.ym+'|packing')||0)/60;
   for(const act of ACTIVITY_ORDER){
    const mins=timeMap.get(m.ym+'|'+act)||0,hrs=mins/60;m.actHours[act]=hrs;
    if(hrs>0)m.hours+=hrs;
@@ -263,7 +264,7 @@ function renderHumanHours(monthly){
  $('humanHoursHead').innerHTML=
   '<tr><th rowspan="2">月度</th>'+
   ACTIVITY_ORDER.map(k=>'<th colspan="2" class="work-group-head">'+ACTIVITY_LABELS[k]+'</th>').join('')+
-  '<th colspan="2" class="total-group">合計</th></tr>'+
+  '<th rowspan="2" title="タイミーの実働時間−ピッキング時間。件数のない梱包時間はWMS作業の件/h計算に含めません。">梱包（タイミー）<br>人時</th><th colspan="2" class="total-group">WMS対応合計</th></tr>'+
   '<tr>'+ACTIVITY_ORDER.map(()=>'<th>人時</th><th class="work-group-end">件/h</th>').join('')+'<th class="total-group">人時</th><th>件/h</th></tr>';
  $('humanHoursBody').innerHTML=monthly.map(m=>{
   const cells=ACTIVITY_ORDER.map(k=>{
@@ -271,7 +272,7 @@ function renderHumanHours(monthly){
    return'<td>'+hours(h)+'</td><td class="work-group-end">'+(rate==null?'—':fmt(rate,1))+'</td>'
   }).join('');
   const totalRate=m.hours>0?m.matchedActions/m.hours:null;
-  return'<tr><td><b>'+Number(m.ym.split('-')[1])+'月度</b></td>'+cells+'<td class="total-group"><b>'+hours(m.hours)+'</b></td><td><b>'+(totalRate==null?'—':fmt(totalRate,1))+'</b></td></tr>'
+  return'<tr><td><b>'+Number(m.ym.split('-')[1])+'月度</b></td>'+cells+'<td>'+hours(m.packingHours||0)+'</td><td class="total-group"><b>'+hours(m.hours)+'</b></td><td><b>'+(totalRate==null?'—':fmt(totalRate,1))+'</b></td></tr>'
  }).join('')
 }
 function renderActivities(actTotal){
