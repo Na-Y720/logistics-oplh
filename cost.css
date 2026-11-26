@@ -40,3 +40,15 @@ table:has(> #shippingFiscalMonthlyBody) thead tr:nth-child(2) th:nth-child(3n+1)
 }
 
 .size-legend{display:flex;gap:18px;flex-wrap:wrap;margin:18px 0;font-size:13px}.size-legend span{display:flex;align-items:center;gap:6px}.size-legend i{width:12px;height:12px;border-radius:3px}.size-chart-row{display:grid;grid-template-columns:72px minmax(80px,1fr) 90px;gap:12px;align-items:center;margin:9px 0;font-size:13px}.size-chart-row b{text-align:right}.size-chart-track{background:#f1f5f9;border-radius:4px;overflow:hidden}.size-chart-bar{display:flex;height:24px}.size-import{margin-top:22px;border-top:1px solid #e2e8f0;padding-top:16px}.size-import summary{cursor:pointer;font-weight:600}.size-import button{margin-top:12px}#sagawaSizeChart{margin-bottom:24px}#sagawaSizeSection{margin-top:14px}#sagawaSizeSection .form-grid{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}#sagawaSizeSection select{font:inherit;color:var(--text);padding:9px 10px;border:1px solid #d0d5dd;border-radius:8px;min-width:0;background:white}#sagawaSizeFiles{max-width:100%}
+
+/* Separate each size's count and ratio as one column group. */
+#sagawaSizeSection table th:nth-child(3),
+#sagawaSizeSection table th:nth-child(5),
+#sagawaSizeSection table th:nth-child(7),
+#sagawaSizeSection table th:nth-child(9),
+#sagawaSizeBody td:nth-child(3),
+#sagawaSizeBody td:nth-child(5),
+#sagawaSizeBody td:nth-child(7),
+#sagawaSizeBody td:nth-child(9){
+ border-left:2px solid #98a2b3;
+}
