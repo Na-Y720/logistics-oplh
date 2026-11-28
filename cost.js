@@ -69,7 +69,7 @@ async function loadBundle(ym,{create=false}={}){let monthlyRows=await rest('logi
  const [shipping,pt,td,imports,orderDaily]=await Promise.all([
   rest('logistics_shipping_monthly',`owner_id=eq.${user.id}&month_ym=eq.${ym}&select=*`).catch(()=>[]),
   rest('logistics_work_time',`owner_id=eq.${user.id}&work_date=gte.${start}&work_date=lte.${end}&select=work_date,picking_minutes,total_picking_minutes,pass_sort_minutes,sorting_minutes,hand_pack_minutes,auto_pack_minutes,stock_move_minutes`).catch(()=>[]),
-  rest('oplh_timedesigner_daily',`owner_id=eq.${user.id}&work_date=gte.${start}&work_date=lte.${end}&select=activity_key,activity_label,work_minutes,event_count,worker_key,worker_name,employee_no,staff_id,source_department`).catch(()=>[]),
+  restAll('oplh_timedesigner_daily',`owner_id=eq.${user.id}&work_date=gte.${start}&work_date=lte.${end}&order=id&select=activity_key,activity_label,work_minutes,event_count,worker_key,worker_name,employee_no,staff_id,source_department`).catch(()=>[]),
   rest('logistics_cost_import_batches',`owner_id=eq.${user.id}&month_ym=eq.${ym}&select=id,source,source_filename,source_rows,imported_at,metadata,period_start,period_end&order=imported_at.desc`).catch(()=>[]),
   rest('logistics_order_daily',`owner_id=eq.${user.id}&work_date=gte.${start}&work_date=lte.${end}&select=work_date,order_count,label_955_achieved,note&order=work_date.asc`).catch(()=>[])
  ]);
@@ -250,7 +250,7 @@ async function streamShiftJisLines(file,onLine,onProgress){
 async function parseWmsFile(file,onProgress){
  const[periodStart,periodEnd]=monthRange(currentBundle.ym),staff=await tdStaffMaps(),agg=new Map(),summary={},unmapped=new Map();
  let head=null,ix=null,sourceRows=0,periodRows=0,recognizedRows=0,outsideRows=0,unparsedRows=0;
- const inventoryRecords=[],timeeEvents=[];
+ const targetDates=new Set(),inventoryRecords=[],timeeEvents=[];
  await streamShiftJisLines(file,line=>{
   if(!head){
    head=csvLine(line).map(normalizeHeader);const find=n=>head.indexOf(n);
@@ -259,9 +259,9 @@ async function parseWmsFile(file,onProgress){
    return
   }
   sourceRows++;const r=csvLine(line),date=normalizeDateCell(r[ix.date]);
-  if(!date){unparsedRows++;return}
+  if(!date)throw Error('WMS CSVの日付が不正です（'+(sourceRows+1)+'行目）')
   if(date<periodStart||date>periodEnd){outsideRows++;return}
-  periodRows++;
+  periodRows++;targetDates.add(date);
   const rawActivity=String(r[ix.activity]||'').normalize('NFKC').trim(),map=WMS_ACTIVITY_MAP[rawActivity];
   if(rawActivity==='調整入庫'||rawActivity==='調整出庫')inventoryRecords.push({row:sourceRows+1,work_date:date,activity:rawActivity,values:r});
   if(!map){if(rawActivity)unmapped.set(rawActivity,(unmapped.get(rawActivity)||0)+1);return}
@@ -269,7 +269,7 @@ async function parseWmsFile(file,onProgress){
   if(map.key==='picking'&&['800001','800002','800003'].includes(workerCode)){const at=head.indexOf('登録日時');if(at<0)throw Error('タイミー時間抽出に必要な登録日時列がありません');timeeEvents.push({work_date:date,worker_code:workerCode,timestamp:r[at]})}
   const rawName=String(r[ix.name]||'').normalize('NFKC').trim(),workerName=rawName||'不明',normName=normalizeWorkerName(workerName),workerKey=workerCode||normName||workerName;
   if(!workerKey){unparsedRows++;return}
-  const qty=Number(String(r[ix.qty]||'0').replace(/,/g,'')),staffId=(workerCode&&staff.byCode.get(workerCode))||staff.byName.get(normName)||null;
+  const qty=Number(String(r[ix.qty]||'0').replace(/,/g,''));if(!Number.isFinite(qty))throw Error('WMS CSVの実績数が不正です（'+(sourceRows+1)+'行目）');const staffId=(workerCode&&staff.byCode.get(workerCode))||staff.byName.get(normName)||null;
   const key=[date,workerKey,map.key].join('|'),x=agg.get(key)||{owner_id:user.id,work_date:date,staff_id:staffId,worker_key:workerKey,worker_code:workerCode||null,worker_name:workerName,activity_key:map.key,activity_label:map.label,action_count:0,quantity:0};
   x.action_count++;if(Number.isFinite(qty))x.quantity+=qty;if(!x.staff_id&&staffId)x.staff_id=staffId;agg.set(key,x);recognizedRows++;
   const s=summary[map.key]||(summary[map.key]={label:map.label,actions:0,quantity:0,aggregate_rows:0});s.actions++;if(Number.isFinite(qty))s.quantity+=qty;
@@ -277,7 +277,7 @@ async function parseWmsFile(file,onProgress){
  const rows=[...agg.values()].map(x=>({...x,quantity:Number((Number(x.quantity)||0).toFixed(3))}));
  for(const r of rows){const s=summary[r.activity_key]||(summary[r.activity_key]={label:r.activity_label,actions:0,quantity:0,aggregate_rows:0});s.aggregate_rows++}
  if(!rows.length)throw new Error(periodStart+'～'+periodEnd+' に取り込めるWMS作業履歴がありません。');
- return{fileName:file.name,fileSize:file.size,periodStart,periodEnd,sourceRows,periodRows,recognizedRows,outsideRows,unparsedRows,rows,summary,timeeHistory:TimeeHistory.build(timeeEvents).map(r=>({...r,source_filename:file.name})),inventoryHeaders:head,inventoryRecords,unmapped:[...unmapped.entries()].map(([activity,count])=>({activity,count})).sort((a,b)=>b.count-a.count)}
+ return{fileName:file.name,fileSize:file.size,targetDates:[...targetDates].sort(),periodStart,periodEnd,sourceRows,periodRows,recognizedRows,outsideRows,unparsedRows,rows,summary,timeeHistory:TimeeHistory.build(timeeEvents).map(r=>({...r,source_filename:file.name})),inventoryHeaders:head,inventoryRecords,unmapped:[...unmapped.entries()].map(([activity,count])=>({activity,count})).sort((a,b)=>b.count-a.count)}
 }
 function normalizeAutoLine(v){const s=String(v||'').normalize('NFKC').trim();if(/Auto0?1/i.test(s))return'Auto01';if(/Auto0?2/i.test(s))return'Auto02';if(/Hand0?1/i.test(s))return'Hand01';return null}
 function parseAutoDateTime(v){
@@ -343,14 +343,14 @@ async function parseTimeDesignerFile(file){
  const ix={name:find('作業履歴_作業担当者'),dept:find('作業履歴_作業担当者_部署名'),emp:find('作業履歴_作業担当者_従業員番号'),start:find('作業履歴_作業開始日時'),min:find('作業履歴_作業時間(分)'),task:find('タスク_タスク名')};
  const missing=Object.entries(ix).filter(([k,v])=>['name','emp','start','min','task'].includes(k)&&v<0).map(([k])=>k);
  if(missing.length)throw new Error('必要な列が見つかりません: '+missing.join(', '));
- const [periodStart,periodEnd]=monthRange(currentBundle.ym),staff=await tdStaffMaps(),agg=new Map(),unmapped=new Map(),unmatchedStaff=new Set();
+ const [periodStart,periodEnd]=monthRange(currentBundle.ym),staff=await tdStaffMaps(),agg=new Map(),unmapped=new Map(),unmatchedStaff=new Set(),targetDates=new Set();
  let periodRows=0,mappedSourceRows=0,outsideRows=0;
  for(let i=1;i<lines.length;i++){
-  const r=csvLine(lines[i]),date=normalizeDateCell(r[ix.start]);if(!date)continue;
+  const r=csvLine(lines[i]),date=normalizeDateCell(r[ix.start]);if(!date)throw Error('TimeDesigner CSVの日付が不正です（'+(i+1)+'行目）');
   if(date<periodStart||date>periodEnd){outsideRows++;continue}
-  periodRows++;
+  periodRows++;targetDates.add(date);
   const task=String(r[ix.task]||'').trim(),map=TD_ACTIVITY_MAP[task];
-  const mins=Number(String(r[ix.min]||'0').replace(/,/g,''))||0;
+  const mins=Number(String(r[ix.min]||'0').replace(/,/g,''));if(!Number.isFinite(mins)||mins<0)throw Error('作業時間が不正です（'+(i+1)+'行目）');
   if(!map){if(task){const x=unmapped.get(task)||{count:0,minutes:0};x.count++;x.minutes+=mins;unmapped.set(task,x)}continue}
   const employeeNo=(String(r[ix.emp]||'').normalize('NFKC').trim().replace(/\.0$/,'')||null);
   const sourceDepartment=ix.dept>=0?(String(r[ix.dept]||'').normalize('NFKC').trim()||null):null;
@@ -363,7 +363,7 @@ async function parseTimeDesignerFile(file){
  }
  const rows=[...agg.values()].map(x=>({...x,work_minutes:Number(x.work_minutes.toFixed(4))}));
  if(!rows.length)throw new Error(`${periodStart}～${periodEnd} に自動振分できるデータがありません。`);
- return{fileName:file.name,periodStart,periodEnd,periodRows,mappedSourceRows,outsideRows,rows,unmapped:[...unmapped.entries()].map(([task,v])=>({task,...v})),unmatchedStaff:[...unmatchedStaff].sort()};
+ return{fileName:file.name,targetDates:[...targetDates].sort(),periodStart,periodEnd,periodRows,mappedSourceRows,outsideRows,rows,unmapped:[...unmapped.entries()].map(([task,v])=>({task,...v})),unmatchedStaff:[...unmatchedStaff].sort()};
 }
 async function replaceCostImportBatchForMonth(monthYm,source,payload){
  await rest('logistics_cost_import_batches',`owner_id=eq.${user.id}&month_ym=eq.${monthYm}&source=eq.${source}`,{method:'DELETE',headers:{Prefer:'return=minimal'}});
@@ -382,32 +382,37 @@ async function deleteRowsByIds(table,ids){
   await rest(table,'id=in.('+chunk.join(',')+')',{method:'DELETE',headers:{Prefer:'return=minimal'}})
  }
 }
-async function importTimeDesigner(){
- const m=currentBundle?.monthly||{};if(m.status==='confirmed'){alert('確定済み月には取り込めません。ロック解除後に再度お試しください。');return}
- const file=$('tdImportFile').files?.[0];if(!file){$('tdImportMessage').className='message bad';$('tdImportMessage').textContent='CSVを選択してください。';return}
- const btn=$('tdImportBtn');btn.disabled=true;$('tdImportMessage').className='message';$('tdImportMessage').textContent='CSVを確認しています…';
- try{
-  const parsed=await parseTimeDesignerFile(file);tdLastPreview=parsed;
-  const existing=currentBundle.td?.length||0;
-  if(existing&&!confirm(`${currentBundle.ym}月度にはTimeDesignerデータが既にあります。\n新しいCSVで置き換えますか？`))return;
-  $('tdImportMessage').textContent='DBへ保存しています…';
-  const batchRows=await rest('oplh_import_batches','',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify({owner_id:user.id,source:'timedesigner',source_filename:parsed.fileName,period_start:parsed.periodStart,period_end:parsed.periodEnd,source_rows:parsed.mappedSourceRows,aggregate_rows:parsed.rows.length})});
-  const batchId=batchRows?.[0]?.id;if(!batchId)throw new Error('取込バッチを作成できませんでした。');
-  const now=new Date().toISOString(),rows=parsed.rows.map(r=>({...r,batch_id:batchId,updated_at:now}));
-  for(let i=0;i<rows.length;i+=400){
-   const chunk=rows.slice(i,i+400);
-   await rest('oplh_timedesigner_daily','on_conflict=owner_id%2Cwork_date%2Cworker_key%2Cactivity_key',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(chunk)});
-  }
-  const range=`owner_id=eq.${user.id}&work_date=gte.${parsed.periodStart}&work_date=lte.${parsed.periodEnd}`;
-  await rest('oplh_timedesigner_daily',range+'&batch_id=is.null',{method:'DELETE',headers:{Prefer:'return=minimal'}});
-  await rest('oplh_timedesigner_daily',range+`&batch_id=neq.${batchId}`,{method:'DELETE',headers:{Prefer:'return=minimal'}});
-  await rest('oplh_import_batches',`owner_id=eq.${user.id}&source=eq.timedesigner&period_start=eq.${parsed.periodStart}&period_end=eq.${parsed.periodEnd}&id=neq.${batchId}`,{method:'DELETE',headers:{Prefer:'return=minimal'}});
-  await replaceCostImportBatch('timedesigner',{owner_id:user.id,month_ym:currentBundle.ym,source:'timedesigner',source_filename:parsed.fileName,source_rows:parsed.mappedSourceRows,period_start:parsed.periodStart,period_end:parsed.periodEnd,metadata:{aggregate_rows:rows.length,period_rows:parsed.periodRows,outside_rows:parsed.outsideRows,unmapped_tasks:parsed.unmapped,unmatched_staff:parsed.unmatchedStaff,replace_rule:'対象期間を置換。同一ファイル・同一期間の再取込は二重計上しない'}});
-  $('tdImportMessage').className='message ok';$('tdImportMessage').textContent=`取込完了：${parsed.mappedSourceRows.toLocaleString()}行 → ${rows.length.toLocaleString()}集計行`;
-  await loadAll()
- }catch(e){console.error(e);$('tdImportMessage').className='message bad';$('tdImportMessage').textContent=e.message}
- finally{btn.disabled=false}
+function importStatus(prefix,state,message){
+ const node=$(prefix+'ImportMessage');
+ node.dataset.status=state;
+ node.className='message'+(state==='success'?' ok':state==='error'?' bad':'');
+ node.textContent=message;
 }
+async function importDatedCsv(source){
+ const wms=source==='wms',prefix=wms?'wms':'td',button=$(prefix+'ImportBtn');
+ const file=$(prefix+'ImportFile').files?.[0],month=currentBundle.ym;
+ if(currentBundle.monthly?.status==='confirmed')return importStatus(prefix,'error','確定済み月には取り込めません。');
+ if(!file)return importStatus(prefix,'error','CSVを選択してください。');
+ button.disabled=true;
+ importStatus(prefix,'processing','CSVを確認しています…');
+ try{
+  const p=wms?await parseWmsFile(file):await parseTimeDesignerFile(file);
+  const count=wms?p.recognizedRows:p.mappedSourceRows;
+  const metadata={period_rows:p.periodRows,outside_rows:p.outsideRows,...(wms?
+   {file_size_bytes:p.fileSize,activities:p.summary,unmapped_activities:p.unmapped,unparsed_rows:p.unparsedRows}:
+   {unmapped_tasks:p.unmapped,unmatched_staff:p.unmatchedStaff})};
+  if(currentBundle.ym!==month)throw Error('表示月度が変わりました。対象月度を確認してください。');
+  importStatus(prefix,'processing','DBへ保存しています…');
+  await rest('rpc/import_cost_csv_days','',{method:'POST',body:JSON.stringify({
+   p_month:month,p_source:source,p_file:file.name,p_dates:p.targetDates,p_rows:p.rows,p_count:count,p_meta:metadata,
+   p_inventory:wms?{headers:p.inventoryHeaders,records:p.inventoryRecords,sourceRows:p.sourceRows}:null,p_timee:wms?p.timeeHistory:[]
+  })});
+  importStatus(prefix,'success','取込完了　'+month+'月度　対象日 '+p.targetDates.join('、')+'　'+count.toLocaleString()+'行 → '+p.rows.length.toLocaleString()+'集計行');
+ }catch(e){importStatus(prefix,'error',e.message);return}
+ finally{button.disabled=currentBundle.monthly?.status==='confirmed'}
+ await loadAll();
+}
+function importTimeDesigner(){return importDatedCsv('timedesigner')}
 
 function wmsSupplementWorkerFromName(fileName,rows){
  const clean=String(fileName||'').normalize('NFKC').replace(/\.(xlsx|xlsm)$/i,'').trim();
@@ -523,42 +528,7 @@ async function importWmsSupplement(){
  }catch(e){console.error(e);$('wmsSupplementImportMessage').className='message bad';$('wmsSupplementImportMessage').textContent=e.message}
  finally{btn.disabled=false}
 }
-async function importWms(){
- const m=currentBundle?.monthly||{};if(m.status==='confirmed'){alert('確定済み月には取り込めません。ロック解除後に再度お試しください。');return}
- const file=$('wmsImportFile').files?.[0];if(!file){$('wmsImportMessage').className='message bad';$('wmsImportMessage').textContent='WMS作業履歴CSVを選択してください。';return}
- const btn=$('wmsImportBtn');btn.disabled=true;$('wmsImportMessage').className='message';$('wmsImportMessage').textContent='WMS CSVを確認しています…';
- try{
-  const parsed=await parseWmsFile(file,p=>{$('wmsImportMessage').textContent='CSV集計中… '+Math.round(p*100)+'%'});
-  const existing=(currentBundle.imports||[]).find(x=>x.source==='wms');
-  if(existing&&!confirm(currentBundle.ym+'月度にはWMS作業履歴が既にあります。\n新しいCSVで置き換えますか？'))return;
-  $('wmsImportMessage').textContent='DBへ保存しています…';
-  const batchRows=await rest('oplh_import_batches','',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify({owner_id:user.id,source:'wms',source_filename:parsed.fileName,period_start:parsed.periodStart,period_end:parsed.periodEnd,source_rows:parsed.recognizedRows,aggregate_rows:parsed.rows.length})});
-  const batchId=batchRows?.[0]?.id;if(!batchId)throw new Error('WMS取込バッチを作成できませんでした。');
-  await rest('rpc/replace_timee_wms_history','',{method:'POST',body:JSON.stringify({p_start:parsed.periodStart,p_end:parsed.periodEnd,p_rows:parsed.timeeHistory})});
-  const now=new Date().toISOString(),rows=parsed.rows.map(r=>({...r,batch_id:batchId,updated_at:now}));
-  for(let i=0;i<rows.length;i+=400){
-   $('wmsImportMessage').textContent='DBへ保存しています… '+Math.min(i+400,rows.length).toLocaleString()+' / '+rows.length.toLocaleString()+'集計行';
-   const chunk=rows.slice(i,i+400);
-   await rest('oplh_wms_daily','on_conflict=owner_id%2Cwork_date%2Cworker_key%2Cactivity_key',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(chunk)});
-  }
-  const range='owner_id=eq.'+user.id+'&work_date=gte.'+parsed.periodStart+'&work_date=lte.'+parsed.periodEnd;
-  const nullRows=await restAll('oplh_wms_daily',range+'&batch_id=is.null&select=id,worker_key');
-  await deleteRowsByIds('oplh_wms_daily',(nullRows||[]).filter(x=>!String(x.worker_key||'').startsWith('BI_SUPPLEMENT:')).map(x=>x.id));
-  await rest('oplh_wms_daily',range+'&batch_id=neq.'+batchId,{method:'DELETE',headers:{Prefer:'return=minimal'}});
-  await pruneWmsSupplementsForPeriod(parsed.periodStart,parsed.periodEnd);
-  await rest('oplh_import_batches','owner_id=eq.'+user.id+'&source=eq.wms&period_start=eq.'+parsed.periodStart+'&period_end=eq.'+parsed.periodEnd+'&id=neq.'+batchId,{method:'DELETE',headers:{Prefer:'return=minimal'}});
-  await replaceCostImportBatch('wms',{owner_id:user.id,month_ym:currentBundle.ym,source:'wms',source_filename:parsed.fileName,source_rows:parsed.recognizedRows,period_start:parsed.periodStart,period_end:parsed.periodEnd,metadata:{file_size_bytes:parsed.fileSize,aggregate_rows:rows.length,period_rows:parsed.periodRows,outside_rows:parsed.outsideRows,unparsed_rows:parsed.unparsedRows,activities:parsed.summary,unmapped_activities:parsed.unmapped,replace_rule:'対象月度を置換。同一ファイル・同一期間の再取込は二重計上しない',storage_rule:'作業分析は日付×作業者×作業区分に集約。棚卸し用の調整入出庫明細は別途保存'}});
-  // Keep a single atomic monthly snapshot of adjustment rows. Reimport replaces it,
-  // preserving distinct identical-looking WMS operations by their source row number.
-  const previousSource=await rest('inventory_wms_sources','owner_id=eq.'+user.id+'&month_ym=eq.'+currentBundle.ym+'&select=headers,mapping');
-  const previous=previousSource?.[0];
-  const mapping=previous&&JSON.stringify(previous.headers)===JSON.stringify(parsed.inventoryHeaders)?previous.mapping:null;
-  await rest('inventory_wms_sources','on_conflict=owner_id%2Cmonth_ym',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify({owner_id:user.id,month_ym:currentBundle.ym,period_start:parsed.periodStart,period_end:parsed.periodEnd,source_filename:parsed.fileName,headers:parsed.inventoryHeaders,records:parsed.inventoryRecords,mapping,source_rows:parsed.sourceRows,period_rows:parsed.periodRows,unparsed_rows:parsed.unparsedRows,imported_at:new Date().toISOString()})});
-  $('wmsImportMessage').className='message ok';$('wmsImportMessage').textContent='取込完了：'+parsed.recognizedRows.toLocaleString()+'行 → '+rows.length.toLocaleString()+'集計行 / 棚卸し用調整明細 '+parsed.inventoryRecords.length.toLocaleString()+'件';
-  await loadAll()
- }catch(e){console.error(e);$('wmsImportMessage').className='message bad';$('wmsImportMessage').textContent=e.message}
- finally{btn.disabled=false}
-}
+function importWms(){return importDatedCsv('wms')}
 async function importAutoPacking(){
  const m=currentBundle?.monthly||{};if(m.status==='confirmed'){alert('確定済み月には取り込めません。ロック解除後に再度お試しください。');return}
  const file=$('autoPackImportFile').files?.[0];if(!file){$('autoPackImportMessage').className='message bad';$('autoPackImportMessage').textContent='自動梱包機CSVを選択してください。';return}
@@ -650,6 +620,11 @@ async function undoImportedSource(source){
   console.error(e);$('importUndoMessage').className='message bad';$('importUndoMessage').textContent='取消に失敗しました: '+e.message
  }
 }
+function latestImportDetails(batch){
+ if(!batch)return '';
+ const dates=batch.metadata?.target_dates?.join('、')||'旧形式・対象日の記録なし';
+ return '<div class="source-row"><div><strong>最終取込</strong><small>'+esc(new Date(batch.imported_at).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'}))+'　対象日 '+esc(dates)+'　'+fmt(batch.source_rows)+'行</small></div></div>';
+}
 function renderTDImport(){
  const m=currentBundle?.monthly||{},locked=m.status==='confirmed';
  $('tdImportBtn').disabled=locked;$('tdImportFile').disabled=locked;$('tdLockedNotice').classList.toggle('hidden',!locked);
@@ -666,7 +641,7 @@ function renderTDImport(){
  const meta=latest?.metadata||{},unmapped=meta.unmapped_tasks||[],unmatched=meta.unmatched_staff||[];
  const deptTotals={};for(const r of currentBundle.td||[]){const dept=tdDepartment(r);deptTotals[dept]=(deptTotals[dept]||0)+(Number(r.work_minutes)||0)}
  const deptText=Object.entries(deptTotals).sort((a,b)=>b[1]-a[1]).map(([dept,min])=>esc(dept)+' '+hours(min/60)).join(' / ')||'—';
- $('tdImportSummary').innerHTML=[
+ $('tdImportSummary').innerHTML=[latestImportDetails(latest),
   `<div class="source-row"><div><strong>最新ファイル</strong><small>${latest?.source_filename?esc(latest.source_filename):'—'}</small></div><span class="badge ${currentBundle.td.length?'auto':'missing'}">${currentBundle.td.length?'取込済':'未取込'}</span></div>`,
   `<div class="source-row"><div><strong>部署別</strong><small>${deptText}</small></div><span class="badge auto">部署分離</span></div>`,
   `<div class="source-row"><div><strong>未振分タスク</strong><small>${unmapped.length?unmapped.map(x=>esc(x.task)+' ('+x.count+'件)').join(' / '):'なし'}</small></div><span class="badge ${unmapped.length?'missing':'auto'}">${unmapped.length}件</span></div>`,
@@ -675,7 +650,7 @@ function renderTDImport(){
  const wmsImport=(currentBundle.imports||[]).find(x=>x.source==='wms'),wm=wmsImport?.metadata||{},wActs=wm.activities||{};
  $('wmsImportBody').innerHTML=WMS_ACTIVITY_ORDER.map(k=>{const x=wActs[k];return x?`<tr><td>${esc(x.label||WMS_ACTIVITY_LABELS[k]||k)}</td><td>${fmt(x.actions)}</td><td>${fmt(x.quantity)}</td><td>${fmt(x.aggregate_rows)}</td></tr>`:''}).join('')||'<tr><td colspan="4">対象月度のWMS取込結果はありません。</td></tr>';
  const wSize=wm.file_size_bytes?fmt(wm.file_size_bytes/1024/1024,1)+'MB':'—',wUnmapped=wm.unmapped_activities||[];
- $('wmsImportSummary').innerHTML=[
+ $('wmsImportSummary').innerHTML=[latestImportDetails(wmsImport),
   `<div class="source-row"><div><strong>最新ファイル</strong><small>${wmsImport?.source_filename?esc(wmsImport.source_filename):'—'}</small></div><span class="badge ${wmsImport?'auto':'missing'}">${wmsImport?'取込済':'未取込'}</span></div>`,
   `<div class="source-row"><div><strong>圧縮保存</strong><small>元 ${fmt(wmsImport?.source_rows)}行 → ${fmt(wm.aggregate_rows)}集計行 / ファイル ${wSize}</small></div><span class="badge auto">日付×作業者×区分</span></div>`,
   `<div class="source-row"><div><strong>対象外・未解析</strong><small>月度外 ${fmt(wm.outside_rows||0)}行 / 未解析 ${fmt(wm.unparsed_rows||0)}行</small></div><span class="badge ${(wm.unparsed_rows||0)?'missing':'auto'}">${fmt(wm.unparsed_rows||0)}行</span></div>`,

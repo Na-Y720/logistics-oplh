@@ -102,3 +102,7 @@ DBには上記のほか `logistics_monthly_plans`, `logistics_shift_patterns`, `
 - Wロケのコア・保存試験は開発時に実施したが、Vercel側リポジトリの `tests/` には未移管。過去試験を今の本番に対する再試験済みと扱わない。
 - 不具合時は現行ソース・デプロイ・DB変更を分けて調べる。コードを戻してもDBは自動で元に戻らない。データ修正やスキーマ巻戻しは影響を確認する。
 - SQLファイルがあるだけでは適用済みと判断しない。DB定義と移行履歴を照合し、既存create文を無条件で再実行しない。
+
+### APP-04 日次CSV取込
+
+WMS・TimeDesignerは選択月度のCSV内の日付集合を `import_cost_csv_days` に渡す。同日のデータを再構築するため、その日の全件を出力する。月度の取込取消は引き続き月単位。アシロボは取込ボタン押下後、`#wmsImportMessage` または `#tdImportMessage` の `data-status`（`processing` / `success` / `error`）を確認する。本番切替はDB関数の適用が先。
